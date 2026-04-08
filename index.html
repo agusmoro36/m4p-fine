@@ -2703,6 +2703,7 @@ async function guardarNube() {
         ? facturasState.reduce((acc,f)=>{acc[f._id]={pagada:f.pagada,entregada:f.entregada};return acc;},{})
         : {},
       facturasExtra: S.facturasExtra||[],
+      stock: D.stock,
       ts: Date.now()
     };
     await sbSave(payload);
@@ -2778,6 +2779,7 @@ function saveState() {
       ? facturasState.reduce((acc,f)=>{acc[f._id]={pagada:f.pagada,entregada:f.entregada};return acc;},{})
       : {},
     facturasExtra: S.facturasExtra||[],
+    stock: D.stock,
     ts: Date.now()
   };
 
@@ -2809,8 +2811,11 @@ function saveState() {
 
 function applyState(st) {
   if(!st) return;
-  // D.stock NO se restaura desde estado guardado.
-  // El stock siempre se carga importando el Excel desde la página Importar.
+  // D.stock: se restaura desde la nube. Los valores del HTML son el punto de partida
+  // inicial; Supabase prevalece sobre ellos para reflejar movimientos reales.
+  if (st.stock) {
+    Object.assign(D.stock, st.stock);
+  }
   if (st.preciosInsumos) S.preciosInsumos = st.preciosInsumos;
   if (st.compras) {
     S.compras = st.compras;
