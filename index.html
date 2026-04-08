@@ -2558,7 +2558,18 @@ function semaforoMRP(x){
     return          {k:'holgado', color:'#374151',label:'Holgado',bg:'rgba(55,65,81,.03)'};
   };
 
-  // 1. Si hay MRP resultado con 'abr', es la fuente más precisa
+  // 1. Stock real de D.stock → fuente de verdad para cobertura actual
+  //    Prevalece sobre MRP guardado (que puede estar corrido con stock desactualizado)
+  const realStock = parseFloat(D.stock[x.codigo]?.stock);
+  if(!isNaN(realStock)) {
+    const dfcMarRaw = parseDfc(x.dfc_mar);
+    const stockMar = parseFloat(x.stock_mar) || 0;
+    const dailyRate = (stockMar > 0 && dfcMarRaw < 900) ? stockMar / dfcMarRaw : 0;
+    const realDfc = dailyRate > 0 ? realStock / dailyRate : 999;
+    return grade(realDfc);
+  }
+
+  // 2. Sin stock real → usar MRP resultado si existe
   if(S.mrpResultado?.resultado) {
     const mesesRun = S.mrpResultado.meses || [];
     if(mesesRun.includes('abr')) {
@@ -2572,16 +2583,6 @@ function semaforoMRP(x){
         return grade(dfc);
       }
     }
-  }
-
-  // 2. Usar stock real de D.stock + estimar tasa desde datos estáticos
-  const realStock = parseFloat(D.stock[x.codigo]?.stock);
-  if(!isNaN(realStock)) {
-    const dfcMarRaw = parseDfc(x.dfc_mar);
-    const stockMar = parseFloat(x.stock_mar) || 0;
-    const dailyRate = (stockMar > 0 && dfcMarRaw < 900) ? stockMar / dfcMarRaw : 0;
-    const realDfc = dailyRate > 0 ? realStock / dailyRate : 999;
-    return grade(realDfc);
   }
 
   // 3. Fallback: datos estáticos con ajuste de días transcurridos
