@@ -2683,9 +2683,7 @@ function applyState(st) {
   // El stock siempre se carga importando el Excel desde la página Importar.
   if (st.preciosInsumos) S.preciosInsumos = st.preciosInsumos;
   if (st.compras) {
-    // Filtrar seeds que se hayan guardado por error en versiones anteriores
-    const _seedSids = new Set(_SEED_COMPRAS.map(s => s._sid));
-    S.compras = st.compras.filter(c => !c._sid || !_seedSids.has(c._sid));
+    S.compras = st.compras;
   }
   if (st.comprasPropuestas) {
     S.comprasPropuestas = st.comprasPropuestas;
@@ -2745,15 +2743,10 @@ async function loadFromSupabase() {
   sbIndicador('sync');
   const data = await sbLoad();
   if(!data) { sbIndicador('offline'); return; }
-  // Solo aplicar si es más nuevo que localStorage
-  const localRaw = localStorage.getItem(LS_KEY);
-  const localTs = localRaw ? (JSON.parse(localRaw).ts || 0) : 0;
-  const sbTs = new Date(data.update_at).getTime();
-  if(sbTs > localTs) {
-    applyState(data.value);
-    localStorage.setItem(LS_KEY, JSON.stringify(data.value));
-    toast('☁ Datos cargados desde la nube', '☁', 2500);
-  }
+  // Supabase siempre es la fuente de verdad — sobreescribe localStorage
+  applyState(data.value);
+  localStorage.setItem(LS_KEY, JSON.stringify(data.value));
+  toast('☁ Datos cargados desde la nube', '☁', 2500);
   sbIndicador('ok');
   sbSuscribir();
 }
