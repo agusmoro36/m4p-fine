@@ -2674,6 +2674,32 @@ async function sbSave(payload) {
   } catch(e) { console.warn('Supabase save error:', e); }
 }
 
+// Clave separada para adjuntos PDF (no mezclar con el estado principal)
+const SB_ADJ_KEY = 'mrp_fine_adjuntos_v8';
+
+async function sbSaveAdjuntos(adjuntosMap) {
+  if(!SB_CLIENT || !Object.keys(adjuntosMap).length) return;
+  try {
+    const { error } = await SB_CLIENT.from(SB_TABLE).upsert({
+      key: SB_ADJ_KEY,
+      value: adjuntosMap,
+      update_at: new Date().toISOString()
+    }, { onConflict: 'key' });
+    if(error) console.warn('Supabase adjuntos save error:', error.message);
+  } catch(e) { console.warn('Supabase adjuntos save error:', e); }
+}
+
+async function sbLoadAdjuntos() {
+  if(!SB_CLIENT) return null;
+  try {
+    const { data, error } = await SB_CLIENT
+      .from(SB_TABLE).select('value')
+      .eq('key', SB_ADJ_KEY).single();
+    if(error || !data) return null;
+    return data.value;
+  } catch(e) { return null; }
+}
+
 async function sbLoad() {
   if(!SB_CLIENT) return null;
   try {
@@ -2706,7 +2732,17 @@ async function guardarNube() {
       stock: D.stock,
       ts: Date.now()
     };
-    await sbSave(payload);
+    // Separar adjuntos del payload principal (igual que saveState)
+    const adjMap = {};
+    const comprasSinB64 = payload.compras.map(c => {
+      if(c.adjunto && c.adjunto.data) {
+        const k = c._sid || c.id || ('oc_'+c.codigo+'_'+c.proveedor);
+        adjMap[k] = c.adjunto;
+        return {...c, adjunto:{nombre:c.adjunto.nombre,tipo:c.adjunto.tipo,tamaño:c.adjunto.tamaño,_adjKey:k}};
+      }
+      return c;
+    });
+    await Promise.all([sbSave({...payload, compras:comprasSinB64}), sbSaveAdjuntos(adjMap)]);
     if(btn) { btn.textContent = '✓ Guardado'; btn.style.background = 'var(--green)'; btn.style.opacity = '1'; }
     sbIndicador('ok');
     setTimeout(() => {
@@ -2783,20 +2819,30 @@ function saveState() {
     ts: Date.now()
   };
 
-  // localStorage: guardar sin el base64 de adjuntos para no superar 5MB
+  // Separar adjuntos PDF del payload principal para no superar límites de tamaño
+  // Los adjuntos van a una fila separada en Supabase (key: mrp_fine_adjuntos_v8)
+  const adjuntosMap = {};
+  const comprasSinBase64 = payload.compras.map(c => {
+    if(c.adjunto && c.adjunto.data) {
+      const adjKey = c._sid || c.id || ('oc_'+c.codigo+'_'+c.proveedor);
+      adjuntosMap[adjKey] = c.adjunto;
+      return {...c, adjunto:{nombre:c.adjunto.nombre,tipo:c.adjunto.tipo,tamaño:c.adjunto.tamaño,_adjKey:adjKey}};
+    }
+    return c;
+  });
+  const payloadSinAdj = {...payload, compras: comprasSinBase64};
+
+  // localStorage: sin base64
   try {
-    const payloadLocal = {
-      ...payload,
-      compras: payload.compras.map(c => c.adjunto
-        ? {...c, adjunto:{nombre:c.adjunto.nombre,tipo:c.adjunto.tipo,tamaño:c.adjunto.tamaño,_soloMeta:true}}
-        : c)
-    };
-    localStorage.setItem(LS_KEY, JSON.stringify(payloadLocal));
+    localStorage.setItem(LS_KEY, JSON.stringify(payloadSinAdj));
   } catch(e) { console.warn('localStorage save error', e); }
 
-  // Supabase: siempre guarda completo (con base64 del adjunto)
+  // Supabase: estado principal liviano (sin base64) + adjuntos en fila separada
   sbIndicador('sync');
-  sbSave(payload).then(() => sbIndicador('ok')).catch(() => sbIndicador('error'));
+  Promise.all([
+    sbSave(payloadSinAdj),
+    sbSaveAdjuntos(adjuntosMap)
+  ]).then(() => sbIndicador('ok')).catch(() => sbIndicador('error'));
 
   // Indicador visual
   const el = document.getElementById('save-ind');
@@ -2876,14 +2922,21 @@ function loadState() {
 
 async function loadFromSupabase() {
   sbIndicador('sync');
-  const data = await sbLoad();
+  const [data, adjuntos] = await Promise.all([sbLoad(), sbLoadAdjuntos()]);
   if(!data) { sbIndicador('offline'); sbSuscribir(); return; }
   // Supabase siempre es la fuente de verdad — sobreescribe localStorage
   applyState(data.value);
-  localStorage.setItem(LS_KEY, JSON.stringify(data.value));
+  // Re-inyectar adjuntos PDF desde su fila separada
+  if(adjuntos) {
+    S.compras.forEach(c => {
+      if(c.adjunto && c.adjunto._adjKey && adjuntos[c.adjunto._adjKey]) {
+        c.adjunto = adjuntos[c.adjunto._adjKey];
+      }
+    });
+  }
+  try { localStorage.setItem(LS_KEY, JSON.stringify(data.value)); } catch(e) {}
   toast('☁ Datos cargados desde la nube', '☁', 2500);
   sbIndicador('ok');
-  // Re-renderizar la página activa con los datos reales de la nube
   _reRenderActivePage();
   sbSuscribir();
 }
