@@ -425,7 +425,14 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     </div>
     <div class="save-row">
       <span class="save-ind" id="save-ind"><span class="dot-save"></span><span id="save-ts">sin guardar</span></span>
-      <span class="save-ind" id="sb-ind" style="margin-top:2px;cursor:pointer" onclick="saveState();toast('Guardando en la nube...','☁',1500)" title="Click para guardar en la nube"><span id="sb-txt">☁ conectando...</span></span>
+      <span class="save-ind" id="sb-ind" style="margin-top:2px"><span id="sb-txt">☁ conectando...</span></span>
+      <button onclick="guardarNube()" id="btn-guardar-nube" style="
+        background:var(--acc);color:#fff;border:none;border-radius:8px;
+        padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;
+        letter-spacing:.5px;display:flex;align-items:center;gap:6px;
+        transition:opacity .2s" title="Guardar todo en la nube">
+        ☁ Guardar
+      </button>
       <div style="display:flex;align-items:center;gap:6px">
         <button class="btn-reset" onclick="toggleDark()" id="btn-dark" title="Modo oscuro / claro" style="font-size:13px;padding:2px 6px">🌙</button>
         <button class="btn-reset" onclick="clearState()" title="Borrar datos guardados localmente">↺ reset</button>
@@ -2573,6 +2580,24 @@ async function sbLoad() {
   } catch(e) { return null; }
 }
 
+async function guardarNube() {
+  const btn = document.getElementById('btn-guardar-nube');
+  if(btn) { btn.textContent = '⟳ Guardando...'; btn.disabled = true; btn.style.opacity = '.7'; }
+  try {
+    saveState();
+    await new Promise(r => setTimeout(r, 1200));
+    if(btn) { btn.textContent = '✓ Guardado'; btn.style.background = 'var(--green)'; }
+    setTimeout(() => {
+      if(btn) { btn.textContent = '☁ Guardar'; btn.style.background = 'var(--acc)'; btn.disabled = false; btn.style.opacity = '1'; }
+    }, 2000);
+  } catch(e) {
+    if(btn) { btn.textContent = '✕ Error'; btn.style.background = 'var(--red)'; btn.disabled = false; btn.style.opacity = '1'; }
+    setTimeout(() => {
+      if(btn) { btn.textContent = '☁ Guardar'; btn.style.background = 'var(--acc)'; }
+    }, 2500);
+  }
+}
+
 function sbIndicador(estado) {
   // estado: 'sync' | 'ok' | 'offline' | 'error'
   const el = document.getElementById('sb-ind');
@@ -2656,11 +2681,6 @@ function applyState(st) {
   if (st.preciosInsumos) S.preciosInsumos = st.preciosInsumos;
   if (st.compras) {
     S.compras = st.compras;
-    // Merge seeds: agrega OCs nuevas que no existen todavía
-    _SEED_COMPRAS.forEach(seed => {
-      if (!S.compras.some(c => c._sid === seed._sid))
-        S.compras.push(seed);
-    });
   }
   if (st.comprasPropuestas) {
     S.comprasPropuestas = st.comprasPropuestas;
