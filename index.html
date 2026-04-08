@@ -2587,14 +2587,31 @@ async function guardarNube() {
   const btn = document.getElementById('btn-guardar-nube');
   if(btn) { btn.textContent = '⟳ Guardando...'; btn.disabled = true; btn.style.opacity = '.7'; }
   try {
-    saveState();
-    await new Promise(r => setTimeout(r, 1200));
-    if(btn) { btn.textContent = '✓ Guardado'; btn.style.background = 'var(--green)'; }
+    // Construir payload completo y guardar en Supabase esperando confirmación
+    const payload = {
+      preciosInsumos: S.preciosInsumos||{},
+      compras: S.compras,
+      comprasPropuestas: S.comprasPropuestas,
+      movimientos: S.movimientos,
+      producciones: S.producciones,
+      proveedores: S.proveedores,
+      productos: D.productos,
+      mrpResultado: S.mrpResultado,
+      facturasToggles: typeof facturasState !== 'undefined'
+        ? facturasState.reduce((acc,f)=>{acc[f._id]={pagada:f.pagada,entregada:f.entregada};return acc;},{})
+        : {},
+      facturasExtra: S.facturasExtra||[],
+      ts: Date.now()
+    };
+    await sbSave(payload);
+    if(btn) { btn.textContent = '✓ Guardado'; btn.style.background = 'var(--green)'; btn.style.opacity = '1'; }
+    sbIndicador('ok');
     setTimeout(() => {
-      if(btn) { btn.textContent = '☁ Guardar'; btn.style.background = 'var(--acc)'; btn.disabled = false; btn.style.opacity = '1'; }
+      if(btn) { btn.textContent = '☁ Guardar'; btn.style.background = 'var(--acc)'; btn.disabled = false; }
     }, 2000);
   } catch(e) {
     if(btn) { btn.textContent = '✕ Error'; btn.style.background = 'var(--red)'; btn.disabled = false; btn.style.opacity = '1'; }
+    sbIndicador('error');
     setTimeout(() => {
       if(btn) { btn.textContent = '☁ Guardar'; btn.style.background = 'var(--acc)'; }
     }, 2500);
@@ -2646,35 +2663,46 @@ function sbSuscribir() {
 }
 
 function saveState() {
+  const payload = {
+    preciosInsumos: S.preciosInsumos||{},
+    compras: S.compras,
+    comprasPropuestas: S.comprasPropuestas,
+    movimientos: S.movimientos,
+    producciones: S.producciones,
+    proveedores: S.proveedores,
+    productos: D.productos,
+    mrpResultado: S.mrpResultado,
+    facturasToggles: typeof facturasState !== 'undefined'
+      ? facturasState.reduce((acc,f)=>{acc[f._id]={pagada:f.pagada,entregada:f.entregada};return acc;},{})
+      : {},
+    facturasExtra: S.facturasExtra||[],
+    ts: Date.now()
+  };
+
+  // localStorage: guardar sin el base64 de adjuntos para no superar 5MB
   try {
-    const payload = {
-      preciosInsumos: S.preciosInsumos||{},
-      compras: S.compras,
-      comprasPropuestas: S.comprasPropuestas,
-      movimientos: S.movimientos,
-      producciones: S.producciones,
-      proveedores: S.proveedores,
-      productos: D.productos,
-      mrpResultado: S.mrpResultado,
-      facturasToggles: typeof facturasState !== 'undefined'
-        ? facturasState.reduce((acc,f)=>{acc[f._id]={pagada:f.pagada,entregada:f.entregada};return acc;},{})
-        : {},
-      facturasExtra: S.facturasExtra||[],
-      ts: Date.now()
+    const payloadLocal = {
+      ...payload,
+      compras: payload.compras.map(c => c.adjunto
+        ? {...c, adjunto:{nombre:c.adjunto.nombre,tipo:c.adjunto.tipo,tamaño:c.adjunto.tamaño,_soloMeta:true}}
+        : c)
     };
-    localStorage.setItem(LS_KEY, JSON.stringify(payload));
-    const el = document.getElementById('save-ind');
-    const ts = document.getElementById('save-ts');
-    if(el && ts) {
-      const h = new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
-      ts.textContent = 'guardado ' + h;
-      el.classList.add('saved');
-      setTimeout(()=>el.classList.remove('saved'), 2000);
-    }
-    // Sync a Supabase (fire & forget)
-    sbIndicador('sync');
-    sbSave(payload).then(() => sbIndicador('ok')).catch(() => sbIndicador('error'));
-  } catch(e) { console.warn('saveState error', e); }
+    localStorage.setItem(LS_KEY, JSON.stringify(payloadLocal));
+  } catch(e) { console.warn('localStorage save error', e); }
+
+  // Supabase: siempre guarda completo (con base64 del adjunto)
+  sbIndicador('sync');
+  sbSave(payload).then(() => sbIndicador('ok')).catch(() => sbIndicador('error'));
+
+  // Indicador visual
+  const el = document.getElementById('save-ind');
+  const ts = document.getElementById('save-ts');
+  if(el && ts) {
+    const h = new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    ts.textContent = 'guardado ' + h;
+    el.classList.add('saved');
+    setTimeout(()=>el.classList.remove('saved'), 2000);
+  }
 }
 
 function applyState(st) {
