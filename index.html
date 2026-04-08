@@ -2877,13 +2877,29 @@ function loadState() {
 async function loadFromSupabase() {
   sbIndicador('sync');
   const data = await sbLoad();
-  if(!data) { sbIndicador('offline'); return; }
+  if(!data) { sbIndicador('offline'); sbSuscribir(); return; }
   // Supabase siempre es la fuente de verdad — sobreescribe localStorage
   applyState(data.value);
   localStorage.setItem(LS_KEY, JSON.stringify(data.value));
   toast('☁ Datos cargados desde la nube', '☁', 2500);
   sbIndicador('ok');
+  // Re-renderizar la página activa con los datos reales de la nube
+  _reRenderActivePage();
   sbSuscribir();
+}
+
+function _reRenderActivePage() {
+  const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
+  if(!activePage) return;
+  const renders = {
+    dashboard: renderDashboard, mrp: renderMRP, plan: renderPlan,
+    semanal: renderSemanal, bom: renderBOMPage, proyeccion: renderProyeccion,
+    compras: renderCompras, propuestas: renderPropuestas, recepcion: renderRecepcion,
+    proveedores: renderProveedoresEnhanced, stock: renderStock, historial: renderHistorial,
+    alertas: renderAlertas, calculadora: renderCalcPage, planificador: renderPlanificador,
+    facturas: renderFacturas, importar: ()=>{},
+  };
+  try { if(renders[activePage]) renders[activePage](); } catch(e) { console.warn('reRender error', e); }
 }
 
 function clearState() {
@@ -6013,14 +6029,11 @@ loadState(); // restaurar localStorage primero (rápido, sin red)
 // ── Render inicial del Dashboard (después de todas las inicializaciones) ──
 try { renderDashboard(); } catch(e) { console.warn('renderDashboard init:', e); }
 
-// Guardar estado limpio ANTES de cargar Supabase
-// Así el timestamp local es más nuevo → Supabase no lo pisa
-saveState();
-
 // Auto-save cada 60 segundos como respaldo
 setInterval(() => { saveState(); }, 60000);
 actualizarBadgePropuestas();
-// Luego cargar desde Supabase si hay datos más nuevos
+// Cargar desde Supabase (fuente única de verdad — siempre prevalece)
+// NO llamar saveState() antes para no pisar los datos reales de la nube
 loadFromSupabase();
 let facPage = 1;
 
