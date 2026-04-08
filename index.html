@@ -2680,7 +2680,9 @@ function applyState(st) {
   // El stock siempre se carga importando el Excel desde la página Importar.
   if (st.preciosInsumos) S.preciosInsumos = st.preciosInsumos;
   if (st.compras) {
-    S.compras = st.compras;
+    // Filtrar seeds que se hayan guardado por error en versiones anteriores
+    const _seedSids = new Set(_SEED_COMPRAS.map(s => s._sid));
+    S.compras = st.compras.filter(c => !c._sid || !_seedSids.has(c._sid));
   }
   if (st.comprasPropuestas) {
     S.comprasPropuestas = st.comprasPropuestas;
