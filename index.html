@@ -2582,11 +2582,19 @@ function semaforoMRP(x){
   }
 
   // 2. D.stock real + tasa de consumo estática (fuente principal para DFC)
+  //    Usa dfc_abr (mes actual) como referencia principal; fallback a dfc_mar
   if(hasReal) {
+    const dfcAbrRaw = parseDfc(x.dfc_abr);
+    const stockAbr  = parseFloat(x.stock_abr) || 0;
     const dfcMarRaw = parseDfc(x.dfc_mar);
     const stockMar  = parseFloat(x.stock_mar) || 0;
-    const dailyRate = (stockMar > 0 && dfcMarRaw < 900) ? stockMar / dfcMarRaw : 0;
-    const realDfc   = dailyRate > 0 ? realStock / dailyRate : 999;
+    let dailyRate = 0;
+    if(stockAbr > 0 && dfcAbrRaw < 900) {
+      dailyRate = stockAbr / dfcAbrRaw;          // tasa de abril (más reciente)
+    } else if(stockMar > 0 && dfcMarRaw < 900) {
+      dailyRate = stockMar / dfcMarRaw;          // fallback: tasa de marzo
+    }
+    const realDfc = dailyRate > 0 ? realStock / dailyRate : 999;
     return grade(realDfc);
   }
 
