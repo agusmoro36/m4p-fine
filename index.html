@@ -2561,7 +2561,9 @@ function semaforoMRP(x){
   const realStock = parseFloat(D.stock[x.codigo]?.stock);
   const hasReal   = !isNaN(realStock);
 
-  // 1. MRP resultado disponible (fue corrido con abr)
+  // 1. MRP resultado: sólo aporta señal CRÍTICA si hay déficit real en abril
+  //    (no usamos la tasa de consumo mensual del MRP para DFC — puede ser un lote puntual
+  //     que no representa el consumo diario sostenido)
   if(S.mrpResultado?.resultado) {
     const mesesRun = S.mrpResultado.meses || [];
     if(mesesRun.includes('abr')) {
@@ -2570,20 +2572,16 @@ function semaforoMRP(x){
         const m = ins.meses['abr'];
         // ¿El MRP fue corrido con el stock real actual? (diferencia < 5%)
         const mrpFresco = !hasReal || Math.abs(m.stockInicio - realStock) <= Math.max(1, realStock * 0.05);
-        if(mrpFresco) {
-          // MRP fresco → fuente más precisa (incluye demanda real del plan)
-          if(m.deficit > 0) return{k:'crit',color:'#ef4444',label:'Crítico',bg:'rgba(239,68,68,.04)'};
-          const consumed = Math.max(0, m.stockInicio + m.ocIngreso - m.stockFin);
-          const dailyRate = consumed > 0 ? consumed / 30 : 0;
-          const dfc = dailyRate > 0 ? Math.round(m.stockFin / dailyRate) : 999;
-          return grade(dfc);
+        if(mrpFresco && m.deficit > 0) {
+          // Déficit real confirmado por MRP fresco → CRÍTICO seguro
+          return{k:'crit',color:'#ef4444',label:'Crítico',bg:'rgba(239,68,68,.04)'};
         }
-        // MRP viejo (stock desactualizado) → ignorar, usar D.stock real
+        // Sin déficit → calcular DFC con tasa estática (más representativa del consumo continuo)
       }
     }
   }
 
-  // 2. D.stock real + tasa de consumo estática (cuando el MRP está desactualizado o no existe)
+  // 2. D.stock real + tasa de consumo estática (fuente principal para DFC)
   if(hasReal) {
     const dfcMarRaw = parseDfc(x.dfc_mar);
     const stockMar  = parseFloat(x.stock_mar) || 0;
