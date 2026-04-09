@@ -2558,31 +2558,38 @@ function semaforoMRP(x){
     return          {k:'holgado', color:'#374151',label:'Holgado',bg:'rgba(55,65,81,.03)'};
   };
 
-  // 1. Stock real de D.stock → fuente de verdad para cobertura actual
-  //    Prevalece sobre MRP guardado (que puede estar corrido con stock desactualizado)
   const realStock = parseFloat(D.stock[x.codigo]?.stock);
-  if(!isNaN(realStock)) {
-    const dfcMarRaw = parseDfc(x.dfc_mar);
-    const stockMar = parseFloat(x.stock_mar) || 0;
-    const dailyRate = (stockMar > 0 && dfcMarRaw < 900) ? stockMar / dfcMarRaw : 0;
-    const realDfc = dailyRate > 0 ? realStock / dailyRate : 999;
-    return grade(realDfc);
-  }
+  const hasReal   = !isNaN(realStock);
 
-  // 2. Sin stock real → usar MRP resultado si existe
+  // 1. MRP resultado disponible (fue corrido con abr)
   if(S.mrpResultado?.resultado) {
     const mesesRun = S.mrpResultado.meses || [];
     if(mesesRun.includes('abr')) {
       const ins = S.mrpResultado.resultado.find(r => r.codigo === x.codigo);
       if(ins && ins.meses['abr']) {
         const m = ins.meses['abr'];
-        if(m.deficit > 0) return{k:'crit',color:'#ef4444',label:'Crítico',bg:'rgba(239,68,68,.04)'};
-        const consumed = Math.max(0, m.stockInicio + m.ocIngreso - m.stockFin);
-        const dailyRate = consumed > 0 ? consumed / 30 : 0;
-        const dfc = dailyRate > 0 ? Math.round(m.stockFin / dailyRate) : 999;
-        return grade(dfc);
+        // ¿El MRP fue corrido con el stock real actual? (diferencia < 5%)
+        const mrpFresco = !hasReal || Math.abs(m.stockInicio - realStock) <= Math.max(1, realStock * 0.05);
+        if(mrpFresco) {
+          // MRP fresco → fuente más precisa (incluye demanda real del plan)
+          if(m.deficit > 0) return{k:'crit',color:'#ef4444',label:'Crítico',bg:'rgba(239,68,68,.04)'};
+          const consumed = Math.max(0, m.stockInicio + m.ocIngreso - m.stockFin);
+          const dailyRate = consumed > 0 ? consumed / 30 : 0;
+          const dfc = dailyRate > 0 ? Math.round(m.stockFin / dailyRate) : 999;
+          return grade(dfc);
+        }
+        // MRP viejo (stock desactualizado) → ignorar, usar D.stock real
       }
     }
+  }
+
+  // 2. D.stock real + tasa de consumo estática (cuando el MRP está desactualizado o no existe)
+  if(hasReal) {
+    const dfcMarRaw = parseDfc(x.dfc_mar);
+    const stockMar  = parseFloat(x.stock_mar) || 0;
+    const dailyRate = (stockMar > 0 && dfcMarRaw < 900) ? stockMar / dfcMarRaw : 0;
+    const realDfc   = dailyRate > 0 ? realStock / dailyRate : 999;
+    return grade(realDfc);
   }
 
   // 3. Fallback: datos estáticos con ajuste de días transcurridos
