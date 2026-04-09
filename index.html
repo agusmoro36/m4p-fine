@@ -6535,11 +6535,9 @@ function renderPlanificador(){
       :'<div style="text-align:right"><div style="font-family:var(--mono);font-size:11px;color:var(--red);margin-bottom:5px">Faltan '+p.sinStock+'</div>'
        +'<button class="btn btn-r btn-sm" onclick="event.stopPropagation();crearTodasOCsFaltantes(\''+p.codigo+'\')" style="font-size:7px;padding:4px 8px">+ Crear OCs</button></div>';
     const border=side==='ok'?'var(--gold)':'rgba(192,57,43,.5)';
-    const card=document.createElement('div');
-    card.style.cssText='background:var(--bg2);border:1px solid var(--border);border-left:3px solid '+border+';border-radius:8px;padding:14px 16px;cursor:pointer;margin-bottom:8px';
-    card.onclick=function(){verDetallePlan(p.codigo);};
-    card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><span style="font-family:Cormorant Garamond,serif;font-size:14px;font-weight:600">'+p.nombre+'</span>'+cli+'<div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:2px">'+p.codigo+'</div></div>'+right+'</div>'+bar;
-    return card.outerHTML;
+    return '<div onclick="verDetallePlan(\''+p.codigo+'\')" style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid '+border+';border-radius:8px;padding:14px 16px;cursor:pointer;margin-bottom:8px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><span style="font-family:Cormorant Garamond,serif;font-size:14px;font-weight:600">'+p.nombre+'</span>'+cli+'<div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:2px">'+p.codigo+'</div></div>'+right+'</div>'+bar
+      +'</div>';
   }
 
   const pEl=document.getElementById('plan-puede');
