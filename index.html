@@ -1136,12 +1136,13 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         <div class="sh-title" id="plan-detalle-titulo">Detalle de insumos</div>
         <div class="sh-actions" id="plan-detalle-actions"></div>
       </div>
+      <div id="plan-detalle-resumen"></div>
       <div class="tbl-wrap">
         <table>
           <thead><tr>
             <th>Insumo</th><th>Descripción</th><th class="tr">Cant/Lote</th>
-            <th class="tr">Stock Actual</th><th class="tr">Falta</th>
-            <th class="tr">Prod. posible</th><th>Estado</th><th>Acción</th>
+            <th class="tr">Stock Actual</th><th class="tr">Falta (insumo)</th>
+            <th class="tr">Unidades posibles</th><th>Estado</th><th>Acción</th>
           </tr></thead>
           <tbody id="plan-detalle-tbody"></tbody>
         </table>
@@ -6557,46 +6558,68 @@ function verDetallePlan(cod){
   if(!det) return;
   det.style.display='block';
   const tit=document.getElementById('plan-detalle-titulo');
-  if(tit) tit.textContent=p.nombre+' ('+p.codigo+') — Insumos';
-  // Botón bulk en el sh
+  if(tit) tit.textContent=p.nombre+' — '+p.codigo;
+  // Botón bulk + resumen en el sh
   const acts=document.getElementById('plan-detalle-actions');
   if(acts) {
     const nFaltantes=p.insumos.filter(ins=>ins.faltante||ins.esLimitante).length;
-    acts.innerHTML=nFaltantes>0
+    acts.innerHTML=(nFaltantes>0
       ?'<button class="btn btn-r btn-sm" onclick="crearTodasOCsFaltantes(\''+p.codigo+'\')">+ Crear '+nFaltantes+' OC'+(nFaltantes>1?'s':'')+' faltante'+(nFaltantes>1?'s':'')+'</button>'
         +'<button class="btn btn-b btn-sm" onclick="go(\'compras\')">Ver OCs →</button>'
-      :'<span class="chip chip-g">✓ Todo en stock</span>';
+      :'<span class="chip chip-g">✓ Todo en stock</span>')
+      +'<button class="btn btn-sm" style="margin-left:8px;opacity:.5" onclick="document.getElementById(\'plan-detalle\').style.display=\'none\'">✕ Cerrar</button>';
+  }
+  // Resumen de producción
+  const resEl=document.getElementById('plan-detalle-resumen');
+  if(resEl){
+    const limIns=p.insumos.find(x=>x.codigo===p.limitante);
+    resEl.innerHTML='<div style="display:flex;gap:16px;flex-wrap:wrap;padding:12px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-bottom:12px;font-size:12px">'
+      +'<div><span style="color:var(--text3)">Lote mínimo: </span><span style="font-family:var(--mono);font-weight:600">'+fmtU(p.loteMin)+' un.</span></div>'
+      +'<div><span style="color:var(--text3)">Lotes posibles: </span><span style="font-family:var(--mono);font-weight:600;color:'+(p.maxLotes>0?'var(--gold2)':'var(--red)')+'">'+p.maxLotes+'</span></div>'
+      +'<div><span style="color:var(--text3)">Máx. producible: </span><span style="font-family:var(--mono);font-weight:700;font-size:14px;color:'+(p.max>0?'var(--gold2)':'var(--red)')+'">'+fmtU(p.max)+' un.</span></div>'
+      +(limIns?'<div><span style="color:var(--text3)">Limitante: </span><span style="color:var(--yellow);font-weight:600">'+limIns.nombre+'</span></div>':'')
+      +'<div style="margin-left:auto"><span style="color:var(--text3)">Insumos OK: </span><span style="font-family:var(--mono)">'+p.conStock+'/'+p.total+'</span></div>'
+      +'</div>';
   }
   const tbody=document.getElementById('plan-detalle-tbody');
   if(!tbody) return;
   tbody.innerHTML=[...p.insumos].sort((a,b)=>{
-    // primero sin stock, luego limitantes, luego OK
     if(a.faltante!==b.faltante) return a.faltante?-1:1;
     if(a.esLimitante!==b.esLimitante) return a.esLimitante?-1:1;
     return a.stockActual-b.stockActual;
   }).map(ins=>{
     const necLote=ins.cantPorLote;
-    const faltaIns=Math.max(0,necLote-ins.stockActual);   // cantidad de insumo faltante p/1 lote
-    const prodPosible=ins.maxPorEste;                      // unidades producibles con stock actual
+    const faltaIns=Math.max(0,necLote-ins.stockActual);
+    // unidades producibles con el stock actual de ESTE insumo
+    const unPosibles=ins.maxPorEste;
+    // unidades que faltan: loteMin - unidades posibles con este insumo (solo si es 0)
+    const unFaltanStr=unPosibles===0
+      ?'<span style="color:var(--red);font-weight:600">0 un.</span>'
+      :'<span style="color:var(--gold2);font-family:var(--mono);font-size:11px">'+fmtU(unPosibles)+' un.</span>';
     const faltaInsStr=faltaIns>0
       ?'<span style="color:var(--red);font-weight:600">'+fmt(faltaIns,2)+' '+ins.um+'</span>'
       :'<span style="color:var(--text3)">—</span>';
-    const prodPosibleStr=prodPosible>0
-      ?'<span style="color:var(--gold2);font-family:var(--mono);font-size:11px">'+fmtU(prodPosible)+' un.</span>'
-      :'<span style="color:var(--red);font-family:var(--mono);font-size:11px">0 un.</span>';
-    const est=ins.stockActual<=0?'<span class="pill pill-crit">SIN STOCK</span>':ins.esLimitante?'<span class="pill pill-warn">⚑ LIMITANTE</span>':'<span class="pill pill-ok">OK</span>';
+    const est=ins.stockActual<=0?'<span class="pill pill-crit">SIN STOCK</span>':ins.esLimitante?'<span class="pill pill-warn">⚑ LIMIT.</span>':'<span class="pill pill-ok">OK</span>';
     const accion=(ins.faltante||ins.esLimitante)
       ?'<button class="btn btn-r btn-sm" onclick="abrirOCDesdePlan(\''+p.codigo+'\',\''+ins.codigo+'\')" style="font-size:7px;padding:3px 8px">+ OC</button>'
       :'<span style="color:var(--text3);font-size:11px">—</span>';
     return '<tr style="'+(ins.esLimitante?'background:rgba(201,168,76,.05)':ins.faltante?'background:rgba(192,57,43,.03)':'')+'">'+
       '<td class="td-code">'+ins.codigo+'</td><td class="td-name">'+ins.nombre+'</td>'+
       '<td class="td-mono tr">'+fmt(necLote,2)+' '+ins.um+'</td>'+
-      '<td class="td-mono tr" style="color:'+(ins.stockActual<=0?'var(--red)':'inherit')+'">'+fmt(ins.stockActual,2)+'</td>'+
+      '<td class="td-mono tr" style="color:'+(ins.stockActual<=0?'var(--red)':'inherit')+'">'+fmt(ins.stockActual,2)+' '+ins.um+'</td>'+
       '<td class="tr">'+faltaInsStr+'</td>'+
-      '<td class="tr">'+prodPosibleStr+'</td>'+
+      '<td class="tr">'+unFaltanStr+'</td>'+
       '<td>'+est+'</td><td>'+accion+'</td></tr>';
   }).join('');
-  det.scrollIntoView({behavior:'smooth',block:'start'});
+  // Scroll robusto al contenedor .pages
+  const pagesDiv=document.querySelector('.pages');
+  if(pagesDiv){
+    const detRect=det.getBoundingClientRect();
+    const pagesRect=pagesDiv.getBoundingClientRect();
+    pagesDiv.scrollTo({top:pagesDiv.scrollTop+detRect.top-pagesRect.top-16,behavior:'smooth'});
+  } else {
+    det.scrollIntoView({behavior:'smooth',block:'start'});
+  }
 }
 
 function exportarPlanificador(){
