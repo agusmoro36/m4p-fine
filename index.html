@@ -1140,8 +1140,8 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         <table>
           <thead><tr>
             <th>Insumo</th><th>Descripción</th><th class="tr">Cant/Lote</th>
-            <th class="tr">Stock Actual</th><th class="tr">Necesario (lote)</th>
-            <th>Estado</th><th>Acción</th>
+            <th class="tr">Stock Actual</th><th class="tr">Falta</th>
+            <th class="tr">Prod. posible</th><th>Estado</th><th>Acción</th>
           </tr></thead>
           <tbody id="plan-detalle-tbody"></tbody>
         </table>
@@ -6571,17 +6571,31 @@ function verDetallePlan(cod){
   }
   const tbody=document.getElementById('plan-detalle-tbody');
   if(!tbody) return;
-  tbody.innerHTML=[...p.insumos].sort((a,b)=>a.stockActual-b.stockActual).map(ins=>{
+  tbody.innerHTML=[...p.insumos].sort((a,b)=>{
+    // primero sin stock, luego limitantes, luego OK
+    if(a.faltante!==b.faltante) return a.faltante?-1:1;
+    if(a.esLimitante!==b.esLimitante) return a.esLimitante?-1:1;
+    return a.stockActual-b.stockActual;
+  }).map(ins=>{
     const necLote=ins.cantPorLote;
+    const faltaIns=Math.max(0,necLote-ins.stockActual);   // cantidad de insumo faltante p/1 lote
+    const prodPosible=ins.maxPorEste;                      // unidades producibles con stock actual
+    const faltaInsStr=faltaIns>0
+      ?'<span style="color:var(--red);font-weight:600">'+fmt(faltaIns,2)+' '+ins.um+'</span>'
+      :'<span style="color:var(--text3)">—</span>';
+    const prodPosibleStr=prodPosible>0
+      ?'<span style="color:var(--gold2);font-family:var(--mono);font-size:11px">'+fmtU(prodPosible)+' un.</span>'
+      :'<span style="color:var(--red);font-family:var(--mono);font-size:11px">0 un.</span>';
     const est=ins.stockActual<=0?'<span class="pill pill-crit">SIN STOCK</span>':ins.esLimitante?'<span class="pill pill-warn">⚑ LIMITANTE</span>':'<span class="pill pill-ok">OK</span>';
     const accion=(ins.faltante||ins.esLimitante)
       ?'<button class="btn btn-r btn-sm" onclick="abrirOCDesdePlan(\''+p.codigo+'\',\''+ins.codigo+'\')" style="font-size:7px;padding:3px 8px">+ OC</button>'
       :'<span style="color:var(--text3);font-size:11px">—</span>';
     return '<tr style="'+(ins.esLimitante?'background:rgba(201,168,76,.05)':ins.faltante?'background:rgba(192,57,43,.03)':'')+'">'+
       '<td class="td-code">'+ins.codigo+'</td><td class="td-name">'+ins.nombre+'</td>'+
-      '<td class="td-mono tr">'+ins.cantPorLote+' '+ins.um+'</td>'+
-      '<td class="td-mono tr" style="color:'+(ins.stockActual<=0?'var(--red)':'inherit')+'">'+ins.stockActual.toFixed(2)+'</td>'+
-      '<td class="td-mono tr" style="color:'+(necLote>ins.stockActual?'var(--red)':'var(--gold2)')+';font-weight:600">'+necLote+'</td>'+
+      '<td class="td-mono tr">'+fmt(necLote,2)+' '+ins.um+'</td>'+
+      '<td class="td-mono tr" style="color:'+(ins.stockActual<=0?'var(--red)':'inherit')+'">'+fmt(ins.stockActual,2)+'</td>'+
+      '<td class="tr">'+faltaInsStr+'</td>'+
+      '<td class="tr">'+prodPosibleStr+'</td>'+
       '<td>'+est+'</td><td>'+accion+'</td></tr>';
   }).join('');
   det.scrollIntoView({behavior:'smooth',block:'start'});
