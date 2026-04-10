@@ -1102,9 +1102,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
       <div class="sh-title">✦ Planificador Inteligente — ¿Qué podés producir hoy?</div>
       <div class="sh-actions">
         <select class="fsel" id="plan-filtro-tipo" onchange="renderPlanificador()">
-          <option value="">Todos los productos</option>
-          <option value="Nacional">Nacional (FINE)</option>
-          <option value="Terceros">Terceros</option>
+          <option value="">Todas las marcas</option>
         </select>
         <select class="fsel" id="plan-modo" onchange="renderPlanificador()">
           <option value="maximo">Máximo posible</option>
@@ -1119,7 +1117,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" id="plan-kpis"></div>
 
     <!-- Resultados principales -->
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:20px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
       <div>
         <div class="sh"><div class="sh-title" style="color:var(--gold2)">✓ Podés producir ahora</div></div>
         <div id="plan-puede" style="display:flex;flex-direction:column;gap:8px"></div>
@@ -6505,13 +6503,18 @@ function analizarProducto(cod){
 }
 
 function renderPlanificador(){
-  const fc=document.getElementById('plan-filtro-tipo')?.value||'';
+  // Poblar filtro de marcas dinámicamente
+  const sel=document.getElementById('plan-filtro-tipo');
+  if(sel&&sel.options.length<=1){
+    const marcas=[...new Set(Object.values(BOM_COMPLETO).map(v=>v.cliente||'FINE'))].sort();
+    marcas.forEach(m=>sel.innerHTML+=`<option value="${m}">${m}</option>`);
+  }
+  const fc=sel?.value||'';
   planificadorData=[];
   Object.keys(BOM_COMPLETO).forEach(cod=>{
     const r=analizarProducto(cod);
     if(!r) return;
-    if(fc==='Nacional'&&r.cliente!=='FINE') return;
-    if(fc==='Terceros'&&r.cliente==='FINE') return;
+    if(fc&&r.cliente!==fc) return;
     planificadorData.push(r);
   });
   planificadorData.sort((a,b)=>b.pctOk-a.pctOk);
@@ -6573,13 +6576,35 @@ function verDetallePlan(cod){
   const resEl=document.getElementById('plan-detalle-resumen');
   if(resEl){
     const limIns=p.insumos.find(x=>x.codigo===p.limitante);
-    resEl.innerHTML='<div style="display:flex;gap:16px;flex-wrap:wrap;padding:12px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-bottom:12px;font-size:12px">'
+    // Insumos con déficit (faltante o limitante)
+    const faltantes=p.insumos.filter(ins=>ins.faltante||ins.stockActual<ins.cantPorLote);
+    const faltantesHtml=faltantes.length>0
+      ?'<div style="margin-top:10px;padding:10px 14px;background:rgba(192,57,43,.06);border:1px solid rgba(192,57,43,.2);border-radius:7px">'
+        +'<div style="font-size:10px;font-weight:700;letter-spacing:.05em;color:var(--red);margin-bottom:8px">⚠ INSUMOS FALTANTES ('+faltantes.length+')</div>'
+        +'<div style="display:flex;flex-direction:column;gap:5px">'
+        +faltantes.map(ins=>{
+          const faltaCant=Math.max(0,ins.cantPorLote-ins.stockActual);
+          const unPosiblesEste=ins.maxPorEste; // unidades producibles con stock de ESTE insumo
+          const bloqueo=unPosiblesEste===0
+            ?'<span style="color:var(--red);font-weight:700">Bloquea todo — 0 un.</span>'
+            :'<span style="color:var(--yellow)">Permite '+fmtU(unPosiblesEste)+' un. / necesitás lote de '+fmtU(p.loteMin)+' un.</span>';
+          return '<div style="display:grid;grid-template-columns:90px 1fr auto;gap:8px;align-items:center;font-size:11px">'
+            +'<span style="font-family:var(--mono);font-size:9px;color:var(--text3)">'+ins.codigo+'</span>'
+            +'<span style="font-weight:500">'+ins.nombre+'</span>'
+            +'<div style="text-align:right"><span style="font-family:var(--mono);color:var(--red);font-size:10px">-'+fmt(faltaCant,2)+' '+ins.um+'</span><br>'+bloqueo+'</div>'
+            +'</div>';
+        }).join('<div style="border-top:1px solid rgba(192,57,43,.1);margin:3px 0"></div>')
+        +'</div></div>'
+      :'';
+    resEl.innerHTML='<div style="display:flex;gap:16px;flex-wrap:wrap;padding:12px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;font-size:12px">'
       +'<div><span style="color:var(--text3)">Lote mínimo: </span><span style="font-family:var(--mono);font-weight:600">'+fmtU(p.loteMin)+' un.</span></div>'
       +'<div><span style="color:var(--text3)">Lotes posibles: </span><span style="font-family:var(--mono);font-weight:600;color:'+(p.maxLotes>0?'var(--gold2)':'var(--red)')+'">'+p.maxLotes+'</span></div>'
       +'<div><span style="color:var(--text3)">Máx. producible: </span><span style="font-family:var(--mono);font-weight:700;font-size:14px;color:'+(p.max>0?'var(--gold2)':'var(--red)')+'">'+fmtU(p.max)+' un.</span></div>'
       +(limIns?'<div><span style="color:var(--text3)">Limitante: </span><span style="color:var(--yellow);font-weight:600">'+limIns.nombre+'</span></div>':'')
       +'<div style="margin-left:auto"><span style="color:var(--text3)">Insumos OK: </span><span style="font-family:var(--mono)">'+p.conStock+'/'+p.total+'</span></div>'
-      +'</div>';
+      +'</div>'
+      +faltantesHtml
+      +'<div style="height:8px"></div>';
   }
   const tbody=document.getElementById('plan-detalle-tbody');
   if(!tbody) return;
