@@ -709,8 +709,9 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         <button class="btn btn-b" onclick="exportarOC()">↓ Exportar OC</button>
       </div>
     </div>
-    <div class="tbl-wrap" style="overflow-x:auto"><table style="min-width:1100px">
+    <div class="tbl-wrap" style="overflow-x:auto"><table style="min-width:1200px">
       <thead><tr>
+        <th style="min-width:58px">N° OC</th>
         <th>Insumo</th><th>Descripción</th><th>Productos</th>
         <th class="tr">Cantidad</th><th class="tr">Precio unit.</th><th class="tr">Total</th>
         <th>Proveedor</th><th>Estado</th>
@@ -4394,7 +4395,9 @@ function renderCompras(){
            📎 Factura
          </button>`;
 
+    const ocNum='OC-'+String(idx+1).padStart(3,'0');
     return `<tr style="${rowDim}cursor:pointer" onclick="exportarOCPDF(${idx})" title="Ver / imprimir OC">
+      <td class="td-code" style="font-size:10px;color:var(--gold2);white-space:nowrap;font-family:var(--mono)">${ocNum}</td>
       <td>${codigoCell}</td>
       <td class="td-name" style="max-width:190px">${descCell}${loteStr}${vencStr}${obsSnip}</td>
       <td>${prodCell}</td>
