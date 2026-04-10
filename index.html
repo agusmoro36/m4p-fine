@@ -6488,11 +6488,12 @@ function analizarProducto(cod){
   const detalles=[];
   bom.insumos.forEach(ins=>{
     const s=D.stock[ins.codigo];
-    const st=s?parseFloat(s.stock||0):0;
+    const stRaw=s?parseFloat(s.stock||0):0;
+    const st=Math.max(0,stRaw); // clamp: stock negativo = 0
     const cant=parseFloat(ins.cantidad)||0;   // cant por LOTE (no por unidad)
     const maxE=cant>0?Math.floor(st/cant):99999; // max lotes producibles con este insumo
     if(st>0) conStock++; else sinStock++;
-    detalles.push({codigo:ins.codigo,nombre:ins.nombre,cantPorLote:cant,cantPorUnidad:cant,um:ins.um||'',stockActual:st,maxLotes:maxE,maxPorEste:maxE*loteMin,esLimitante:false,faltante:st<=0});
+    detalles.push({codigo:ins.codigo,nombre:ins.nombre,cantPorLote:cant,cantPorUnidad:cant,um:ins.um||'',stockActual:stRaw,maxLotes:maxE,maxPorEste:maxE*loteMin,esLimitante:false,faltante:stRaw<=0});
     if(maxE<maxLotes){maxLotes=maxE;lim=ins.codigo;}
   });
   if(maxLotes===Infinity) maxLotes=0;
