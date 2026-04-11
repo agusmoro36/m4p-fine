@@ -908,7 +908,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <div id="hist-empty" style="display:none;text-align:center;padding:60px;color:var(--text2)">
       <div style="font-size:40px;margin-bottom:12px">📋</div>
       <div style="font-size:16px;font-weight:600;margin-bottom:6px">Sin movimientos registrados</div>
-      <div style="font-size:13px">Los movimientos se registran automáticamente cuando marcás OCs como entregadas.</div>
+      <div style="font-size:13px">Los movimientos se registran al recibir mercadería desde Recepción Depósito.</div>
     </div>
   </div>
 
@@ -4435,83 +4435,9 @@ function renderCompras(){
 function setCampoCompra(idx, campo, valor){
   const c = S.compras[idx];
   if(!c) return;
-  const wasEntregada = c.entregada;
 
-  // Confirmación antes de revertir recepción
-  if(campo === 'entregada' && valor === false && wasEntregada) {
-    const items = (c.items && c.items.length > 0)
-      ? c.items
-      : (c.codigo ? [{codigo:c.codigo, descripcion:c.descripcion, cantidad:c.cantidad, um:c.um}] : []);
-    const detalle = items.map(it => `  • ${it.codigo}  ${fmt(parseFloat(it.cantidad)||0)} ${it.um||'kg'}`).join('\n');
-    const ok = confirm(
-      `⚠️ Revertir recepción\n\nProveedor: ${c.proveedor||'—'}\n\n${detalle}\n\nEsto va a RESTAR estas cantidades del stock.\n¿Confirmás?`
-    );
-    if(!ok) { renderCompras(); return; }
-  }
-
+  // Solo actualizar el campo — el stock se impacta ÚNICAMENTE desde Recepción Depósito
   c[campo] = valor;
-
-  // Si se marca como ENTREGADA → sumar al stock (todos los items)
-  if(campo === 'entregada' && valor === true && !wasEntregada) {
-    // Normalizar items: usar array si existe, si no el item legacy
-    const itemsToProcess = (c.items && c.items.length > 0)
-      ? c.items
-      : (c.codigo && parseFloat(c.cantidad) > 0 ? [{codigo:c.codigo, descripcion:c.descripcion, cantidad:c.cantidad}] : []);
-
-    itemsToProcess.forEach(item => {
-      const cod = item.codigo || '';
-      const cant = parseFloat(item.cantidad) || 0;
-      if(!cod || cant <= 0) return;
-      if(!D.stock[cod]) D.stock[cod] = {nombre: item.descripcion || cod, stock: 0};
-      const antes = parseFloat(D.stock[cod].stock) || 0;
-      D.stock[cod].stock = Math.round((antes + cant) * 1000) / 1000;
-      const u = getUbic(D.stock[cod]);
-      u.deposito = Math.round(((u.deposito||0) + cant) * 1000) / 1000;
-      if(!D.stock[cod].lotes) D.stock[cod].lotes = [];
-      D.stock[cod].lotes.unshift({lote:c.lote||'', vencimiento:c.vencimiento||'', cantidad:cant, fecha:new Date().toISOString().slice(0,10)});
-      if(D.stock[cod].lotes.length > 30) D.stock[cod].lotes = D.stock[cod].lotes.slice(0,30);
-      registrarMovimiento(cod, item.descripcion||cod, 'entrada', cant, antes, D.stock[cod].stock, 'OC entregada', c.proveedor||'');
-    });
-    if(itemsToProcess.length > 0)
-      toast('✓ Stock actualizado — ' + itemsToProcess.length + ' insumo'+(itemsToProcess.length>1?'s':''), '📦', 4000);
-
-    // ── Abrir modal de factura para que el usuario ingrese monto real del PDF ──
-    const ocSid = c._sid || ('oc_'+idx);
-    const yaExiste = (S.facturasExtra||[]).some(f => f._oc_sid === ocSid);
-    if(!yaExiste && typeof facturasState !== 'undefined') {
-      const items2 = (c.items && c.items.length > 0)
-        ? c.items : (c.codigo ? [{codigo:c.codigo, descripcion:c.descripcion, cantidad:c.cantidad}] : []);
-      const desc = items2.map(it=>it.descripcion||it.codigo).join(', ');
-      // Abrir modal pre-completado — el usuario ingresa el monto real de la factura
-      abrirModalFacturaDesdeOC(c, ocSid, desc);
-    }
-  }
-
-  // Si se DESMARCA → restar (todos los items)
-  if(campo === 'entregada' && valor === false && wasEntregada) {
-    const itemsRev = (c.items && c.items.length > 0)
-      ? c.items
-      : (c.codigo && parseFloat(c.cantidad) > 0 ? [{codigo:c.codigo, descripcion:c.descripcion, cantidad:c.cantidad}] : []);
-    itemsRev.forEach(item => {
-      const cod = item.codigo || '';
-      const cant = parseFloat(item.cantidad) || 0;
-      if(!cod || cant <= 0 || !D.stock[cod]) return;
-      const antes = parseFloat(D.stock[cod].stock) || 0;
-      D.stock[cod].stock = Math.max(0, Math.round((antes - cant) * 1000) / 1000);
-      registrarMovimiento(cod, item.descripcion||cod, 'salida', cant, antes, D.stock[cod].stock, 'OC entregada', 'Revertido · '+(c.proveedor||''));
-    });
-    if(itemsRev.length > 0) toast('↩ Stock revertido — '+itemsRev.length+' insumo'+(itemsRev.length>1?'s':''), '↩', 3000);
-    // Eliminar factura auto-creada si existe
-    const ocSidRev = c._sid || ('oc_'+idx);
-    if(typeof facturasState !== 'undefined') {
-      const fIdx = facturasState.findIndex(f=>f._oc_sid===ocSidRev);
-      if(fIdx>=0) facturasState.splice(fIdx,1);
-    }
-    if(S.facturasExtra) {
-      const eIdx = S.facturasExtra.findIndex(f=>f._oc_sid===ocSidRev);
-      if(eIdx>=0) S.facturasExtra.splice(eIdx,1);
-    }
-  }
 
   renderCompras();
   saveState();
