@@ -2662,7 +2662,7 @@ const LS_KEY = 'mrp_fine_v8';
 const SB_URL = 'https://njxmxzddhukquspzrjwh.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qeG14emRkaHVrcXVzcHpyandoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NzI4NzEsImV4cCI6MjA4OTI0ODg3MX0.9K7CegfGzCTRUhAh95y8M3zx7XEE29KhzLzuZ-o5dZo';
 const SB_TABLE = 'app_state';
-const SB_STATE_KEY = 'mrp_fine_v8';
+let SB_STATE_KEY = 'mrp_fine_v8'; // se sobreescribe en login según usuario
 
 let SB_CLIENT = null;
 let _sbIgnoreNext = false; // evitar loop al recibir propio cambio
@@ -5984,8 +5984,9 @@ let facturasState = FACTURAS_DATA.map((f,i) => ({...f, _id: i}));
 
 // ── AUTENTICACIÓN ─────────────────────────────────────────────
 const AUTH_USERS = {
-  'admin':  { pass: 'admin1234', role: 'admin' },
-  'viewer': { pass: 'viewer',    role: 'viewer' },
+  'admin':  { pass: 'admin1234', role: 'admin',  sbKey: 'mrp_fine_v8'   },
+  'viewer': { pass: 'viewer',    role: 'viewer', sbKey: 'mrp_fine_v8'   },
+  'test':   { pass: 'test2026',  role: 'admin',  sbKey: 'mrp_fine_test' },
 };
 
 function doLogin() {
@@ -6000,9 +6001,12 @@ function doLogin() {
   }
   sessionStorage.setItem('mrp-role', auth.role);
   sessionStorage.setItem('mrp-user', user);
+  // Apuntar al espacio de datos correcto según usuario
+  SB_STATE_KEY = auth.sbKey || 'mrp_fine_v8';
   document.getElementById('login-overlay').style.display = 'none';
   if (auth.role === 'viewer') applyViewerMode();
-  toast('Bienvenida, ' + user + ' 👋', '✓', 2500);
+  if (user === 'test') toast('🧪 Modo TEST — datos separados de producción', '⚗', 4000);
+  else toast('Bienvenida, ' + user + ' 👋', '✓', 2500);
 }
 
 function applyViewerMode() {
