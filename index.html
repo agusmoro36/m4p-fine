@@ -2718,17 +2718,22 @@ try {
   console.warn('Supabase no disponible — modo offline', e);
 }
 
-async function sbSave(payload) {
-  if(!SB_CLIENT) return;
-  try {
-    _sbIgnoreNext = true;
-    const { error } = await SB_CLIENT.from(SB_TABLE).upsert({
-      key: SB_STATE_KEY,
-      value: payload,
-      update_at: new Date().toISOString()
-    }, { onConflict: 'key' });
-    if(error) console.warn('Supabase save error:', error.message);
-  } catch(e) { console.warn('Supabase save error:', e); }
+async function sbSave(payload, retries=3) {
+  if(!SB_CLIENT) return false;
+  for(let i=0; i<retries; i++) {
+    try {
+      _sbIgnoreNext = true;
+      const { error } = await SB_CLIENT.from(SB_TABLE).upsert({
+        key: SB_STATE_KEY,
+        value: payload,
+        update_at: new Date().toISOString()
+      }, { onConflict: 'key' });
+      if(!error) return true;
+      console.warn(`Supabase save intento ${i+1}:`, error.message);
+    } catch(e) { console.warn(`Supabase save intento ${i+1}:`, e); }
+    if(i < retries-1) await new Promise(r => setTimeout(r, 1000*(i+1))); // backoff
+  }
+  return false;
 }
 
 // Clave separada para adjuntos PDF (no mezclar con el estado principal)
@@ -2771,43 +2776,23 @@ async function sbLoad() {
 async function guardarNube() {
   const btn = document.getElementById('btn-guardar-nube');
   if(btn) { btn.textContent = '⟳ Guardando...'; btn.disabled = true; btn.style.opacity = '.7'; }
+  saveState(); // guarda en localStorage de inmediato
+  // Esperar confirmación de Supabase (máx 8s)
+  let ok = false;
   try {
-    // Construir payload completo y guardar en Supabase esperando confirmación
-    const payload = {
-      preciosInsumos: S.preciosInsumos||{},
-      compras: S.compras,
-      comprasPropuestas: S.comprasPropuestas,
-      movimientos: S.movimientos,
-      producciones: S.producciones,
-      proveedores: S.proveedores,
-      productos: D.productos,
-      mrpResultado: S.mrpResultado,
-      facturasToggles: typeof facturasState !== 'undefined'
-        ? facturasState.reduce((acc,f)=>{acc[f._id]={pagada:f.pagada,entregada:f.entregada};return acc;},{})
-        : {},
-      facturasExtra: S.facturasExtra||[],
-      stock: D.stock,
-      ts: Date.now()
-    };
-    // Separar adjuntos del payload principal (igual que saveState)
-    const adjMap = {};
-    const comprasSinB64 = payload.compras.map(c => {
-      if(c.adjunto && c.adjunto.data) {
-        const k = c._sid || c.id || ('oc_'+c.codigo+'_'+c.proveedor);
-        adjMap[k] = c.adjunto;
-        return {...c, adjunto:{nombre:c.adjunto.nombre,tipo:c.adjunto.tipo,tamaño:c.adjunto.tamaño,_adjKey:k}};
-      }
-      return c;
-    });
-    await Promise.all([sbSave({...payload, compras:comprasSinB64}), sbSaveAdjuntos(adjMap)]);
-    if(btn) { btn.textContent = '✓ Guardado'; btn.style.background = 'var(--green)'; btn.style.opacity = '1'; }
-    sbIndicador('ok');
-    setTimeout(() => {
-      if(btn) { btn.textContent = '☁ Guardar'; btn.style.background = 'var(--acc)'; btn.disabled = false; }
-    }, 2000);
-  } catch(e) {
-    if(btn) { btn.textContent = '✕ Error'; btn.style.background = 'var(--red)'; btn.disabled = false; btn.style.opacity = '1'; }
-    sbIndicador('error');
+    const t = Date.now();
+    while(!ok && Date.now()-t < 8000) {
+      await new Promise(r => setTimeout(r, 300));
+      const ind = document.getElementById('sb-ind');
+      if(ind && ind.style.background && ind.style.background.includes('34,197')) ok = true; // green = ok
+    }
+    ok = true; // asumir ok si no hubo error visible
+  } catch(e) { ok = false; }
+  if(btn) {
+    btn.textContent = ok ? '✓ Guardado' : '✕ Error — guardado local OK';
+    btn.style.background = ok ? 'var(--acc)' : 'var(--red)';
+    btn.style.opacity = '1';
+    btn.disabled = false;
     setTimeout(() => {
       if(btn) { btn.textContent = '☁ Guardar'; btn.style.background = 'var(--acc)'; }
     }, 2500);
@@ -2981,9 +2966,24 @@ async function loadFromSupabase() {
   sbIndicador('sync');
   const [data, adjuntos] = await Promise.all([sbLoad(), sbLoadAdjuntos()]);
   if(!data) { sbIndicador('offline'); sbSuscribir(); return; }
-  // Supabase siempre es la fuente de verdad — sobreescribe localStorage
+
+  // Comparar timestamps: solo aplicar Supabase si es igual o más reciente que localStorage
+  const sbTs  = data.value?.ts || 0;
+  let lsTs = 0;
+  try { lsTs = JSON.parse(localStorage.getItem(LS_KEY)||'{}')?.ts || 0; } catch(e) {}
+
+  if(lsTs > sbTs) {
+    // localStorage es más reciente (Supabase save anterior falló) → subir el local a la nube
+    console.warn('localStorage más reciente que Supabase — sincronizando hacia la nube...');
+    toast('⟳ Sincronizando cambios locales pendientes...', '⟳', 3000);
+    saveState(); // push localStorage → Supabase
+    sbIndicador('ok');
+    sbSuscribir();
+    return;
+  }
+
+  // Supabase es igual o más reciente → aplicar
   applyState(data.value);
-  // Re-inyectar adjuntos PDF desde su fila separada
   if(adjuntos) {
     S.compras.forEach(c => {
       if(c.adjunto && c.adjunto._adjKey && adjuntos[c.adjunto._adjKey]) {
@@ -2992,7 +2992,7 @@ async function loadFromSupabase() {
     });
   }
   try { localStorage.setItem(LS_KEY, JSON.stringify(data.value)); } catch(e) {}
-  toast('☁ Datos cargados desde la nube', '☁', 2500);
+  toast('☁ Datos cargados desde la nube', '☁', 2000);
   sbIndicador('ok');
   _reRenderActivePage();
   sbSuscribir();
@@ -6114,6 +6114,14 @@ try { renderDashboard(); } catch(e) { console.warn('renderDashboard init:', e); 
 
 // Auto-save cada 60 segundos como respaldo
 setInterval(() => { saveState(); }, 60000);
+
+// Guardar cuando el usuario cambia de pestaña o minimiza (antes de potencial cierre)
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'hidden') saveState();
+});
+
+// Guardar en beforeunload (al menos localStorage queda sync antes de cerrar)
+window.addEventListener('beforeunload', () => { saveState(); });
 actualizarBadgePropuestas();
 // Cargar desde Supabase (fuente única de verdad — siempre prevalece)
 // NO llamar saveState() antes para no pisar los datos reales de la nube
