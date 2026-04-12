@@ -4387,7 +4387,27 @@ function renderCompras(){
 
     const loteStr = c.lote ? `<div style="font-size:9px;color:var(--gold);font-family:var(--mono)">L: ${c.lote}</div>` : '';
     const vencStr = c.vencimiento ? `<div style="font-size:9px;font-family:var(--mono)">${vencPill(c.vencimiento)}</div>` : '';
-    const cantRec = c.cant_recibida > 0 ? `<div style="font-size:9px;color:var(--green);font-family:var(--mono)">Rec: ${fmt(c.cant_recibida)}</div>` : '';
+    // Barra de recepción parcial
+    const totalOC   = ocItems.reduce((s,it)=>s+(parseFloat(it.cantidad)||0),0) || parseFloat(c.cantidad)||0;
+    const totalRec  = parseFloat(c.cant_recibida)||0;
+    const nRecs     = (c.recepciones||[]).length;
+    const pct       = totalOC>0 ? Math.min(100, (totalRec/totalOC)*100) : 0;
+    const pendiente = Math.max(0, totalOC - totalRec);
+    const barColor  = c.entregada ? 'var(--acc)' : pct>=100 ? 'var(--acc)' : pct>0 ? 'var(--gold2)' : 'var(--border)';
+    const cantRec   = !c.entregada && totalRec>0
+      ? `<div style="margin-top:4px">
+           <div style="display:flex;justify-content:space-between;font-size:9px;font-family:var(--mono);color:var(--text3);margin-bottom:2px">
+             <span style="color:var(--gold2)">${fmt(totalRec,2)} rec.</span>
+             <span style="color:var(--text3)">falta ${fmt(pendiente,2)}</span>
+           </div>
+           <div style="height:4px;background:var(--border);border-radius:3px;overflow:hidden">
+             <div style="width:${pct.toFixed(1)}%;height:100%;background:${barColor};border-radius:3px;transition:width .3s"></div>
+           </div>
+           <div style="font-size:8px;color:var(--text3);margin-top:2px">${pct.toFixed(0)}% · ${nRecs} entrega${nRecs!==1?'s':''}</div>
+         </div>`
+      : c.entregada && totalRec>0
+        ? `<div style="font-size:9px;color:var(--acc);font-family:var(--mono);margin-top:2px">✓ ${fmt(totalRec,2)} recibido${nRecs>1?' ('+nRecs+' partes)':''}</div>`
+        : '';
     const coms = c.comentarios||[];
     const ultimoCom = coms.length ? coms[coms.length-1] : null;
     const obsSnip = ultimoCom
@@ -4445,7 +4465,10 @@ function renderCompras(){
       <td>${codigoCell}</td>
       <td class="td-name" style="max-width:190px">${descCell}${loteStr}${vencStr}${obsSnip}</td>
       <td>${prodCell}</td>
-      <td class="td-mono tr">${ocItems.length>1?fmt(ocItems.reduce((s,it)=>s+it.cantidad,0),2):fmt(first.cantidad||0)}${cantRec}</td>
+      <td class="td-mono tr" style="min-width:110px">
+        <div style="font-weight:600">${ocItems.length>1?fmt(ocItems.reduce((s,it)=>s+(parseFloat(it.cantidad)||0),0),2):fmt(first.cantidad||0)} <span style="font-size:9px;color:var(--text3);font-weight:400">${first.um||'kg'}</span></div>
+        ${cantRec}
+      </td>
       <td class="td-mono tr">${precioCell}</td>
       <td class="td-mono tr">${totalCell}</td>
       <td style="font-size:11px;white-space:nowrap">${c.proveedor||'—'}</td>
