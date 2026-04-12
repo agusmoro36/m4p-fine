@@ -406,6 +406,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <div class="nav-item" onclick="go('produccion')"><span class="nav-ico">⚙</span>Producción Real</div>
     <div class="nav-item" onclick="go('bom')"><span class="nav-ico">◎</span>Fórmulas / BOM</div>
     <div class="nav-item" onclick="go('costos')"><span class="nav-ico">$</span>Dashboard de Costos</div>
+    <div class="nav-item" onclick="go('cotizaciones')"><span class="nav-ico">💰</span>Cotizaciones</div>
     <div class="nav-item" onclick="go('proyeccion')"><span class="nav-ico">◈</span>Proyección Stock<span class="nav-new">NEW</span></div>
     <div class="nav-group">Compras</div>
     <div class="nav-item" onclick="go('propuestas')"><span class="nav-ico">◈</span>OCs Propuestas<span class="nav-badge" id="nb-propuestas" style="display:none">0</span></div>
@@ -1210,6 +1211,41 @@ body.viewer-mode .page-filters select { pointer-events:auto }
   </div>
 </div>
 
+  <!-- ══ COTIZACIONES ══ -->
+  <div class="page" id="page-cotizaciones">
+    <div class="sh">
+      <div class="sh-title">💰 Cotizaciones</div>
+      <div class="sh-actions">
+        <input type="text" class="finput" id="cot-search" placeholder="Buscar insumo…" oninput="renderCotizaciones()" style="width:220px">
+        <select class="fsel" id="cot-moneda" onchange="renderCotizaciones()">
+          <option value="">Todas las monedas</option>
+          <option value="USD">USD</option>
+          <option value="ARS">ARS</option>
+        </select>
+        <button class="btn btn-b btn-sm" onclick="exportarCotizaciones()">↓ Excel</button>
+      </div>
+    </div>
+    <!-- KPIs -->
+    <div id="cot-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px"></div>
+    <!-- Tabla principal -->
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Insumo</th>
+            <th>Proveedores cotizados</th>
+            <th class="tr">Mejor precio</th>
+            <th class="tr">Proveedor más económico</th>
+            <th class="tr">Últ. cotización</th>
+            <th class="tr">Variación max/min</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbl-cotizaciones"></tbody>
+      </table>
+    </div>
+  </div>
+
   </div><!-- /pages -->
 </div><!-- /content -->
 </div><!-- /app -->
@@ -1731,6 +1767,18 @@ body.viewer-mode .page-filters select { pointer-events:auto }
       <button class="btn btn-r btn-sm" onclick="borrarPrecioIns()" id="precio-ins-del" style="margin-right:auto;display:none">🗑 Quitar precio</button>
       <button class="btn btn-g" onclick="closeM('m-precio-ins')">Cancelar</button>
       <button class="btn btn-p" onclick="guardarPrecioIns()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal historial de cotizaciones por insumo -->
+<div class="overlay" id="m-cotiz">
+  <div class="modal" style="max-width:680px">
+    <button class="modal-close" onclick="closeM('m-cotiz')">✕</button>
+    <div class="modal-title" id="m-cotiz-title">Historial de cotizaciones</div>
+    <div id="m-cotiz-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-g" onclick="closeM('m-cotiz')">Cerrar</button>
     </div>
   </div>
 </div>
@@ -2519,14 +2567,14 @@ const S = {
 // ══════════════════════════════════════
 // NAVIGATION
 // ══════════════════════════════════════
-const titles={dashboard:'Dashboard',planificador:'Planificador Inteligente',recepcion:'Recepción de Mercadería',facturas:'Facturas',mrp:'MRP Insumos',plan:'Plan de Producción',produccion:'Producción Real',bom:'Fórmulas / BOM',costos:'Dashboard de Costos',proyeccion:'Proyección de Stock',compras:'Órdenes de Compra',propuestas:'OCs Propuestas',proveedores:'Gestión de Proveedores',stock:'Stock de Insumos',historial:'Historial de Stock',calculadora:'Calculadora MRP',importar:'Importar Excel',alertas:'Alertas'};
+const titles={dashboard:'Dashboard',planificador:'Planificador Inteligente',recepcion:'Recepción de Mercadería',facturas:'Facturas',mrp:'MRP Insumos',plan:'Plan de Producción',produccion:'Producción Real',bom:'Fórmulas / BOM',costos:'Dashboard de Costos',cotizaciones:'Cotizaciones',proyeccion:'Proyección de Stock',compras:'Órdenes de Compra',propuestas:'OCs Propuestas',proveedores:'Gestión de Proveedores',stock:'Stock de Insumos',historial:'Historial de Stock',calculadora:'Calculadora MRP',importar:'Importar Excel',alertas:'Alertas'};
 function go(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')?.includes(`'${id}'`))n.classList.add('active');});
   document.getElementById('tb-title').innerHTML=`${titles[id]||id} <span>· The Fine Company</span>`;
-  const renders={dashboard:renderDashboard,mrp:renderMRP,plan:renderPlan,produccion:renderProduccion,bom:renderBOMPage,costos:renderCostos,proyeccion:renderProyeccion,compras:renderCompras,propuestas:renderPropuestas,recepcion:renderRecepcion,proveedores:renderProveedoresEnhanced,stock:renderStock,historial:renderHistorial,alertas:renderAlertas,calculadora:renderCalcPage,planificador:renderPlanificador,facturas:renderFacturas};
+  const renders={dashboard:renderDashboard,mrp:renderMRP,plan:renderPlan,produccion:renderProduccion,bom:renderBOMPage,costos:renderCostos,cotizaciones:renderCotizaciones,proyeccion:renderProyeccion,compras:renderCompras,propuestas:renderPropuestas,recepcion:renderRecepcion,proveedores:renderProveedoresEnhanced,stock:renderStock,historial:renderHistorial,alertas:renderAlertas,calculadora:renderCalcPage,planificador:renderPlanificador,facturas:renderFacturas};
   closeSidebar();
   if(renders[id]) renders[id]();
 }
@@ -8026,6 +8074,220 @@ function borrarPrecioIns() {
   renderCostos();
   saveState();
   toast('Precio eliminado: '+cod,'🗑️');
+}
+
+// ══════════════════════════════════════
+// COTIZACIONES — HISTORIAL DE PRECIOS
+// ══════════════════════════════════════
+
+/**
+ * buildPriceHistory()
+ * Recorre S.compras y devuelve un mapa:
+ *   { codigo: [ {proveedor, precio, moneda, fecha, cantidad, descripcion, sid, estado} ] }
+ * Cada array está ordenado de más reciente a más antiguo (por fecha).
+ */
+function buildPriceHistory() {
+  const hist = {};
+  // Recorremos en orden cronológico → luego invertiremos por insumo
+  S.compras.forEach(c => {
+    if(!c.codigo || !(c.precio > 0)) return;
+    const fecha = c.fecha || (c.recepciones && c.recepciones[0]?.fecha) || '';
+    const entry = {
+      proveedor:   c.proveedor || '—',
+      precio:      parseFloat(c.precio),
+      moneda:      c.moneda || 'USD',
+      fecha:       fecha,
+      cantidad:    parseFloat(c.cantidad) || 0,
+      descripcion: c.descripcion || '',
+      sid:         c._sid || '',
+      estado:      c.estado || '',
+    };
+    if(!hist[c.codigo]) hist[c.codigo] = [];
+    hist[c.codigo].push(entry);
+  });
+  // Ordenar cada grupo: con fecha primero (más reciente al tope), sin fecha al final
+  Object.keys(hist).forEach(cod => {
+    hist[cod].sort((a, b) => {
+      if(!a.fecha && !b.fecha) return 0;
+      if(!a.fecha) return 1;
+      if(!b.fecha) return -1;
+      return b.fecha.localeCompare(a.fecha);
+    });
+  });
+  return hist;
+}
+
+/**
+ * getSupplierSummary(entries)
+ * Para un insumo, agrupa por proveedor y devuelve el último precio de cada uno.
+ * Retorna array [{proveedor, precio, moneda, fecha, cantidad}] ordenado por precio asc.
+ */
+function getSupplierSummary(entries) {
+  const byProv = {};
+  // entries ya viene ordenado desc por fecha → el primero de cada proveedor es el más reciente
+  entries.forEach(e => {
+    const key = (e.proveedor||'').toLowerCase();
+    if(!byProv[key]) byProv[key] = {...e};
+  });
+  return Object.values(byProv).sort((a, b) => a.precio - b.precio);
+}
+
+function renderCotizaciones() {
+  const hist = buildPriceHistory();
+  const search = (document.getElementById('cot-search')?.value || '').toLowerCase().trim();
+  const monedaFiltro = document.getElementById('cot-moneda')?.value || '';
+
+  // Construir nombre de insumo desde BOM o D.stock
+  const nomMap = {};
+  Object.values(D.bom || {}).forEach(bom => (bom.insumos||[]).forEach(i => { if(!nomMap[i.codigo]) nomMap[i.codigo] = i.nombre; }));
+  Object.entries(D.stock||{}).forEach(([cod, v]) => { if(!nomMap[cod]) nomMap[cod] = v.nombre||''; });
+
+  // Filtrar
+  let codigos = Object.keys(hist).filter(cod => {
+    const nom = (nomMap[cod]||'').toLowerCase();
+    if(search && !cod.toLowerCase().includes(search) && !nom.includes(search)) return false;
+    if(monedaFiltro) {
+      const monedas = [...new Set(hist[cod].map(e => e.moneda))];
+      if(!monedas.includes(monedaFiltro)) return false;
+    }
+    return true;
+  }).sort();
+
+  // KPIs
+  const totalInsumos = codigos.length;
+  let totalOCs = 0, multiProv = 0, sinFecha = 0;
+  codigos.forEach(cod => {
+    totalOCs += hist[cod].length;
+    const provs = new Set(hist[cod].map(e => e.proveedor.toLowerCase()));
+    if(provs.size > 1) multiProv++;
+    if(hist[cod].some(e => !e.fecha)) sinFecha++;
+  });
+  document.getElementById('cot-kpis').innerHTML = [
+    {label:'Insumos cotizados', val: totalInsumos, color:'var(--gold)', sub:'con historial de precios'},
+    {label:'OCs en historial',  val: totalOCs,     color:'var(--blue)', sub:'órdenes de compra'},
+    {label:'Comparables',       val: multiProv,    color:'var(--green)',sub:'insumos con 2+ proveedores'},
+    {label:'Sin fecha en OC',   val: sinFecha,     color: sinFecha>0?'var(--gold)':'var(--text3)', sub:'completar en la OC'},
+  ].map(k=>`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 18px">
+    <div style="font-size:9px;color:var(--text3);font-family:var(--mono);letter-spacing:1.5px;margin-bottom:8px">${k.label.toUpperCase()}</div>
+    <div style="font-size:22px;font-weight:700;color:${k.color};font-family:var(--mono);line-height:1.2">${k.val}</div>
+    <div style="font-size:10px;color:var(--text3);margin-top:4px">${k.sub}</div>
+  </div>`).join('');
+
+  // Tabla principal
+  const tbody = document.getElementById('tbl-cotizaciones');
+  if(!codigos.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:40px">Sin resultados</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = codigos.map(cod => {
+    const entries = hist[cod];
+    const nom = nomMap[cod] || entries[0]?.descripcion || cod;
+    const summary = getSupplierSummary(entries);
+    const bestEntry = summary[0]; // más barato
+    const worstEntry = summary[summary.length - 1];
+    const variacion = summary.length > 1 && bestEntry.precio > 0
+      ? ((worstEntry.precio / bestEntry.precio - 1) * 100).toFixed(0)
+      : null;
+    const lastFecha = entries.find(e => e.fecha)?.fecha || '';
+    const lastFechaStr = lastFecha ? new Date(lastFecha + 'T12:00:00').toLocaleDateString('es-AR', {day:'2-digit',month:'short',year:'2-digit'}) : '<span style="color:var(--text3)">—</span>';
+
+    // Chips de proveedores con sus últimos precios
+    const provChips = summary.map((s, i) => {
+      const isBest = i === 0;
+      const bg = isBest ? 'rgba(34,197,94,0.15)' : 'var(--bg3)';
+      const border = isBest ? '1px solid rgba(34,197,94,0.4)' : '1px solid var(--border)';
+      const textCol = isBest ? 'var(--green)' : 'var(--text2)';
+      const monSym = s.moneda === 'ARS' ? '$' : 'U$D';
+      const fechaStr = s.fecha ? new Date(s.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'2-digit'}) : 'sin fecha';
+      return `<div style="display:inline-flex;flex-direction:column;gap:1px;padding:4px 8px;border-radius:6px;background:${bg};border:${border};margin:2px;cursor:default" title="${s.proveedor} — ${monSym} ${fmt(s.precio,2)} — ${fechaStr}">
+        <span style="font-size:10px;font-weight:600;color:${textCol};font-family:var(--mono)">${monSym} ${fmt(s.precio,2)}</span>
+        <span style="font-size:9px;color:var(--text3)">${s.proveedor}</span>
+        <span style="font-size:8px;color:var(--text3);font-family:var(--mono)">${fechaStr}</span>
+      </div>`;
+    }).join('');
+
+    const varBadge = variacion !== null
+      ? `<span style="font-family:var(--mono);font-size:11px;color:${parseFloat(variacion)>30?'var(--red)':parseFloat(variacion)>10?'var(--gold)':'var(--green)'};font-weight:700">+${variacion}%</span>`
+      : `<span style="color:var(--text3);font-size:11px">—</span>`;
+
+    return `<tr>
+      <td>
+        <div style="font-weight:700;font-family:var(--mono);font-size:11px;color:var(--gold)">${cod}</div>
+        <div style="font-size:12px;color:var(--text2);max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${nom}">${nom}</div>
+      </td>
+      <td style="max-width:380px">${provChips}</td>
+      <td class="td-mono tr" style="color:var(--green);font-weight:700;white-space:nowrap">
+        ${bestEntry.moneda==='ARS'?'$':'U$D'} ${fmt(bestEntry.precio, 2)}
+      </td>
+      <td style="font-size:12px;color:var(--text2)">${bestEntry.proveedor}</td>
+      <td class="td-mono tr" style="font-size:11px">${lastFechaStr}</td>
+      <td class="tr">${varBadge}</td>
+      <td><button class="btn btn-sm" onclick="verHistorialCotiz('${cod}')" style="font-size:10px;padding:3px 8px">Ver historial</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function verHistorialCotiz(cod) {
+  const hist = buildPriceHistory();
+  const entries = hist[cod] || [];
+  const nomMap = {};
+  Object.values(D.bom||{}).forEach(bom=>(bom.insumos||[]).forEach(i=>{ if(!nomMap[i.codigo]) nomMap[i.codigo]=i.nombre; }));
+  Object.entries(D.stock||{}).forEach(([c,v])=>{ if(!nomMap[c]) nomMap[c]=v.nombre||''; });
+  const nom = nomMap[cod] || entries[0]?.descripcion || cod;
+
+  const rows = entries.map((e, i) => {
+    const isBest = e.precio === Math.min(...entries.map(x=>x.precio));
+    const monSym = e.moneda === 'ARS' ? '$' : 'U$D';
+    const fechaStr = e.fecha ? new Date(e.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+    return `<tr style="${isBest?'background:rgba(34,197,94,0.07)':''}">
+      <td style="font-size:11px;color:var(--text3);font-family:var(--mono)">${i+1}</td>
+      <td style="font-size:12px;font-weight:600">${e.proveedor}</td>
+      <td class="td-mono tr" style="color:${isBest?'var(--green)':'var(--text)'};font-weight:${isBest?'700':'400'}">${monSym} ${fmt(e.precio,2)} ${isBest?'<span style="font-size:9px;background:rgba(34,197,94,0.2);color:var(--green);padding:1px 5px;border-radius:4px;margin-left:4px">MEJOR</span>':''}</td>
+      <td class="td-mono tr" style="font-size:11px">${e.cantidad > 0 ? fmt(e.cantidad,0)+' kg' : '—'}</td>
+      <td style="font-size:11px;color:var(--text2);font-family:var(--mono)">${fechaStr}</td>
+      <td><span style="font-size:9px;font-family:var(--mono);padding:2px 6px;border-radius:4px;background:var(--bg3);border:1px solid var(--border)">${e.estado||'—'}</span></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('m-cotiz-title').textContent = cod + ' — ' + nom;
+  document.getElementById('m-cotiz-body').innerHTML = `
+    <div class="tbl-wrap" style="max-height:400px;overflow-y:auto">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Proveedor</th><th class="tr">Precio</th><th class="tr">Cantidad</th><th class="tr">Fecha OC</th><th>Estado</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  openM('m-cotiz');
+}
+
+function exportarCotizaciones() {
+  if(typeof XLSX === 'undefined') return;
+  const hist = buildPriceHistory();
+  const nomMap = {};
+  Object.values(D.bom||{}).forEach(bom=>(bom.insumos||[]).forEach(i=>{ if(!nomMap[i.codigo]) nomMap[i.codigo]=i.nombre; }));
+  Object.entries(D.stock||{}).forEach(([c,v])=>{ if(!nomMap[c]) nomMap[c]=v.nombre||''; });
+  const rows = [];
+  Object.keys(hist).sort().forEach(cod => {
+    hist[cod].forEach(e => {
+      rows.push({
+        'Código': cod,
+        'Insumo': nomMap[cod] || e.descripcion || '',
+        'Proveedor': e.proveedor,
+        'Precio': e.precio,
+        'Moneda': e.moneda,
+        'Cantidad': e.cantidad,
+        'Fecha OC': e.fecha || '',
+        'Estado': e.estado,
+      });
+    });
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Cotizaciones');
+  XLSX.writeFile(wb, 'cotizaciones_' + new Date().toISOString().slice(0,10) + '.xlsx');
+  toast('Exportado ↓', '✓');
 }
 
 function exportarCostos() {
