@@ -407,6 +407,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <div class="nav-item" onclick="go('bom')"><span class="nav-ico">◎</span>Fórmulas / BOM</div>
     <div class="nav-item" onclick="go('costos')"><span class="nav-ico">$</span>Dashboard de Costos</div>
     <div class="nav-item" onclick="go('cotizaciones')"><span class="nav-ico">💰</span>Cotizaciones</div>
+    <div class="nav-item" onclick="go('maestroprecios')"><span class="nav-ico">📋</span>Maestro de Precios</div>
     <div class="nav-item" onclick="go('proyeccion')"><span class="nav-ico">◈</span>Proyección Stock<span class="nav-new">NEW</span></div>
     <div class="nav-group">Compras</div>
     <div class="nav-item" onclick="go('propuestas')"><span class="nav-ico">◈</span>OCs Propuestas<span class="nav-badge" id="nb-propuestas" style="display:none">0</span></div>
@@ -1246,6 +1247,41 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     </div>
   </div>
 
+  <!-- ══ MAESTRO DE PRECIOS ══ -->
+  <div class="page" id="page-maestroprecios">
+    <div class="sh">
+      <div class="sh-title">📋 Maestro de Precios</div>
+      <div class="sh-actions">
+        <input type="text" class="finput" id="mp-search" placeholder="Buscar insumo…" oninput="renderMaestroPrecios()" style="width:200px">
+        <select class="fsel" id="mp-filtro" onchange="renderMaestroPrecios()">
+          <option value="">Todos</option>
+          <option value="con">Con precio</option>
+          <option value="sin">Sin precio</option>
+        </select>
+        <button class="btn btn-sm" onclick="importarPreciosDesdOCs()" style="border-color:var(--gold);color:var(--gold)">⬇ Importar desde OCs</button>
+        <button class="btn btn-b btn-sm" onclick="exportarMaestroPrecios()">↓ Excel</button>
+      </div>
+    </div>
+    <div id="mp-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px"></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Insumo</th>
+            <th class="tr">Precio vigente</th>
+            <th>Moneda</th>
+            <th>Fuente</th>
+            <th>Proveedor ref.</th>
+            <th>Actualizado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbl-maestroprecios"></tbody>
+      </table>
+    </div>
+  </div>
+
   </div><!-- /pages -->
 </div><!-- /content -->
 </div><!-- /app -->
@@ -1743,17 +1779,17 @@ body.viewer-mode .page-filters select { pointer-events:auto }
 
 
 <div class="overlay" id="m-precio-ins">
-  <div class="modal" style="max-width:460px">
+  <div class="modal" style="max-width:500px">
     <button class="modal-close" onclick="closeM('m-precio-ins')">✕</button>
-    <div class="modal-title">✏ Editar precio insumo</div>
+    <div class="modal-title">✏ Editar precio — Maestro de Precios</div>
     <input type="hidden" id="precio-ins-cod">
     <div class="fg">
-      <div class="fl fg-full"><label id="precio-ins-label">Insumo</label>
+      <div class="fl fg-full"><label>Insumo</label>
         <select id="precio-ins-sel" class="fsel" style="width:100%" onchange="precioInsSelChange()">
           <option value="">— Seleccionar insumo —</option>
         </select>
       </div>
-      <div class="fl"><label>Precio USD / kg (o por unidad)</label>
+      <div class="fl"><label>Precio / kg (o por unidad)</label>
         <input type="number" id="precio-ins-val" placeholder="0.00" step="0.01" min="0">
       </div>
       <div class="fl"><label>Moneda</label>
@@ -1762,11 +1798,24 @@ body.viewer-mode .page-filters select { pointer-events:auto }
           <option value="ARS">ARS</option>
         </select>
       </div>
+      <div class="fl"><label>Proveedor de referencia</label>
+        <input type="text" id="precio-ins-prov" placeholder="Ej: Nutralia" style="width:100%">
+      </div>
+      <div class="fl"><label>Fecha de cotización</label>
+        <input type="date" id="precio-ins-fecha" style="width:100%">
+      </div>
+      <div class="fl fg-full" id="precio-ins-sugerencia" style="display:none">
+        <div style="background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.3);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text2)">
+          <span style="color:var(--gold);font-weight:600">💡 Desde última OC: </span>
+          <span id="precio-ins-sug-text"></span>
+          <button class="btn btn-sm" style="margin-left:10px;font-size:10px;padding:2px 8px" onclick="aplicarSugerenciaPrecio()">Aplicar</button>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-r btn-sm" onclick="borrarPrecioIns()" id="precio-ins-del" style="margin-right:auto;display:none">🗑 Quitar precio</button>
       <button class="btn btn-g" onclick="closeM('m-precio-ins')">Cancelar</button>
-      <button class="btn btn-p" onclick="guardarPrecioIns()">Guardar</button>
+      <button class="btn btn-p" onclick="guardarPrecioIns()">Guardar en Maestro</button>
     </div>
   </div>
 </div>
@@ -2567,14 +2616,14 @@ const S = {
 // ══════════════════════════════════════
 // NAVIGATION
 // ══════════════════════════════════════
-const titles={dashboard:'Dashboard',planificador:'Planificador Inteligente',recepcion:'Recepción de Mercadería',facturas:'Facturas',mrp:'MRP Insumos',plan:'Plan de Producción',produccion:'Producción Real',bom:'Fórmulas / BOM',costos:'Dashboard de Costos',cotizaciones:'Cotizaciones',proyeccion:'Proyección de Stock',compras:'Órdenes de Compra',propuestas:'OCs Propuestas',proveedores:'Gestión de Proveedores',stock:'Stock de Insumos',historial:'Historial de Stock',calculadora:'Calculadora MRP',importar:'Importar Excel',alertas:'Alertas'};
+const titles={dashboard:'Dashboard',planificador:'Planificador Inteligente',recepcion:'Recepción de Mercadería',facturas:'Facturas',mrp:'MRP Insumos',plan:'Plan de Producción',produccion:'Producción Real',bom:'Fórmulas / BOM',costos:'Dashboard de Costos',cotizaciones:'Cotizaciones',maestroprecios:'Maestro de Precios',proyeccion:'Proyección de Stock',compras:'Órdenes de Compra',propuestas:'OCs Propuestas',proveedores:'Gestión de Proveedores',stock:'Stock de Insumos',historial:'Historial de Stock',calculadora:'Calculadora MRP',importar:'Importar Excel',alertas:'Alertas'};
 function go(id){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n=>{if(n.getAttribute('onclick')?.includes(`'${id}'`))n.classList.add('active');});
   document.getElementById('tb-title').innerHTML=`${titles[id]||id} <span>· The Fine Company</span>`;
-  const renders={dashboard:renderDashboard,mrp:renderMRP,plan:renderPlan,produccion:renderProduccion,bom:renderBOMPage,costos:renderCostos,cotizaciones:renderCotizaciones,proyeccion:renderProyeccion,compras:renderCompras,propuestas:renderPropuestas,recepcion:renderRecepcion,proveedores:renderProveedoresEnhanced,stock:renderStock,historial:renderHistorial,alertas:renderAlertas,calculadora:renderCalcPage,planificador:renderPlanificador,facturas:renderFacturas};
+  const renders={dashboard:renderDashboard,mrp:renderMRP,plan:renderPlan,produccion:renderProduccion,bom:renderBOMPage,costos:renderCostos,cotizaciones:renderCotizaciones,maestroprecios:renderMaestroPrecios,proyeccion:renderProyeccion,compras:renderCompras,propuestas:renderPropuestas,recepcion:renderRecepcion,proveedores:renderProveedoresEnhanced,stock:renderStock,historial:renderHistorial,alertas:renderAlertas,calculadora:renderCalcPage,planificador:renderPlanificador,facturas:renderFacturas};
   closeSidebar();
   if(renders[id]) renders[id]();
 }
@@ -8020,50 +8069,104 @@ function abrirEditarPrecio(cod) {
   if(!S.preciosInsumos) S.preciosInsumos = {};
   const sel = document.getElementById('precio-ins-sel');
   // Poblar selector con todos los insumos únicos del BOM
-  const insumos = new Map();
-  Object.values(D.bom).forEach(bom=>(bom.insumos||[]).forEach(i=>insumos.set(i.codigo, i.nombre)));
+  const insumos = _getAllBOMInsumos();
   sel.innerHTML = '<option value="">— Seleccionar insumo —</option>';
-  [...insumos.entries()].sort((a,b)=>a[0].localeCompare(b[0])).forEach(([c,n])=>{
-    sel.innerHTML += `<option value="${c}">${c} — ${n}</option>`;
+  [...insumos.entries()].sort((a,b)=>a[0].localeCompare(b[0])).forEach(([c,ins])=>{
+    sel.innerHTML += `<option value="${c}">${c} — ${ins.nombre}</option>`;
   });
   if(cod) sel.value = cod;
   const existing = cod ? S.preciosInsumos[cod] : null;
   document.getElementById('precio-ins-val').value = existing?.precio || '';
   document.getElementById('precio-ins-mon').value = existing?.moneda || 'USD';
+  document.getElementById('precio-ins-prov').value = existing?.proveedor || '';
+  document.getElementById('precio-ins-fecha').value = existing?.fecha || existing?.updatedAt || '';
   document.getElementById('precio-ins-del').style.display = existing ? '' : 'none';
-  precioInsSelChange();
+  _precioSugerido = null;
+  document.getElementById('precio-ins-sugerencia').style.display = 'none';
+  if(!existing && cod) {
+    // mostrar sugerencia desde OC
+    const hist = buildPriceHistory();
+    const entries = hist[cod];
+    if(entries && entries.length > 0) {
+      const last = entries[0];
+      _precioSugerido = last;
+      const monSym = last.moneda === 'ARS' ? '$' : 'U$D';
+      const fechaStr = last.fecha ? new Date(last.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'numeric'}) : 'sin fecha';
+      document.getElementById('precio-ins-sug-text').textContent = `${monSym} ${fmt(last.precio,2)} — ${last.proveedor} — ${fechaStr}`;
+      document.getElementById('precio-ins-sugerencia').style.display = '';
+      document.getElementById('precio-ins-val').value = last.precio;
+      document.getElementById('precio-ins-mon').value = last.moneda || 'USD';
+      document.getElementById('precio-ins-prov').value = last.proveedor || '';
+      document.getElementById('precio-ins-fecha').value = last.fecha || '';
+    }
+  }
   openM('m-precio-ins');
 }
+
+// Sugerencia de precio guardada temporalmente para el modal
+let _precioSugerido = null;
 
 function precioInsSelChange() {
   const cod = document.getElementById('precio-ins-sel').value;
   const existing = S.preciosInsumos?.[cod];
   document.getElementById('precio-ins-del').style.display = existing ? '' : 'none';
-  if(!existing) {
-    // Auto-cargar precio existente de OC o proveedores como sugerencia
-    const preciosMap = buildPreciosMap();
-    const p = preciosMap[cod];
-    if(p) {
-      document.getElementById('precio-ins-val').value = p.precio;
-      document.getElementById('precio-ins-mon').value = p.moneda||'USD';
+  _precioSugerido = null;
+  document.getElementById('precio-ins-sugerencia').style.display = 'none';
+  if(existing) {
+    document.getElementById('precio-ins-val').value = existing.precio || '';
+    document.getElementById('precio-ins-mon').value = existing.moneda || 'USD';
+    document.getElementById('precio-ins-prov').value = existing.proveedor || '';
+    document.getElementById('precio-ins-fecha').value = existing.fecha || '';
+  } else {
+    // Buscar sugerencia desde última OC
+    const hist = buildPriceHistory();
+    const entries = hist[cod];
+    if(entries && entries.length > 0) {
+      const last = entries[0]; // más reciente
+      _precioSugerido = last;
+      const monSym = last.moneda === 'ARS' ? '$' : 'U$D';
+      const fechaStr = last.fecha ? new Date(last.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'numeric'}) : 'sin fecha';
+      document.getElementById('precio-ins-sug-text').textContent = `${monSym} ${fmt(last.precio,2)} — ${last.proveedor} — ${fechaStr}`;
+      document.getElementById('precio-ins-sugerencia').style.display = '';
+      // Pre-cargar campos
+      document.getElementById('precio-ins-val').value = last.precio;
+      document.getElementById('precio-ins-mon').value = last.moneda || 'USD';
+      document.getElementById('precio-ins-prov').value = last.proveedor || '';
+      document.getElementById('precio-ins-fecha').value = last.fecha || '';
     } else {
       document.getElementById('precio-ins-val').value = '';
+      document.getElementById('precio-ins-prov').value = '';
+      document.getElementById('precio-ins-fecha').value = '';
     }
   }
+}
+
+function aplicarSugerenciaPrecio() {
+  if(!_precioSugerido) return;
+  document.getElementById('precio-ins-val').value = _precioSugerido.precio;
+  document.getElementById('precio-ins-mon').value = _precioSugerido.moneda || 'USD';
+  document.getElementById('precio-ins-prov').value = _precioSugerido.proveedor || '';
+  document.getElementById('precio-ins-fecha').value = _precioSugerido.fecha || '';
+  toast('Datos copiados de la OC','✓');
 }
 
 function guardarPrecioIns() {
   const cod = document.getElementById('precio-ins-sel').value;
   const precio = parseFloat(document.getElementById('precio-ins-val').value);
   const moneda = document.getElementById('precio-ins-mon').value;
+  const proveedor = document.getElementById('precio-ins-prov').value.trim();
+  const fecha = document.getElementById('precio-ins-fecha').value;
   if(!cod) { toast('Seleccioná un insumo','⚠️'); return; }
   if(!precio || precio <= 0) { toast('Ingresá un precio válido','⚠️'); return; }
   if(!S.preciosInsumos) S.preciosInsumos = {};
-  S.preciosInsumos[cod] = {precio, moneda, fuente:'Manual'};
+  S.preciosInsumos[cod] = {precio, moneda, fuente:'Manual', proveedor, fecha, updatedAt: new Date().toISOString().slice(0,10)};
   closeM('m-precio-ins');
-  renderCostos();
+  // Refrescar la página activa si es Maestro o Costos
+  const pageActiva = document.querySelector('.page.active')?.id;
+  if(pageActiva === 'page-maestroprecios') renderMaestroPrecios();
+  else if(pageActiva === 'page-costos') renderCostos();
   saveState();
-  toast('Precio guardado: '+cod+' → U$D '+precio,'✓');
+  toast('Precio guardado en Maestro: '+cod,'✓');
 }
 
 function borrarPrecioIns() {
@@ -8074,6 +8177,162 @@ function borrarPrecioIns() {
   renderCostos();
   saveState();
   toast('Precio eliminado: '+cod,'🗑️');
+}
+
+// ══════════════════════════════════════
+// MAESTRO DE PRECIOS
+// ══════════════════════════════════════
+
+function _getAllBOMInsumos() {
+  // Devuelve Map { codigo → {codigo, nombre, um, productos:[]} } con todos los insumos del BOM
+  const map = new Map();
+  Object.entries(D.bom || {}).forEach(([prodCod, bom]) => {
+    (bom.insumos || []).forEach(i => {
+      if(!map.has(i.codigo)) {
+        map.set(i.codigo, {codigo: i.codigo, nombre: i.nombre || '', um: i.um || '', productos: []});
+      }
+      map.get(i.codigo).productos.push(prodCod);
+    });
+  });
+  // Completar con D.stock si falta nombre
+  Object.entries(D.stock || {}).forEach(([cod, v]) => {
+    if(map.has(cod) && !map.get(cod).nombre) map.get(cod).nombre = v.nombre || '';
+    else if(!map.has(cod) && v.nombre) map.set(cod, {codigo: cod, nombre: v.nombre, um: '', productos: []});
+  });
+  return map;
+}
+
+function renderMaestroPrecios() {
+  if(!S.preciosInsumos) S.preciosInsumos = {};
+  const search = (document.getElementById('mp-search')?.value || '').toLowerCase().trim();
+  const filtro = document.getElementById('mp-filtro')?.value || '';
+  const hist = buildPriceHistory();
+  const insumos = _getAllBOMInsumos();
+
+  // Aplicar filtros
+  let rows = [...insumos.values()].filter(ins => {
+    if(search && !ins.codigo.toLowerCase().includes(search) && !ins.nombre.toLowerCase().includes(search)) return false;
+    const tiene = !!S.preciosInsumos[ins.codigo];
+    if(filtro === 'con' && !tiene) return false;
+    if(filtro === 'sin' && tiene) return false;
+    return true;
+  }).sort((a, b) => {
+    // Con precio primero, luego sin precio; dentro de cada grupo, por código
+    const tA = !!S.preciosInsumos[a.codigo];
+    const tB = !!S.preciosInsumos[b.codigo];
+    if(tA !== tB) return tB - tA;
+    return a.codigo.localeCompare(b.codigo);
+  });
+
+  // KPIs
+  const total = insumos.size;
+  const conPrecio = [...insumos.keys()].filter(c => S.preciosInsumos[c]).length;
+  const sinPrecio = total - conPrecio;
+  const hoy = new Date().toISOString().slice(0,10);
+  const hace7 = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
+  const recientes = Object.values(S.preciosInsumos).filter(p => p.updatedAt && p.updatedAt >= hace7).length;
+  document.getElementById('mp-kpis').innerHTML = [
+    {label:'Total insumos BOM', val: total,      color:'var(--text)',  sub:'en fórmulas activas'},
+    {label:'Con precio',        val: conPrecio,  color:'var(--green)', sub:`${Math.round(conPrecio/total*100)||0}% cobertura`},
+    {label:'Sin precio',        val: sinPrecio,  color: sinPrecio>0?'var(--red)':'var(--text3)', sub:'pendientes de cargar'},
+    {label:'Actualizados (7d)', val: recientes,  color:'var(--gold)',  sub:'en los últimos 7 días'},
+  ].map(k=>`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 18px">
+    <div style="font-size:9px;color:var(--text3);font-family:var(--mono);letter-spacing:1.5px;margin-bottom:8px">${k.label.toUpperCase()}</div>
+    <div style="font-size:22px;font-weight:700;color:${k.color};font-family:var(--mono);line-height:1.2">${k.val}</div>
+    <div style="font-size:10px;color:var(--text3);margin-top:4px">${k.sub}</div>
+  </div>`).join('');
+
+  // Tabla
+  const tbody = document.getElementById('tbl-maestroprecios');
+  if(!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:40px">Sin resultados</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(ins => {
+    const p = S.preciosInsumos[ins.codigo];
+    const tieneHistorial = (hist[ins.codigo]||[]).length > 0;
+    const monSym = (p?.moneda || 'USD') === 'ARS' ? '$' : 'U$D';
+    if(p) {
+      const fuenteColor = p.fuente === 'Manual' ? 'var(--gold)' : 'var(--blue)';
+      const fechaStr = p.updatedAt ? new Date(p.updatedAt+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'2-digit'}) : (p.fecha ? new Date(p.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'2-digit'}) : '—');
+      return `<tr>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:700">${ins.codigo}</td>
+        <td style="font-size:12px;max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${ins.nombre}">${ins.nombre}</td>
+        <td class="td-mono tr" style="font-weight:700;color:var(--green);font-size:14px">${monSym} ${fmt(p.precio,2)}</td>
+        <td><span style="font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);border:1px solid var(--border)">${p.moneda||'USD'}</span></td>
+        <td><span style="font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);border:1px solid var(--border);color:${fuenteColor}">${p.fuente||'Manual'}</span></td>
+        <td style="font-size:12px;color:var(--text2)">${p.proveedor||'—'}</td>
+        <td style="font-size:11px;color:var(--text3);font-family:var(--mono)">${fechaStr}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm" onclick="abrirEditarPrecio('${ins.codigo}')" style="font-size:10px;padding:3px 8px;margin-right:4px">✏</button>
+          ${tieneHistorial ? `<button class="btn btn-sm" onclick="verHistorialCotiz('${ins.codigo}')" style="font-size:10px;padding:3px 8px" title="Ver historial de OCs">📋</button>` : ''}
+        </td>
+      </tr>`;
+    } else {
+      // Sin precio
+      const ocEntry = (hist[ins.codigo]||[])[0];
+      const sugerencia = ocEntry ? `<span style="font-size:10px;color:var(--text3)">OC: ${ocEntry.moneda==='ARS'?'$':'U$D'} ${fmt(ocEntry.precio,2)} — ${ocEntry.proveedor}</span>` : '';
+      return `<tr style="opacity:0.7">
+        <td style="font-family:var(--mono);font-size:11px;color:var(--text3);font-weight:700">${ins.codigo}</td>
+        <td style="font-size:12px;max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${ins.nombre}">${ins.nombre}</td>
+        <td class="tr"><span style="font-size:10px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--red)">Sin precio</span></td>
+        <td>—</td>
+        <td>—</td>
+        <td style="font-size:11px">${sugerencia}</td>
+        <td>—</td>
+        <td><button class="btn btn-sm" onclick="abrirEditarPrecio('${ins.codigo}')" style="font-size:10px;padding:3px 8px;border-color:var(--gold);color:var(--gold)">+ Cargar</button></td>
+      </tr>`;
+    }
+  }).join('');
+}
+
+function importarPreciosDesdOCs() {
+  if(!S.preciosInsumos) S.preciosInsumos = {};
+  const hist = buildPriceHistory();
+  const insumos = _getAllBOMInsumos();
+  let importados = 0;
+  insumos.forEach((ins, cod) => {
+    if(S.preciosInsumos[cod]) return; // no sobreescribir manuales
+    const entries = hist[cod];
+    if(!entries || !entries.length) return;
+    const last = entries[0]; // más reciente
+    S.preciosInsumos[cod] = {
+      precio: last.precio,
+      moneda: last.moneda || 'USD',
+      fuente: 'OC',
+      proveedor: last.proveedor || '',
+      fecha: last.fecha || '',
+      updatedAt: new Date().toISOString().slice(0,10),
+    };
+    importados++;
+  });
+  saveState();
+  renderMaestroPrecios();
+  toast(`${importados} precios importados desde OCs`, '✓', 3000);
+}
+
+function exportarMaestroPrecios() {
+  if(typeof XLSX === 'undefined') return;
+  if(!S.preciosInsumos) S.preciosInsumos = {};
+  const insumos = _getAllBOMInsumos();
+  const rows = [...insumos.values()].map(ins => {
+    const p = S.preciosInsumos[ins.codigo];
+    return {
+      'Código':      ins.codigo,
+      'Insumo':      ins.nombre,
+      'Precio':      p?.precio ?? '',
+      'Moneda':      p?.moneda ?? '',
+      'Fuente':      p?.fuente ?? 'Sin precio',
+      'Proveedor':   p?.proveedor ?? '',
+      'Fecha cotiz': p?.fecha ?? '',
+      'Actualizado': p?.updatedAt ?? '',
+      'Productos':   ins.productos.join(', '),
+    };
+  }).sort((a,b) => a['Código'].localeCompare(b['Código']));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Maestro Precios');
+  XLSX.writeFile(wb, 'maestro_precios_' + new Date().toISOString().slice(0,10) + '.xlsx');
+  toast('Exportado ↓', '✓');
 }
 
 // ══════════════════════════════════════
