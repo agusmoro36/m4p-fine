@@ -1733,6 +1733,40 @@ body.viewer-mode .page-filters select { pointer-events:auto }
   </div>
 </div>
 
+<!-- ══ MODAL REGISTRAR LOTE / VENCIMIENTO ══ -->
+<div class="overlay" id="m-lote">
+  <div class="modal" style="max-width:420px">
+    <button class="modal-close" onclick="closeM('m-lote')">✕</button>
+    <div class="modal-title">📅 Registrar Lote y Vencimiento</div>
+    <div class="fg">
+      <div class="fl">
+        <label>Insumo</label>
+        <input id="lote-nombre" class="finp" style="width:100%;background:var(--bg2);color:var(--text3)" readonly>
+        <input type="hidden" id="lote-cod">
+      </div>
+      <div class="fl">
+        <label>N° de Lote</label>
+        <input id="lote-num" class="finp" style="width:100%" placeholder="Ej: LOT-2024-001">
+      </div>
+      <div class="fl">
+        <label>Fecha de Vencimiento</label>
+        <input id="lote-venc" type="date" class="finp" style="width:100%">
+      </div>
+      <div class="fl">
+        <label>Cantidad de este lote <span style="color:var(--text3);font-weight:400">(opcional)</span></label>
+        <input id="lote-cant" type="number" min="0" step="any" class="finp" style="width:100%" placeholder="Dejar vacío si es todo el stock">
+      </div>
+      <div id="lote-preview" style="display:none;padding:10px 14px;background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.3);border-radius:6px;font-size:12px;margin-top:4px"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-p" style="flex:1" onclick="guardarLote()">✓ Guardar lote</button>
+      <button class="btn" onclick="closeM('m-lote')">Cancelar</button>
+    </div>
+    <!-- Lotes existentes -->
+    <div id="lote-existentes" style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;font-size:11px"></div>
+  </div>
+</div>
+
 <datalist id="prov-list"></datalist>
 <datalist id="insumo-list"></datalist>
 
@@ -5220,6 +5254,7 @@ function renderStock(){
         <button class="btn btn-sm" onclick="abrirAjusteStock('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:var(--gold);color:var(--gold)" title="Ajustar stock">✏</button>
         <button class="btn btn-sm" onclick="abrirTransferir('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:#4a7fd4;color:#4a7fd4" title="Transferir">↔</button>
         <button class="btn btn-sm" onclick="verMovimientosInsumo('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:var(--text3);color:var(--text3)" title="Ver historial de movimientos">⏱</button>
+        <button class="btn btn-sm" onclick="abrirRegistrarLote('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:#22c55e;color:#22c55e" title="Registrar lote / vencimiento">📅</button>
       </td>
     </tr>`;
   }).join('');
@@ -6934,6 +6969,70 @@ function loadBOMCompleto() {
 }
 loadBOMCompleto();
 
+
+// ══════════════════════════════════════
+// REGISTRAR LOTE / VENCIMIENTO
+// ══════════════════════════════════════
+function abrirRegistrarLote(cod) {
+  const s = D.stock[cod];
+  if(!s) return;
+  document.getElementById('lote-cod').value  = cod;
+  document.getElementById('lote-nombre').value = cod + ' — ' + (s.nombre||cod);
+  document.getElementById('lote-num').value  = '';
+  document.getElementById('lote-venc').value = '';
+  document.getElementById('lote-cant').value = '';
+  document.getElementById('lote-preview').style.display = 'none';
+  // Mostrar lotes existentes
+  const lotes = s.lotes||[];
+  const lotEl = document.getElementById('lote-existentes');
+  if(lotes.length) {
+    lotEl.innerHTML = '<div style="font-weight:600;color:var(--text2);margin-bottom:8px">Lotes registrados</div>'
+      + lotes.map(l=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+          <div>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">${l.lote||'—'}</span>
+            <span style="margin-left:8px;font-size:11px">${l.cantidad?fmt(l.cantidad,2)+' ':''}${s.um||'kg'}</span>
+          </div>
+          <div>${vencPill(l.vencimiento)}</div>
+        </div>`).join('');
+  } else {
+    lotEl.innerHTML = '<div style="color:var(--text3);font-size:11px">Sin lotes registrados aún</div>';
+  }
+  openM('m-lote');
+  setTimeout(()=>document.getElementById('lote-num').focus(), 150);
+}
+
+function guardarLote() {
+  const cod  = document.getElementById('lote-cod').value;
+  const num  = document.getElementById('lote-num').value.trim();
+  const venc = document.getElementById('lote-venc').value;
+  const cant = parseFloat(document.getElementById('lote-cant').value)||0;
+  if(!cod) return;
+  if(!num && !venc) { toast('Ingresá al menos un N° de lote o fecha de vencimiento','⚠️',3000); return; }
+  const s = D.stock[cod];
+  if(!s) return;
+  if(!s.lotes) s.lotes = [];
+  const entrada = {
+    lote: num||'',
+    vencimiento: venc||'',
+    cantidad: cant||s.stock||0,
+    fecha: new Date().toISOString().slice(0,10)
+  };
+  // Insertar al inicio (más reciente primero)
+  s.lotes.unshift(entrada);
+  if(s.lotes.length > 30) s.lotes = s.lotes.slice(0,30);
+  // Alerta si ya está vencido o vence pronto
+  if(venc) {
+    const dv = diasHastaVenc(venc);
+    if(dv !== null && dv < 0)      toast('⛔ Ese lote está VENCIDO hace '+Math.abs(dv)+'d','⛔',7000);
+    else if(dv !== null && dv<=30) toast('⚠️ Lote vence en '+dv+' días','⚠️',5000);
+  }
+  saveState();
+  actualizarBadgeAlertas();
+  closeM('m-lote');
+  renderStock();
+  toast('✓ Lote registrado — '+cod+(num?' · '+num:'')+(venc?' · Vence: '+venc.split('-').reverse().join('/'):''),'📅',4000);
+}
 
 // ══════════════════════════════════════
 // AJUSTE MANUAL DE STOCK
