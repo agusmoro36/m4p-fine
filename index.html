@@ -1141,12 +1141,17 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         <div class="sh-actions" id="plan-detalle-actions"></div>
       </div>
       <div id="plan-detalle-resumen"></div>
+      <div id="plan-target-wrap"></div>
       <div class="tbl-wrap">
         <table>
           <thead><tr>
-            <th>Insumo</th><th>Descripción</th><th class="tr">Cant/Lote</th>
-            <th class="tr">Stock Actual</th><th class="tr">Falta (insumo)</th>
-            <th class="tr">Unidades posibles</th><th>Estado</th><th>Acción</th>
+            <th>Insumo</th><th>Descripción</th>
+            <th class="tr">Cant/Lote</th>
+            <th class="tr">Nec. Total</th>
+            <th class="tr">Stock Actual</th>
+            <th class="tr">Falta</th>
+            <th class="tr">Un. posibles / objetivo</th>
+            <th>Estado</th><th>Acción</th>
           </tr></thead>
           <tbody id="plan-detalle-tbody"></tbody>
         </table>
@@ -6366,16 +6371,17 @@ function buscarProveedorParaInsumo(cod, nombre) {
   return '';
 }
 
-function abrirOCDesdePlan(prodCod, insCod) {
+function abrirOCDesdePlan(prodCod, insCod, nLotes) {
   const p = planificadorData.find(x => x.codigo === prodCod);
   if(!p) return;
   const ins = p.insumos.find(x => x.codigo === insCod);
   if(!ins) return;
+  const lotes = nLotes || 1;
   // Evitar duplicado en propuestas
   const yaEnPropuestas = S.comprasPropuestas.find(c => c.codigo===insCod && c.productos===prodCod);
   if(yaEnPropuestas) { toast('Ya hay una propuesta para ' + insCod, '📦', 2500); go('propuestas'); return; }
-  const necesario = ins.cantPorLote;
-  const falta = Math.max(necesario * 0.5, necesario - ins.stockActual);
+  const necesario = ins.cantPorLote * lotes;
+  const falta = Math.max(0, necesario - Math.max(0, ins.stockActual));
   S.comprasPropuestas.push({
     _sel: true,
     codigo: insCod,
@@ -6401,16 +6407,16 @@ let _ocReviewData = []; // OCs pendientes de revisión
 function crearTodasOCsFaltantes(prodCod) {
   const p = planificadorData.find(x => x.codigo === prodCod);
   if(!p) return;
-  const faltantes = p.insumos.filter(ins => ins.faltante || ins.esLimitante);
-  if(!faltantes.length) { toast('No hay insumos faltantes para este producto','✓'); return; }
+  // Todos los insumos donde el stock actual no alcanza para 1 lote
+  const faltantes = p.insumos.filter(ins => Math.max(0,ins.stockActual) < ins.cantPorLote);
+  if(!faltantes.length) { toast('¡Todos los insumos tienen stock suficiente para 1 lote!','✓'); return; }
 
   let agregadas = 0, saltadas = 0;
   faltantes.forEach(ins => {
-    // Solo evitar duplicados dentro de propuestas (mismo insumo + mismo producto)
     const yaEnPropuestas = S.comprasPropuestas.find(c => c.codigo===ins.codigo && c.productos===prodCod);
     if(yaEnPropuestas) { saltadas++; return; }
     const necesario = ins.cantPorLote;
-    const falta = Math.max(necesario * 0.5, necesario - ins.stockActual);
+    const falta = Math.max(0, necesario - Math.max(0, ins.stockActual));
     S.comprasPropuestas.push({
       _sel: true,
       codigo: ins.codigo,
@@ -6613,32 +6619,60 @@ function verDetallePlan(cod){
       +faltantesHtml
       +'<div style="height:8px"></div>';
   }
+  // ── Selector de lotes objetivo ──
+  const targetId='plan-target-lotes-'+p.codigo;
+  const existingTarget=document.getElementById(targetId);
+  const targetLotes=existingTarget?parseInt(existingTarget.value)||1:1;
+
   const tbody=document.getElementById('plan-detalle-tbody');
   if(!tbody) return;
+
+  // Agregar input de "cuántos lotes querés producir" arriba de la tabla
+  const targetWrap=document.getElementById('plan-target-wrap');
+  if(targetWrap){
+    targetWrap.innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;margin-bottom:10px;font-size:12px">'
+      +'<span style="color:var(--text2);font-weight:600">¿Cuántos lotes querés producir?</span>'
+      +'<input id="'+targetId+'" type="number" min="1" step="1" value="'+targetLotes+'" style="width:70px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:13px;font-weight:700;text-align:center;background:var(--bg);color:var(--text)"'
+      +' onchange="verDetallePlan(\''+p.codigo+'\')">'
+      +'<span style="color:var(--text3)">× '+fmtU(p.loteMin)+' un./lote = </span>'
+      +'<span style="font-family:var(--mono);font-weight:700;color:var(--gold2)">'+fmtU(targetLotes*p.loteMin)+' un.</span>'
+      +'</div>';
+  }
+
   tbody.innerHTML=[...p.insumos].sort((a,b)=>{
-    if(a.faltante!==b.faltante) return a.faltante?-1:1;
-    if(a.esLimitante!==b.esLimitante) return a.esLimitante?-1:1;
-    return a.stockActual-b.stockActual;
+    const stA=Math.max(0,a.stockActual), necA=a.cantPorLote*targetLotes, fA=necA-stA;
+    const stB=Math.max(0,b.stockActual), necB=b.cantPorLote*targetLotes, fB=necB-stB;
+    if(fA>0&&fB<=0) return -1; // faltante primero
+    if(fA<=0&&fB>0) return 1;
+    return fB-fA; // mayor faltante primero
   }).map(ins=>{
-    const necLote=ins.cantPorLote;
-    const faltaIns=Math.max(0,necLote-ins.stockActual);
-    // unidades producibles con el stock actual de ESTE insumo
-    const unPosibles=ins.maxPorEste;
-    // unidades que faltan: loteMin - unidades posibles con este insumo (solo si es 0)
-    const unFaltanStr=unPosibles===0
-      ?'<span style="color:var(--red);font-weight:600">0 un.</span>'
-      :'<span style="color:var(--gold2);font-family:var(--mono);font-size:11px">'+fmtU(unPosibles)+' un.</span>';
+    const stClamped=Math.max(0,ins.stockActual); // clamp negativo
+    const necTotal=ins.cantPorLote*targetLotes;  // necesario para N lotes
+    const faltaIns=Math.max(0,necTotal-stClamped);
+    const tieneInsuf=faltaIns>0;
+    // Unidades producibles con stock de ESTE insumo (considerando N lotes objetivo)
+    const maxLotesEste=ins.cantPorLote>0?Math.floor(stClamped/ins.cantPorLote):99999;
+    const unPosiblesEste=maxLotesEste*p.loteMin;
+    const unFaltanStr=tieneInsuf
+      ?'<span style="color:var(--red);font-weight:600">'+fmtU(unPosiblesEste)+' / '+fmtU(targetLotes*p.loteMin)+' un.</span>'
+      :'<span style="color:var(--acc);font-family:var(--mono);font-size:11px">✓ '+fmtU(unPosiblesEste)+' un.</span>';
     const faltaInsStr=faltaIns>0
-      ?'<span style="color:var(--red);font-weight:600">'+fmt(faltaIns,2)+' '+ins.um+'</span>'
+      ?'<span style="color:var(--red);font-weight:600">−'+fmt(faltaIns,2)+' '+ins.um+'</span>'
       :'<span style="color:var(--text3)">—</span>';
-    const est=ins.stockActual<=0?'<span class="pill pill-crit">SIN STOCK</span>':ins.esLimitante?'<span class="pill pill-warn">⚑ LIMIT.</span>':'<span class="pill pill-ok">OK</span>';
-    const accion=(ins.faltante||ins.esLimitante)
-      ?'<button class="btn btn-r btn-sm" onclick="abrirOCDesdePlan(\''+p.codigo+'\',\''+ins.codigo+'\')" style="font-size:7px;padding:3px 8px">+ OC</button>'
+    const est=ins.stockActual<=0
+      ?'<span class="pill pill-crit">SIN STOCK</span>'
+      :tieneInsuf
+        ?'<span class="pill pill-low">INSUF.</span>'
+        :'<span class="pill pill-ok">OK</span>';
+    const accion=tieneInsuf
+      ?'<button class="btn btn-r btn-sm" onclick="abrirOCDesdePlan(\''+p.codigo+'\',\''+ins.codigo+'\','+targetLotes+')" style="font-size:7px;padding:3px 8px">+ OC</button>'
       :'<span style="color:var(--text3);font-size:11px">—</span>';
-    return '<tr style="'+(ins.esLimitante?'background:rgba(201,168,76,.05)':ins.faltante?'background:rgba(192,57,43,.03)':'')+'">'+
+    const rowBg=tieneInsuf?(ins.stockActual<=0?'background:rgba(192,57,43,.05)':'background:rgba(245,158,11,.04)'):'';
+    return '<tr style="'+rowBg+'">'+
       '<td class="td-code">'+ins.codigo+'</td><td class="td-name">'+ins.nombre+'</td>'+
-      '<td class="td-mono tr">'+fmt(necLote,2)+' '+ins.um+'</td>'+
-      '<td class="td-mono tr" style="color:'+(ins.stockActual<=0?'var(--red)':'inherit')+'">'+fmt(ins.stockActual,2)+' '+ins.um+'</td>'+
+      '<td class="td-mono tr">'+fmt(ins.cantPorLote,3)+' '+ins.um+'</td>'+
+      '<td class="td-mono tr">'+fmt(necTotal,3)+' '+ins.um+'</td>'+
+      '<td class="td-mono tr" style="color:'+(ins.stockActual<0?'var(--red)':ins.stockActual===0?'var(--text3)':'inherit')+'">'+fmt(ins.stockActual,3)+' '+ins.um+'</td>'+
       '<td class="tr">'+faltaInsStr+'</td>'+
       '<td class="tr">'+unFaltanStr+'</td>'+
       '<td>'+est+'</td><td>'+accion+'</td></tr>';
