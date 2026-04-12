@@ -865,26 +865,31 @@ body.viewer-mode .page-filters select { pointer-events:auto }
       <div class="sh-actions">
         <select class="fsel" id="f-hist-tipo" onchange="renderHistorial()">
           <option value="">Todos los tipos</option>
-          <option value="entrada">Entradas</option>
-          <option value="salida">Salidas</option>
-          <option value="ajuste">Ajustes</option>
-          <option value="importacion">Importaciones</option>
+          <option value="entrada">↑ Entradas</option>
+          <option value="salida">↓ Salidas</option>
+          <option value="ajuste">⟳ Ajustes</option>
+          <option value="transferencia">↔ Transferencias</option>
+          <option value="importacion">📥 Importaciones</option>
         </select>
         <select class="fsel" id="f-hist-origen" onchange="renderHistorial()">
           <option value="">Todos los orígenes</option>
+          <option value="Recepción Depósito">📦 Recepción Depósito</option>
           <option value="OC entregada">OC entregada</option>
-          <option value="Pedido entregado">Pedido entregado</option>
           <option value="Producción">Producción</option>
           <option value="Producción revertida">Producción revertida</option>
           <option value="Ajuste manual">Ajuste manual</option>
+          <option value="Transferencia">Transferencia</option>
           <option value="Importar Excel">Importar Excel</option>
         </select>
         <input type="date" class="fsel" id="f-hist-desde" onchange="renderHistorial()" title="Desde" style="width:130px">
         <input type="date" class="fsel" id="f-hist-hasta" onchange="renderHistorial()" title="Hasta" style="width:130px">
         <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-historial" placeholder="Buscar insumo..." oninput="renderHistorial()"></div>
+        <button class="btn btn-sm" onclick="filtroRapidoHistorial('hoy')" style="font-size:10px">Hoy</button>
+        <button class="btn btn-sm" onclick="filtroRapidoHistorial('semana')" style="font-size:10px">Semana</button>
+        <button class="btn btn-sm" onclick="filtroRapidoHistorial('mes')" style="font-size:10px">Mes</button>
         <button class="btn btn-sm" onclick="abrirAjusteStock()" style="border-color:var(--gold);color:var(--gold)">✏ Ajuste</button>
         <button class="btn btn-b btn-sm" onclick="exportHistorialXLSX()">↓ Excel</button>
-        <button class="btn btn-sm" onclick="limpiarFiltrosHistorial()" title="Limpiar filtros" style="padding:4px 8px">✕ filtros</button>
+        <button class="btn btn-sm" onclick="limpiarFiltrosHistorial()" style="padding:4px 8px">✕ filtros</button>
         <button class="btn btn-sm" onclick="if(confirm('¿Limpiar todo el historial?')){S.movimientos=[];saveState();renderHistorial();toast('Historial limpiado','🗑️')}" style="color:var(--red);border-color:var(--red)">Limpiar</button>
       </div>
     </div>
@@ -4223,7 +4228,7 @@ function _ingresarStockRecepcion(c, cant, lote, venc) {
   D.stock[cod].lotes.unshift({lote:lote||'', vencimiento:venc||'', cantidad:cant, fecha:new Date().toISOString().slice(0,10)});
   if(D.stock[cod].lotes.length > 30) D.stock[cod].lotes = D.stock[cod].lotes.slice(0,30);
   const ref = [c.proveedor||'', lote?'Lote: '+lote:'', venc?'Vence: '+venc:''].filter(Boolean).join(' · ');
-  registrarMovimiento(cod, c.descripcion||cod, 'entrada', cant, antes, D.stock[cod].stock, 'OC entregada', ref);
+  registrarMovimiento(cod, c.descripcion||cod, 'entrada', cant, antes, D.stock[cod].stock, 'Recepción Depósito', ref);
   // Alertas vencimiento
   if(venc) {
     const dv = diasHastaVenc(venc);
@@ -5338,6 +5343,27 @@ function limpiarFiltrosHistorial() {
   renderHistorial();
 }
 
+function filtroRapidoHistorial(rango) {
+  const hoy  = new Date();
+  const pad  = n => String(n).padStart(2,'0');
+  const iso  = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const desde = document.getElementById('f-hist-desde');
+  const hasta = document.getElementById('f-hist-hasta');
+  if(!desde || !hasta) return;
+  hasta.value = iso(hoy);
+  if(rango === 'hoy') {
+    desde.value = iso(hoy);
+  } else if(rango === 'semana') {
+    const d = new Date(hoy); d.setDate(hoy.getDate() - 6);
+    desde.value = iso(d);
+  } else if(rango === 'mes') {
+    const d = new Date(hoy); d.setDate(1);
+    desde.value = iso(d);
+  }
+  S.histPage = 1;
+  renderHistorial();
+}
+
 function verMovimientosInsumo(cod) {
   const el = document.getElementById('s-historial');
   if(el) el.value = cod;
@@ -5428,9 +5454,11 @@ function renderHistorial() {
 
   const tipoPill = t => {
     const map = {
-      entrada:     ['var(--green)',   '↑ Entrada'],
-      salida:      ['var(--red)',     '↓ Salida'],
-      ajuste:      ['var(--blue)',    '⟳ Ajuste'],
+      entrada:       ['var(--green)',   '↑ Entrada'],
+      salida:        ['var(--red)',     '↓ Salida'],
+      ajuste:        ['var(--blue)',    '⟳ Ajuste'],
+      transferencia: ['#a855f7',        '↔ Transfer.'],
+      importacion:   ['var(--text2)',   '📥 Import.'],
       importacion: ['var(--gold)',    '↑ Import'],
     };
     const [col, lbl] = map[t] || ['var(--text2)', t];
@@ -5444,20 +5472,30 @@ function renderHistorial() {
       + ' ' + d.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
   };
 
-  if(tbl) tbl.innerHTML = slice.map(m => {
+  if(tbl) tbl.innerHTML = slice.map((m,i) => {
     const delta = m.stockDespues - m.stockAntes;
     const deltaStr = (delta >= 0 ? '+' : '') + fmt(delta, 3);
     const deltaCol = delta >= 0 ? 'var(--green)' : 'var(--red)';
-    return `<tr>
-      <td style="font-size:11px;color:var(--text2);white-space:nowrap">${fmtFecha(m.fecha)}</td>
-      <td class="td-code">${m.codigo}</td>
+    const refId = 'href-'+i;
+    const ref = m.ref||'—';
+    const refShort = ref.length > 30 ? ref.slice(0,28)+'…' : ref;
+    const refHtml = ref.length > 30
+      ? `<span id="${refId}" style="font-size:11px;color:var(--text2);cursor:pointer" title="Click para ver completo"
+           onclick="const el=document.getElementById('${refId}');el.textContent=el.textContent.includes('…')?'${ref.replace(/'/g,"\\'")}':'${refShort.replace(/'/g,"\\'")}'"
+         >${refShort}</span>`
+      : `<span style="font-size:11px;color:var(--text2)">${ref}</span>`;
+    const fechaHoy = new Date().toISOString().slice(0,10);
+    const esHoy = m.fecha?.slice(0,10) === fechaHoy;
+    return `<tr style="${esHoy?'background:rgba(201,168,76,.04)':''}">
+      <td style="font-size:11px;color:${esHoy?'var(--gold2)':'var(--text2)'};white-space:nowrap;font-weight:${esHoy?'600':'400'}">${fmtFecha(m.fecha)}</td>
+      <td class="td-code"><a href="#" onclick="verMovimientosInsumo('${m.codigo}');return false" style="color:var(--gold2);text-decoration:none">${m.codigo}</a></td>
       <td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${m.nombre}">${m.nombre}</td>
       <td class="tc">${tipoPill(m.tipo)}</td>
-      <td class="td-mono tr" style="color:${deltaCol};font-weight:600">${deltaStr}</td>
-      <td class="td-mono tr" style="color:var(--text2)">${fmt(m.stockAntes, 3)}</td>
+      <td class="td-mono tr" style="color:${deltaCol};font-weight:700">${deltaStr}</td>
+      <td class="td-mono tr" style="color:var(--text3)">${fmt(m.stockAntes, 3)}</td>
       <td class="td-mono tr" style="font-weight:600">${fmt(m.stockDespues, 3)}</td>
-      <td style="font-size:11px">${m.origen}</td>
-      <td style="font-size:11px;color:var(--text2);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${m.ref}">${m.ref||'—'}</td>
+      <td style="font-size:11px">${m.origen||'—'}</td>
+      <td>${refHtml}</td>
     </tr>`;
   }).join('');
 
