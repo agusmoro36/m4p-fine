@@ -2816,7 +2816,7 @@ try {
 }
 
 async function sbSave(payload, retries=3) {
-  if(!SB_CLIENT) return false;
+  if(!SB_CLIENT) { sbIndicador('offline'); return false; }
   for(let i=0; i<retries; i++) {
     try {
       _sbIgnoreNext = true;
@@ -2826,10 +2826,11 @@ async function sbSave(payload, retries=3) {
         update_at: new Date().toISOString()
       }, { onConflict: 'key' });
       if(!error) return true;
-      console.warn(`Supabase save intento ${i+1}:`, error.message);
-    } catch(e) { console.warn(`Supabase save intento ${i+1}:`, e); }
-    if(i < retries-1) await new Promise(r => setTimeout(r, 1000*(i+1))); // backoff
+      console.warn(`Supabase save intento ${i+1}/${retries}:`, error.message);
+    } catch(e) { console.warn(`Supabase save intento ${i+1}/${retries}:`, e.message || e); }
+    if(i < retries-1) await new Promise(r => setTimeout(r, 1000*(i+1))); // backoff 1s, 2s
   }
+  console.error('Supabase save falló después de', retries, 'intentos — key:', SB_STATE_KEY);
   return false;
 }
 
@@ -2976,12 +2977,29 @@ function saveState() {
     localStorage.setItem(LS_KEY, JSON.stringify(payloadSinAdj));
   } catch(e) { console.warn('localStorage save error', e); }
 
+  // Chequeo de tamaño antes de enviar
+  let jsonSize = 0;
+  try { jsonSize = new Blob([JSON.stringify(payloadSinAdj)]).size; } catch(e) {}
+  if(jsonSize > 900000) {
+    console.warn(`Payload grande: ${(jsonSize/1024).toFixed(0)}KB — recortando movimientos...`);
+    // Mantener solo los últimos 500 movimientos para no superar límite
+    if(payloadSinAdj.movimientos && payloadSinAdj.movimientos.length > 500) {
+      payloadSinAdj.movimientos = payloadSinAdj.movimientos.slice(0, 500);
+    }
+  }
+
   // Supabase: estado principal liviano (sin base64) + adjuntos en fila separada
   sbIndicador('sync');
   Promise.all([
     sbSave(payloadSinAdj),
     sbSaveAdjuntos(adjuntosMap)
-  ]).then(() => sbIndicador('ok')).catch(() => sbIndicador('error'));
+  ]).then(([ok]) => {
+    if(ok !== false) sbIndicador('ok');
+    else {
+      sbIndicador('error');
+      console.warn('Supabase save falló — datos guardados solo en localStorage');
+    }
+  }).catch(() => sbIndicador('error'));
 
   // Indicador visual
   const el = document.getElementById('save-ind');
@@ -3104,7 +3122,8 @@ function _reRenderActivePage() {
     compras: renderCompras, propuestas: renderPropuestas, recepcion: renderRecepcion,
     proveedores: renderProveedoresEnhanced, stock: renderStock, historial: renderHistorial,
     alertas: renderAlertas, calculadora: renderCalcPage, planificador: renderPlanificador,
-    facturas: renderFacturas, importar: ()=>{},
+    facturas: renderFacturas, maestroprecios: renderMaestroPrecios,
+    cotizaciones: renderCotizaciones, costos: renderCostos, importar: ()=>{},
   };
   try { if(renders[activePage]) renders[activePage](); } catch(e) { console.warn('reRender error', e); }
 }
@@ -6218,9 +6237,12 @@ function applyViewerMode() {
 
 function checkSession() {
   const role = sessionStorage.getItem('mrp-role');
+  const user = sessionStorage.getItem('mrp-user');
   if (role === 'admin' || role === 'viewer') {
     document.getElementById('login-overlay').style.display = 'none';
     if (role === 'viewer') applyViewerMode();
+    // CRÍTICO: restaurar SB_STATE_KEY según usuario (se pierde en refresh)
+    if (user && AUTH_USERS[user]) SB_STATE_KEY = AUTH_USERS[user].sbKey || 'mrp_fine_v8';
     return true;
   }
   return false;
