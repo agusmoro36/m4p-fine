@@ -4482,6 +4482,10 @@ function renderCompras(){
       <option value="si" ${c.entregada?'selected':''}>Sí ✓</option>
     </select>`;
 
+    // Normalizar items para display (debe ir primero, ocItems se usa más abajo)
+    const ocItems = (c.items && c.items.length > 0)
+      ? c.items
+      : (c.codigo ? [{codigo:c.codigo, descripcion:c.descripcion, cantidad:c.cantidad, um:c.um||'kg', precio:c.precio||0}] : []);
     const loteStr = c.lote ? `<div style="font-size:9px;color:var(--gold);font-family:var(--mono)">L: ${c.lote}</div>` : '';
     const vencStr = c.vencimiento ? `<div style="font-size:9px;font-family:var(--mono)">${vencPill(c.vencimiento)}</div>` : '';
     // Barra de recepción parcial
@@ -4512,10 +4516,6 @@ function renderCompras(){
       : (c.obs ? `<div style="font-size:9px;color:var(--text3);font-style:italic;margin-top:2px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.obs.replace(/"/g,'&quot;')}">💬 ${c.obs}</div>` : '');
     const nComs = coms.length + (c.obs&&!coms.length?1:0);
     const btnNota = `<button class="btn btn-sm" onclick="abrirComentarios(${idx})" title="Comentarios (${nComs})" style="font-size:10px;padding:3px 7px;color:${nComs?'var(--gold)':'var(--text3)'};border-color:${nComs?'var(--gold)':'var(--border)'}">${nComs?'💬 '+nComs:'＋💬'}</button>`;
-    // Normalizar items para display
-    const ocItems = (c.items && c.items.length > 0)
-      ? c.items
-      : (c.codigo ? [{codigo:c.codigo, descripcion:c.descripcion, cantidad:c.cantidad, um:c.um||'kg', precio:c.precio||0}] : []);
     const first = ocItems[0] || {};
     const masItems = ocItems.length > 1
       ? `<span style="font-size:9px;background:var(--gold-dim);color:var(--gold2);border:1px solid var(--border2);border-radius:3px;padding:1px 5px;font-family:var(--mono);margin-left:4px">+${ocItems.length-1} más</span>`
