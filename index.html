@@ -2779,7 +2779,17 @@ function selEstadoOC(idx, actual) {
       background:var(--bg);color:${col};border:1px solid ${col};cursor:pointer">${opts}</select>`;
 }
 function setEstadoCompra(idx, val) {
-  if(S.compras[idx]) { S.compras[idx].estado = val; saveState(); renderCompras(); toast('Estado → '+val,'✓',1800); }
+  if(!S.compras[idx]) return;
+  S.compras[idx].estado = val;
+  saveState();
+  renderCompras();
+  toast('Estado → '+val,'✓',1800);
+  // Verificar que el save a Supabase haya funcionado
+  if(saveState._lastPromise) {
+    saveState._lastPromise.then(ok => {
+      if(!ok) toast('⚠ Cambio guardado localmente pero no en la nube. Usá ☁ Guardar para reintentar.','⚠️', 5000);
+    });
+  }
 }
 
 function toast(msg,icon='✓',dur=2800){
@@ -2874,26 +2884,23 @@ async function sbLoad() {
 async function guardarNube() {
   const btn = document.getElementById('btn-guardar-nube');
   if(btn) { btn.textContent = '⟳ Guardando...'; btn.disabled = true; btn.style.opacity = '.7'; }
-  saveState(); // guarda en localStorage de inmediato
-  // Esperar confirmación de Supabase (máx 8s)
+  saveState(); // guarda en localStorage sincrónicamente + dispara Supabase async
   let ok = false;
   try {
-    const t = Date.now();
-    while(!ok && Date.now()-t < 8000) {
-      await new Promise(r => setTimeout(r, 300));
-      const ind = document.getElementById('sb-ind');
-      if(ind && ind.style.background && ind.style.background.includes('34,197')) ok = true; // green = ok
-    }
-    ok = true; // asumir ok si no hubo error visible
+    // Esperar la Promise real de Supabase (máx 12s por timeout)
+    const timeout = new Promise(r => setTimeout(() => r(false), 12000));
+    const result = await Promise.race([saveState._lastPromise || Promise.resolve(false), timeout]);
+    ok = result === true;
   } catch(e) { ok = false; }
   if(btn) {
-    btn.textContent = ok ? '✓ Guardado' : '✕ Error — guardado local OK';
+    btn.textContent = ok ? '✓ Guardado en la nube' : '✕ Error — revisar consola';
     btn.style.background = ok ? 'var(--acc)' : 'var(--red)';
     btn.style.opacity = '1';
     btn.disabled = false;
+    if(!ok) toast('⚠ No se pudo guardar en Supabase. Intentá de nuevo o recargá la página.', '⚠️', 6000);
     setTimeout(() => {
       if(btn) { btn.textContent = '☁ Guardar'; btn.style.background = 'var(--acc)'; }
-    }, 2500);
+    }, 3000);
   }
 }
 
@@ -2990,16 +2997,18 @@ function saveState() {
 
   // Supabase: estado principal liviano (sin base64) + adjuntos en fila separada
   sbIndicador('sync');
-  Promise.all([
+  const _sbPromise = Promise.all([
     sbSave(payloadSinAdj),
     sbSaveAdjuntos(adjuntosMap)
   ]).then(([ok]) => {
-    if(ok !== false) sbIndicador('ok');
+    if(ok !== false) { sbIndicador('ok'); return true; }
     else {
       sbIndicador('error');
       console.warn('Supabase save falló — datos guardados solo en localStorage');
+      return false;
     }
-  }).catch(() => sbIndicador('error'));
+  }).catch(e => { sbIndicador('error'); console.error('sbSave error:', e); return false; });
+  saveState._lastPromise = _sbPromise; // exponer para guardarNube()
 
   // Indicador visual
   const el = document.getElementById('save-ind');
