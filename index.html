@@ -4229,7 +4229,7 @@ function renderRecepcion() {
   const q = (document.getElementById('s-recepcion')?.value || '').toLowerCase();
   const pendientes = S.compras.filter(c =>
     !c.entregada &&
-    (!q || c.codigo.toLowerCase().includes(q) || c.descripcion.toLowerCase().includes(q) || (c.proveedor||'').toLowerCase().includes(q))
+    (!q || (c.codigo||'').toLowerCase().includes(q) || (c.descripcion||'').toLowerCase().includes(q) || (c.proveedor||'').toLowerCase().includes(q))
   );
 
   // KPIs
@@ -4346,7 +4346,12 @@ function renderRecepcion() {
 
 function _ingresarStockRecepcion(c, cant, lote, venc) {
   const cod = c.codigo || '';
-  if(!cod || cant <= 0) return;
+  if(cant <= 0) return;
+  if(!cod) {
+    console.error('[Recepción] OC sin código de insumo — stock NO actualizado. OC:', JSON.stringify({proveedor:c.proveedor, descripcion:c.descripcion, items:c.items}));
+    toast('⚠️ OC sin código de insumo: el stock no pudo actualizarse. Ajustalo manualmente en Stock.', '⚠️', 8000);
+    return;
+  }
   if(!D.stock[cod]) D.stock[cod] = {nombre: c.descripcion || cod, stock: 0};
   const antes = parseFloat(D.stock[cod].stock) || 0;
   D.stock[cod].stock = Math.round((antes + cant) * 1000) / 1000;
@@ -4389,13 +4394,23 @@ function confirmarRecepcion(idx) {
   // Calcular si la OC está completa
   const totalRec = c.recepciones.reduce((s,r) => s+(r.cant||0), 0);
   c.cant_recibida = totalRec;
+  const cantOC = parseFloat(c.cantidad) || 0;
 
-  if(totalRec >= c.cantidad - 0.001) {
+  if(cantOC > 0 && totalRec >= cantOC - 0.001) {
     // OC completa → cerrar automáticamente
     c.entregada = true;
-    toast('✅ OC completada: '+fmt(totalRec,3)+' / '+fmt(c.cantidad,3)+' recibidos', '✅', 5000);
+    toast('✅ OC completada: '+fmt(totalRec,3)+' / '+fmt(cantOC,3)+' recibidos', '✅', 5000);
+  } else if(cantOC <= 0) {
+    // OC sin cantidad definida → preguntar si cerrar
+    const cerrar = confirm(`Se registraron ${fmt(cant,3)} kg de ${c.descripcion||c.codigo}.\n¿Marcar esta OC como entregada?`);
+    if(cerrar) {
+      c.entregada = true;
+      toast('✅ OC cerrada manualmente', '✅', 4000);
+    } else {
+      toast('📦 +'+fmt(cant,3)+' recibidos. OC sigue abierta.', '📦', 4000);
+    }
   } else {
-    const pendiente = c.cantidad - totalRec;
+    const pendiente = cantOC - totalRec;
     toast('📦 +'+fmt(cant,3)+' recibidos · Pendiente: '+fmt(pendiente,3), '📦', 4000);
   }
 
