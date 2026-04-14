@@ -2644,9 +2644,16 @@ function go(id){
   document.querySelectorAll('.nav-item').forEach(n=>{
     if(n.getAttribute('onclick')?.includes(`'${id}'`)){
       n.classList.add('active');
-      // resaltar el nav-group padre (busca hacia atrás)
+      // resaltar el nav-group padre y auto-expandir si está colapsado
       let prev=n.previousElementSibling;
-      while(prev){if(prev.classList.contains('nav-group')){prev.classList.add('section-active');break;}prev=prev.previousElementSibling;}
+      while(prev){
+        if(prev.classList.contains('nav-group')){
+          prev.classList.add('section-active');
+          if(prev.classList.contains('collapsed')) toggleNavGroup(prev);
+          break;
+        }
+        prev=prev.previousElementSibling;
+      }
     }
   });
   document.getElementById('tb-title').innerHTML=`${titles[id]||id} <span>· The Fine Company</span>`;
