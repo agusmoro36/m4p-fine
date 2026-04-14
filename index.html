@@ -2555,6 +2555,7 @@ const _SEED_COMPRAS = [
   {_sid:'PK-0040-ENVAFLU-1000',codigo:'PK-0040',descripcion:'LATA SMOOTH',productos:'PT-0004',cantidad:1000,precio:3698,total_usd:3698000,moneda:'ARS',proveedor:'ENVAFLU',estado:'Pedido',pagada:false,entregada:false},
   {_sid:'MP-0020-MCCASSAB-1300',codigo:'MP-0020',descripcion:'COLAGENO',productos:'FINE',cantidad:1300,precio:9.25,total_usd:12025,moneda:'USD',proveedor:'MC CASSAB',estado:'Pedido',pagada:false,entregada:false},
   {_sid:'MP-0060-BASEL-10',codigo:'MP-0060',descripcion:'EXTRACTO MAQUI',productos:'',cantidad:10,precio:60,total_usd:600,moneda:'USD',proveedor:'BASEL',estado:'Pedido',pagada:false,entregada:false},
+  {_sid:'PK-0183-BIORIENT-2500',nro:'OC-32/OC-0207-2026',codigo:'PK-0183',descripcion:'ESTUCHE VECE ESTILO SALUDABLE',productos:'',cantidad:2500,um:'uni.',precio:194,total_ars:485000,moneda:'ARS',proveedor:'BI-ORIENT',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-03-20',condicion_pago:'CONTADO',lead_time:20},
 ];
 
 const S = {
@@ -2590,7 +2591,6 @@ const S = {
     {codigo:'PK-0040',descripcion:'LATA SMOOTH',productos:'PT-0004',cantidad:1000,precio:3698,total_usd:3698000,moneda:'ARS',proveedor:'ENVAFLU',estado:'Pedido',pagada:false,entregada:false},
     {codigo:'MP-0020',descripcion:'COLAGENO',productos:'FINE',cantidad:1300,precio:9.25,total_usd:12025,moneda:'USD',proveedor:'MC CASSAB',estado:'Pedido',pagada:false,entregada:false},
     {codigo:'MP-0060',descripcion:'EXTRACTO MAQUI',productos:'',cantidad:10,precio:60,total_usd:600,moneda:'USD',proveedor:'BASEL',estado:'Pedido',pagada:false,entregada:false},
-    {nro:'OC-32/OC-0207-2026',codigo:'PK-0183',descripcion:'ESTUCHE VECE ESTILO SALUDABLE',productos:'',cantidad:2500,um:'uni.',precio:194,total_ars:485000,moneda:'ARS',proveedor:'BI-ORIENT',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-03-20',condicion_pago:'CONTADO',lead_time:20},
   ],
   proveedores:[
     {nombre:'Nutralia',codigo:'NUTRALIA',contacto:'Lucas Gómez',email:'ventas@nutralia.com.ar',tel:'+54 11 4555-1234',lt:10,ins:'L485, VITAC, CAFANH, LCISTIN, COLBITA',rating:5},
@@ -3036,6 +3036,10 @@ function applyState(st) {
   if (st.preciosInsumos) S.preciosInsumos = st.preciosInsumos;
   if (st.compras) {
     S.compras = st.compras;
+    // Merge OCs semilla que no existan aún (por _sid)
+    _SEED_COMPRAS.forEach(sc => {
+      if(!S.compras.some(c=>c._sid===sc._sid)) S.compras.push(sc);
+    });
   }
   if (st.comprasPropuestas) {
     S.comprasPropuestas = st.comprasPropuestas;
