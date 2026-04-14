@@ -2626,6 +2626,22 @@ const S = {
 // NAVIGATION
 // ══════════════════════════════════════
 const titles={dashboard:'Dashboard',planificador:'Planificador Inteligente',recepcion:'Recepción de Mercadería',facturas:'Facturas',mrp:'MRP Insumos',plan:'Plan de Producción',produccion:'Producción Real',bom:'Fórmulas / BOM',costos:'Dashboard de Costos',cotizaciones:'Cotizaciones',maestroprecios:'Maestro de Precios',proyeccion:'Proyección de Stock',compras:'Órdenes de Compra',propuestas:'OCs Propuestas',proveedores:'Gestión de Proveedores',stock:'Stock de Insumos',historial:'Historial de Stock',calculadora:'Calculadora MRP',importar:'Importar Excel',alertas:'Alertas'};
+function _saveNavCollapse(){
+  const state={};
+  document.querySelectorAll('.nav-group').forEach(g=>{
+    const key=g.textContent.trim().replace(/▾/g,'').trim();
+    state[key]=g.classList.contains('collapsed');
+  });
+  try{localStorage.setItem('nav_collapse',JSON.stringify(state));}catch(e){}
+}
+function _restoreNavCollapse(){
+  let state={};
+  try{state=JSON.parse(localStorage.getItem('nav_collapse')||'{}');}catch(e){}
+  document.querySelectorAll('.nav-group').forEach(g=>{
+    const key=g.textContent.trim().replace(/▾/g,'').trim();
+    if(state[key]===true && !g.classList.contains('collapsed')) toggleNavGroup(g);
+  });
+}
 function toggleNavGroup(el){
   el.classList.toggle('collapsed');
   const collapsed = el.classList.contains('collapsed');
@@ -2634,6 +2650,7 @@ function toggleNavGroup(el){
     next.style.display = collapsed ? 'none' : '';
     next = next.nextElementSibling;
   }
+  _saveNavCollapse();
 }
 
 function go(id){
@@ -6330,6 +6347,7 @@ actualizarBadgePropuestas();
 // Cargar desde Supabase (fuente única de verdad — siempre prevalece)
 // NO llamar saveState() antes para no pisar los datos reales de la nube
 loadFromSupabase();
+_restoreNavCollapse();
 let facPage = 1;
 
 // ── SIDEBAR MOBILE ──
