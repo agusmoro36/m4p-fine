@@ -400,28 +400,31 @@ body.viewer-mode .page-filters select { pointer-events:auto }
   <div class="nav">
     <div class="nav-group">Principal</div>
     <div class="nav-item active" onclick="go('dashboard')"><span class="nav-ico">◈</span>Dashboard</div>
+    <div class="nav-item" onclick="go('alertas')"><span class="nav-ico">⚑</span>Alertas<span class="nav-badge" id="nb-alertas">62</span></div>
+    <div class="nav-group">Stock</div>
+    <div class="nav-item" onclick="go('stock')"><span class="nav-ico">▤</span>Stock de Insumos</div>
+    <div class="nav-item" onclick="go('recepcion')"><span class="nav-ico">📦</span>Recepción Depósito<span class="nav-badge" id="nb-recepcion" style="display:none">0</span></div>
+    <div class="nav-item" onclick="go('historial')"><span class="nav-ico">⏱</span>Historial Stock<span class="nav-badge" id="nb-historial" style="display:none">0</span></div>
+    <div class="nav-group">Planificación</div>
     <div class="nav-item" onclick="go('mrp')"><span class="nav-ico">◉</span>MRP Insumos<span class="nav-badge" id="nb-criticos">50</span></div>
-    <div class="nav-group">Producción</div>
     <div class="nav-item" onclick="go('plan')"><span class="nav-ico">◇</span>Plan de Producción</div>
+    <div class="nav-item" onclick="go('proyeccion')"><span class="nav-ico">◈</span>Proyección Stock</div>
+    <div class="nav-item" onclick="go('planificador')"><span class="nav-ico">✦</span>Planificador IA<span class="nav-new">NEW</span></div>
+    <div class="nav-item" onclick="go('calculadora')"><span class="nav-ico">⊕</span>Calculadora MRP</div>
+    <div class="nav-group">Producción</div>
     <div class="nav-item" onclick="go('produccion')"><span class="nav-ico">⚙</span>Producción Real</div>
     <div class="nav-item" onclick="go('bom')"><span class="nav-ico">◎</span>Fórmulas / BOM</div>
-    <div class="nav-item" onclick="go('costos')"><span class="nav-ico">$</span>Dashboard de Costos</div>
-    <div class="nav-item" onclick="go('cotizaciones')"><span class="nav-ico">💰</span>Cotizaciones</div>
-    <div class="nav-item" onclick="go('maestroprecios')"><span class="nav-ico">📋</span>Maestro de Precios</div>
-    <div class="nav-item" onclick="go('proyeccion')"><span class="nav-ico">◈</span>Proyección Stock<span class="nav-new">NEW</span></div>
     <div class="nav-group">Compras</div>
     <div class="nav-item" onclick="go('propuestas')"><span class="nav-ico">◈</span>OCs Propuestas<span class="nav-badge" id="nb-propuestas" style="display:none">0</span></div>
     <div class="nav-item" onclick="go('compras')"><span class="nav-ico">◆</span>Órdenes de Compra<span class="nav-badge blue" id="nb-oc">21</span></div>
     <div class="nav-item" onclick="go('proveedores')"><span class="nav-ico">▦</span>Proveedores</div>
     <div class="nav-item" onclick="go('facturas')"><span class="nav-ico">◉</span>Facturas<span class="nav-badge">55</span></div>
-    <div class="nav-group">Datos</div>
-    <div class="nav-item" onclick="go('recepcion')" style="background:rgba(201,168,76,.07);border-left:2px solid var(--gold-dim)"><span class="nav-ico">📦</span>Recepción Depósito<span class="nav-badge" id="nb-recepcion" style="display:none">0</span></div>
-    <div class="nav-item" onclick="go('stock')"><span class="nav-ico">▤</span>Stock de Insumos</div>
-    <div class="nav-item" onclick="go('historial')"><span class="nav-ico">⏱</span>Historial Stock<span class="nav-badge" id="nb-historial" style="display:none">0</span></div>
-    <div class="nav-item" onclick="go('planificador')"><span class="nav-ico">✦</span>Planificador IA<span class="nav-new">NEW</span></div>
-    <div class="nav-item" onclick="go('calculadora')"><span class="nav-ico">⊕</span>Calculadora MRP</div>
-    <div class="nav-item" onclick="go('importar')"><span class="nav-ico">↑</span>Importar Excel<span class="nav-new">NEW</span></div>
-    <div class="nav-item" onclick="go('alertas')"><span class="nav-ico">⚑</span>Alertas<span class="nav-badge" id="nb-alertas">62</span></div>
+    <div class="nav-group">Precios</div>
+    <div class="nav-item" onclick="go('maestroprecios')"><span class="nav-ico">📋</span>Maestro de Precios</div>
+    <div class="nav-item" onclick="go('cotizaciones')"><span class="nav-ico">💰</span>Cotizaciones</div>
+    <div class="nav-item" onclick="go('costos')"><span class="nav-ico">$</span>Dashboard de Costos</div>
+    <div class="nav-group">Herramientas</div>
+    <div class="nav-item" onclick="go('importar')"><span class="nav-ico">↑</span>Importar Excel</div>
   </div>
   <div class="sidebar-footer">
     <div class="user-row">
