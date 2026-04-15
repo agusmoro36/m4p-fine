@@ -214,6 +214,27 @@ tbody tr:hover td{background:rgba(201,168,76,.04);color:var(--black)}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
 .three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px}
 
+/* ── BUSCADOR GLOBAL ── */
+#gSearch-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:900;align-items:flex-start;justify-content:center;padding-top:80px}
+#gSearch-overlay.open{display:flex}
+#gSearch-box{background:var(--bg2);border:1px solid var(--gold-dim);border-radius:14px;width:600px;max-width:calc(100vw - 40px);box-shadow:0 24px 60px rgba(0,0,0,.6),0 0 0 1px rgba(201,168,76,.15);animation:fin .15s;overflow:hidden}
+#gSearch-input{width:100%;background:transparent;border:none;outline:none;padding:18px 20px;font-size:17px;font-family:'Cormorant Garamond',serif;color:var(--text);letter-spacing:.3px}
+#gSearch-input::placeholder{color:var(--text3)}
+#gSearch-divider{height:1px;background:var(--border)}
+#gSearch-results{max-height:420px;overflow-y:auto;padding:8px 0}
+#gSearch-results:empty{display:none}
+.gs-group{padding:6px 16px 2px;font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:2px;text-transform:uppercase}
+.gs-item{display:flex;align-items:center;gap:12px;padding:9px 16px;cursor:pointer;transition:background .12s;border-radius:0}
+.gs-item:hover,.gs-item.gs-active{background:rgba(201,168,76,.1)}
+.gs-item.gs-active .gs-name{color:var(--gold)}
+.gs-ico{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;background:rgba(201,168,76,.1)}
+.gs-name{font-family:'Cormorant Garamond',serif;font-size:14px;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gs-meta{font-family:var(--mono);font-size:10px;color:var(--text3);flex-shrink:0}
+.gs-hint{padding:10px 16px;font-family:var(--mono);font-size:10px;color:var(--text3);text-align:center}
+#gSearch-footer{padding:8px 16px;border-top:1px solid var(--border);display:flex;gap:16px;font-family:var(--mono);font-size:10px;color:var(--text3)}
+#gSearch-footer span{display:flex;align-items:center;gap:4px}
+#gSearch-footer kbd{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:9px}
+
 /* ── MODAL ── */
 .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:500;align-items:center;justify-content:center;padding:20px}
 .overlay.open{display:flex}
@@ -463,6 +484,9 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <span class="chip chip-b hide-mobile">385 insumos</span>
     <span class="chip chip-r hide-mobile">50 críticos</span>
     <button class="btn btn-g btn-sm hide-mobile" onclick="exportarExcel()">↓ Exportar</button>
+    <button onclick="openGlobalSearch()" title="Buscar (Ctrl+K)" style="margin-left:auto;display:flex;align-items:center;gap:8px;background:rgba(201,168,76,.07);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;color:var(--text3);font-family:var(--mono);font-size:11px;transition:all .2s" onmouseover="this.style.borderColor='var(--gold-dim)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text3)'">
+      <span>🔍</span><span class="hide-mobile">Buscar</span><kbd style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:9px;margin-left:4px">Ctrl K</kbd>
+    </button>
   </div>
 
   <div class="pages">
@@ -8848,6 +8872,189 @@ function exportarCostos() {
   XLSX.writeFile(wb, 'CostosProd_'+mes+'_2026.xlsx');
   toast('Exportado','↓');
 }
+
+// ══════════════════════════════════════════════
+// BUSCADOR GLOBAL  Ctrl+K / Cmd+K
+// ══════════════════════════════════════════════
+(function(){
+  // ── HTML ──
+  const el = document.createElement('div');
+  el.id = 'gSearch-overlay';
+  el.innerHTML = `
+    <div id="gSearch-box">
+      <input id="gSearch-input" placeholder="Buscar insumos, OCs, proveedores, páginas…" autocomplete="off" spellcheck="false">
+      <div id="gSearch-divider"></div>
+      <div id="gSearch-results"></div>
+      <div id="gSearch-footer">
+        <span><kbd>↑↓</kbd> Navegar</span>
+        <span><kbd>Enter</kbd> Abrir</span>
+        <span><kbd>Esc</kbd> Cerrar</span>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+
+  // ── FUENTES DE DATOS ──
+  const PAGES = [
+    {id:'dashboard',   label:'Dashboard',           ico:'◈', cat:'Páginas'},
+    {id:'alertas',     label:'Alertas',              ico:'⚑', cat:'Páginas'},
+    {id:'stock',       label:'Stock de Insumos',     ico:'▤', cat:'Páginas'},
+    {id:'recepcion',   label:'Recepción Depósito',   ico:'📦', cat:'Páginas'},
+    {id:'historial',   label:'Historial Stock',      ico:'⏱', cat:'Páginas'},
+    {id:'mrp',         label:'MRP Insumos',          ico:'◉', cat:'Páginas'},
+    {id:'plan',        label:'Plan de Producción',   ico:'◇', cat:'Páginas'},
+    {id:'proyeccion',  label:'Proyección Stock',     ico:'◈', cat:'Páginas'},
+    {id:'planificador',label:'Planificador IA',      ico:'✦', cat:'Páginas'},
+    {id:'calculadora', label:'Calculadora MRP',      ico:'⊕', cat:'Páginas'},
+    {id:'produccion',  label:'Producción Real',      ico:'⚙', cat:'Páginas'},
+    {id:'bom',         label:'Fórmulas / BOM',       ico:'◎', cat:'Páginas'},
+    {id:'propuestas',  label:'OCs Propuestas',       ico:'◈', cat:'Páginas'},
+    {id:'compras',     label:'Órdenes de Compra',    ico:'◆', cat:'Páginas'},
+    {id:'proveedores', label:'Proveedores',           ico:'▦', cat:'Páginas'},
+    {id:'facturas',    label:'Facturas',              ico:'◉', cat:'Páginas'},
+    {id:'maestroprecios',label:'Maestro de Precios', ico:'📋', cat:'Páginas'},
+    {id:'cotizaciones',label:'Cotizaciones',          ico:'💰', cat:'Páginas'},
+    {id:'costos',      label:'Dashboard de Costos',  ico:'$',  cat:'Páginas'},
+    {id:'importar',    label:'Importar Excel',        ico:'↑',  cat:'Páginas'},
+  ];
+
+  function _items(q){
+    const ql = q.toLowerCase().trim();
+    if(!ql) return [];
+    const res = [];
+    const MAX = 5;
+
+    // Páginas
+    PAGES.filter(p => p.label.toLowerCase().includes(ql)).slice(0,4).forEach(p=>{
+      res.push({cat:'Páginas', ico:p.ico, name:p.label, meta:'', action:()=>go(p.id)});
+    });
+
+    // Insumos (D.stock)
+    let ins = 0;
+    Object.entries(D.stock||{}).forEach(([cod,v])=>{
+      if(ins>=MAX) return;
+      if(cod.toLowerCase().includes(ql)||v.nombre.toLowerCase().includes(ql)){
+        res.push({cat:'Insumos', ico:'🧪', name:v.nombre||cod, meta:cod,
+          action:()=>{ go('stock'); setTimeout(()=>{ const s=document.getElementById('s-stock'); if(s){s.value=cod; renderStock&&renderStock();} },300); }});
+        ins++;
+      }
+    });
+
+    // OCs (S.compras)
+    let ocs = 0;
+    (S.compras||[]).forEach(c=>{
+      if(ocs>=MAX) return;
+      const hay = (c.nro||'').toLowerCase().includes(ql)||(c.proveedor||'').toLowerCase().includes(ql)||(c.descripcion||'').toLowerCase().includes(ql)||(c.codigo||'').toLowerCase().includes(ql);
+      if(hay){
+        res.push({cat:'OCs', ico:'◆', name:`${c.proveedor||'—'} · ${c.descripcion||c.codigo||''}`, meta:c.nro||'',
+          action:()=>{ go('compras'); setTimeout(()=>{ const s=document.getElementById('s-compras'); if(s){s.value=c.proveedor||''; filterCompras&&renderCompras();} },300); }});
+        ocs++;
+      }
+    });
+
+    // Proveedores
+    let provs = 0;
+    (S.proveedores||[]).forEach(p=>{
+      if(provs>=MAX) return;
+      if((p.nombre||'').toLowerCase().includes(ql)||(p.codigo||'').toLowerCase().includes(ql)){
+        res.push({cat:'Proveedores', ico:'▦', name:p.nombre||'', meta:p.email||p.tel||'',
+          action:()=>{ go('proveedores'); }});
+        provs++;
+      }
+    });
+
+    // Precios (S.preciosInsumos)
+    let precios = 0;
+    Object.entries(S.preciosInsumos||{}).forEach(([cod,v])=>{
+      if(precios>=MAX) return;
+      const nom = (D.stock&&D.stock[cod]?.nombre)||cod;
+      if(cod.toLowerCase().includes(ql)||nom.toLowerCase().includes(ql)){
+        const pStr = v.precio ? `${v.moneda} ${v.precio}` : '';
+        res.push({cat:'Precios', ico:'📋', name:nom, meta:pStr,
+          action:()=>{ go('maestroprecios'); setTimeout(()=>{ const s=document.getElementById('mp-search'); if(s){s.value=cod; renderMaestroPrecios&&renderMaestroPrecios();} },300); }});
+        precios++;
+      }
+    });
+
+    return res;
+  }
+
+  // ── RENDER ──
+  let _activeIdx = -1;
+  function _render(q){
+    const items = _items(q);
+    const cont = document.getElementById('gSearch-results');
+    if(!items.length){
+      cont.innerHTML = q.trim() ? `<div class="gs-hint">Sin resultados para "<b>${q}</b>"</div>` : '';
+      _activeIdx = -1;
+      return;
+    }
+    let html = '';
+    let lastCat = '';
+    items.forEach((it,i)=>{
+      if(it.cat !== lastCat){ html+=`<div class="gs-group">${it.cat}</div>`; lastCat=it.cat; }
+      html+=`<div class="gs-item${i===_activeIdx?' gs-active':''}" data-idx="${i}">
+        <div class="gs-ico">${it.ico}</div>
+        <div class="gs-name">${it.name}</div>
+        <div class="gs-meta">${it.meta}</div>
+      </div>`;
+    });
+    cont.innerHTML = html;
+    cont.querySelectorAll('.gs-item').forEach(el=>{
+      el.addEventListener('click',()=>{ _pick(items, parseInt(el.dataset.idx)); });
+    });
+    _items._cache = items;
+  }
+
+  function _pick(items, idx){
+    const it = (items||_items._cache||[])[idx>=0?idx:0];
+    if(it){ it.action(); _close(); }
+  }
+
+  function _setActive(idx){
+    const items = _items._cache||[];
+    _activeIdx = Math.max(-1, Math.min(items.length-1, idx));
+    document.querySelectorAll('.gs-item').forEach((el,i)=>{
+      el.classList.toggle('gs-active', i===_activeIdx);
+      if(i===_activeIdx) el.scrollIntoView({block:'nearest'});
+    });
+  }
+
+  // ── OPEN / CLOSE ──
+  function _open(){
+    el.classList.add('open');
+    const inp = document.getElementById('gSearch-input');
+    inp.value = '';
+    document.getElementById('gSearch-results').innerHTML = '';
+    _activeIdx = -1;
+    setTimeout(()=>inp.focus(), 30);
+  }
+  function _close(){
+    el.classList.remove('open');
+  }
+
+  // ── EVENTOS ──
+  document.getElementById('gSearch-input').addEventListener('input', e=>{
+    _activeIdx = -1;
+    _render(e.target.value);
+  });
+
+  document.getElementById('gSearch-input').addEventListener('keydown', e=>{
+    const items = _items._cache||[];
+    if(e.key==='ArrowDown'){ e.preventDefault(); _setActive(_activeIdx+1); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); _setActive(_activeIdx-1); }
+    else if(e.key==='Enter'){ e.preventDefault(); _pick(items, _activeIdx>=0?_activeIdx:0); }
+    else if(e.key==='Escape'){ _close(); }
+  });
+
+  el.addEventListener('click', e=>{ if(e.target===el) _close(); });
+
+  document.addEventListener('keydown', e=>{
+    if((e.ctrlKey||e.metaKey) && e.key==='k'){ e.preventDefault(); el.classList.contains('open') ? _close() : _open(); }
+  });
+
+  // Exponer por si se quiere abrir desde un botón futuro
+  window.openGlobalSearch = _open;
+})();
 
 </script>
 </body>
