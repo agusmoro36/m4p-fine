@@ -3075,10 +3075,14 @@ function saveState() {
     if(ok !== false) { sbIndicador('ok'); return true; }
     else {
       sbIndicador('error');
-      console.warn('Supabase save falló — datos guardados solo en localStorage');
+      toast('⚠ No se pudo guardar en la nube. Tus cambios están solo en este dispositivo. Tocá ☁ Guardar para reintentar.', '⚠️', 9000);
       return false;
     }
-  }).catch(e => { sbIndicador('error'); console.error('sbSave error:', e); return false; });
+  }).catch(e => {
+    sbIndicador('error');
+    toast('⚠ Error de conexión al guardar. Tocá ☁ Guardar para reintentar.', '⚠️', 9000);
+    return false;
+  });
   saveState._lastPromise = _sbPromise; // exponer para guardarNube()
 
   // Indicador visual
@@ -3101,12 +3105,21 @@ function applyState(st) {
   }
   if (st.preciosInsumos) S.preciosInsumos = st.preciosInsumos;
   if (st.compras) {
+    // Preservar OCs creadas esta sesión (_uid) que aún no llegaron a la nube
+    const sessionOCs = S.compras.filter(c => c._uid);
+
     S.compras = st.compras;
+
+    // Re-agregar OCs de sesión que no están en el estado de la nube
+    sessionOCs.forEach(oc => {
+      if(!S.compras.find(c => c._uid === oc._uid)) S.compras.push(oc);
+    });
+
     // Merge OCs semilla: buscar por _sid exacto o por codigo+proveedor+cantidad
     _SEED_COMPRAS.forEach(sc => {
       const existing = S.compras.find(c =>
         c._sid === sc._sid ||
-        (!c._sid && c.codigo === sc.codigo &&
+        (!c._sid && !c._uid && c.codigo === sc.codigo &&
          (c.proveedor||'').toUpperCase() === (sc.proveedor||'').toUpperCase() &&
          parseFloat(c.cantidad) === parseFloat(sc.cantidad))
       );
@@ -3191,19 +3204,21 @@ async function loadFromSupabase() {
     return;
   }
 
-  // Supabase es igual o más reciente → aplicar
-  applyState(data.value);
-  if(adjuntos) {
-    S.compras.forEach(c => {
-      if(c.adjunto && c.adjunto._adjKey && adjuntos[c.adjunto._adjKey]) {
-        c.adjunto = adjuntos[c.adjunto._adjKey];
-      }
-    });
+  // Supabase es más reciente → aplicar (si timestamps iguales, localStorage ya es correcto)
+  if(sbTs > lsTs) {
+    applyState(data.value);
+    if(adjuntos) {
+      S.compras.forEach(c => {
+        if(c.adjunto && c.adjunto._adjKey && adjuntos[c.adjunto._adjKey]) {
+          c.adjunto = adjuntos[c.adjunto._adjKey];
+        }
+      });
+    }
+    try { localStorage.setItem(LS_KEY, JSON.stringify(data.value)); } catch(e) {}
+    toast('☁ Datos actualizados desde la nube', '☁', 2000);
+    _reRenderActivePage();
   }
-  try { localStorage.setItem(LS_KEY, JSON.stringify(data.value)); } catch(e) {}
-  toast('☁ Datos cargados desde la nube', '☁', 2000);
   sbIndicador('ok');
-  _reRenderActivePage();
   sbSuscribir();
 }
 
