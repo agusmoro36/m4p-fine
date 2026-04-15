@@ -2612,16 +2612,6 @@ const S = {
     {codigo:'MP-0137',descripcion:'SUCRALOSA',productos:'FINE-NAARA',cantidad:25,precio:9.3,total_usd:232.5,proveedor:'el bahiense',estado:'Pendiente',pagada:false,entregada:false},
     {codigo:'MP-0036',descripcion:'EXT. ACEROLA 17%',productos:'PT-0014-NAHR',cantidad:4,precio:54,total_usd:216,proveedor:'basel',estado:'Pendiente',pagada:false,entregada:false},
     {codigo:'MP-0026',descripcion:'COLORANTE AMARILLO OCASO',productos:'FINE-NAARA',cantidad:1,precio:45,total_usd:45,proveedor:'adicol',estado:'Confirmada',pagada:false,entregada:false},
-    {codigo:'MP-0041',descripcion:'EXT. CAFÉ VERDE',productos:'',cantidad:20,precio:29,total_usd:580,moneda:'USD',proveedor:'BASEL',estado:'Pedido',pagada:false,entregada:false},
-    {codigo:'MP-0226',descripcion:'EXTRACTO DE LIMÓN',productos:'',cantidad:20,precio:28.5,total_usd:570,moneda:'USD',proveedor:'LINNEO',estado:'Pedido',pagada:false,entregada:false},
-    {codigo:'MP-0231',descripcion:'GINSENG',productos:'',cantidad:20,precio:40,total_usd:800,moneda:'USD',proveedor:'LINNEO',estado:'Pedido',pagada:false,entregada:false},
-    {codigo:'MP-0068',descripcion:'EXT. POROTO BLANCO-PHASEOLUS',productos:'',cantidad:30,precio:46,total_usd:1380,moneda:'USD',proveedor:'LINNEO',estado:'Pedido',pagada:false,entregada:false},
-    {codigo:'PK-0025',descripcion:'LAMINA BEAUTY',productos:'PT-0003',cantidad:1000,precio:3698,total_usd:3698000,moneda:'ARS',proveedor:'ENVAFLU',estado:'Pedido',pagada:false,entregada:false},
-    {codigo:'PK-0037',descripcion:'LATA PEAK',productos:'PT-0001',cantidad:4000,precio:3698,total_usd:14792000,moneda:'ARS',proveedor:'ENVAFLU',estado:'Pedido',pagada:false,entregada:false},
-    {codigo:'PK-0038',descripcion:'LATA POWER',productos:'PT-0002',cantidad:3000,precio:3698,total_usd:11094000,moneda:'ARS',proveedor:'ENVAFLU',estado:'Pedido',pagada:false,entregada:false},
-    {codigo:'PK-0040',descripcion:'LATA SMOOTH',productos:'PT-0004',cantidad:1000,precio:3698,total_usd:3698000,moneda:'ARS',proveedor:'ENVAFLU',estado:'Pedido',pagada:false,entregada:false},
-    {codigo:'MP-0020',descripcion:'COLAGENO',productos:'FINE',cantidad:1300,precio:9.25,total_usd:12025,moneda:'USD',proveedor:'MC CASSAB',estado:'Pedido',pagada:false,entregada:false},
-    {codigo:'MP-0060',descripcion:'EXTRACTO MAQUI',productos:'',cantidad:10,precio:60,total_usd:600,moneda:'USD',proveedor:'BASEL',estado:'Pedido',pagada:false,entregada:false},
   ],
   proveedores:[
     {nombre:'Nutralia',codigo:'NUTRALIA',contacto:'Lucas Gómez',email:'ventas@nutralia.com.ar',tel:'+54 11 4555-1234',lt:10,ins:'L485, VITAC, CAFANH, LCISTIN, COLBITA',rating:5},
@@ -3123,29 +3113,6 @@ function applyState(st) {
         S.compras.push(sc);
       }
     });
-    // De-duplicar: si hay versión sin _sid Y con _sid del mismo OC,
-    // migrar los campos del usuario al registro con _sid y eliminar el duplicado
-    const toRemove = [];
-    S.compras.forEach(c => {
-      if(c._sid) return;
-      const withSid = S.compras.find(o =>
-        o._sid && o.codigo === c.codigo &&
-        (o.proveedor||'').toUpperCase() === (c.proveedor||'').toUpperCase() &&
-        parseFloat(o.cantidad) === parseFloat(c.cantidad)
-      );
-      if(withSid) {
-        // Migrar estado del usuario al registro canónico (con _sid)
-        withSid.pagada      = c.pagada;
-        withSid.entregada   = c.entregada;
-        withSid.estado      = c.estado || withSid.estado;
-        withSid.cant_recibida = c.cant_recibida || withSid.cant_recibida;
-        withSid.recepciones = c.recepciones || withSid.recepciones;
-        if(c.adjunto) withSid.adjunto = c.adjunto;
-        if(c.nro)     withSid.nro     = c.nro;
-        toRemove.push(c);
-      }
-    });
-    if(toRemove.length) S.compras = S.compras.filter(c => !toRemove.includes(c));
   }
   if (st.comprasPropuestas) {
     S.comprasPropuestas = st.comprasPropuestas;
@@ -5274,8 +5241,9 @@ function addCompra(){
     saveState();
     toast('OC actualizada','✓');
   } else {
-    // NUEVA
-    S.compras.push({...d, pagada:false, entregada:false});
+    // NUEVA — asignar _uid único para que nunca sea confundida con una seed
+    const uid = 'U' + Date.now().toString(36).toUpperCase();
+    S.compras.push({...d, _uid: uid, pagada:false, entregada:false});
     closeM('m-compra');
     renderCompras();
     saveState();
