@@ -2920,16 +2920,21 @@ async function sbSave(payload, retries=3) {
 // Clave separada para adjuntos PDF (no mezclar con el estado principal)
 const SB_ADJ_KEY = 'mrp_fine_adjuntos_v8';
 
-async function sbSaveAdjuntos(adjuntosMap) {
-  if(!SB_CLIENT || !Object.keys(adjuntosMap).length) return;
-  try {
-    const { error } = await SB_CLIENT.from(SB_TABLE).upsert({
-      key: SB_ADJ_KEY,
-      value: adjuntosMap,
-      update_at: new Date().toISOString()
-    }, { onConflict: 'key' });
-    if(error) console.warn('Supabase adjuntos save error:', error.message);
-  } catch(e) { console.warn('Supabase adjuntos save error:', e); }
+async function sbSaveAdjuntos(adjuntosMap, retries=3) {
+  if(!SB_CLIENT || !Object.keys(adjuntosMap).length) return true;
+  for(let i=0; i<retries; i++) {
+    try {
+      const { error } = await SB_CLIENT.from(SB_TABLE).upsert({
+        key: SB_ADJ_KEY,
+        value: adjuntosMap,
+        update_at: new Date().toISOString()
+      }, { onConflict: 'key' });
+      if(!error) return true;
+      console.warn(`Adjuntos save intento ${i+1}/${retries}:`, error.message);
+    } catch(e) { console.warn(`Adjuntos save intento ${i+1}/${retries}:`, e.message||e); }
+    if(i < retries-1) await new Promise(r => setTimeout(r, 1000*(i+1)));
+  }
+  return false;
 }
 
 async function sbLoadAdjuntos() {
