@@ -9,7 +9,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260415-009';
+  var VER = '20260415-010';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -1271,7 +1271,6 @@ body.viewer-mode .page-filters select { pointer-events:auto }
           <option value="ARS">ARS</option>
         </select>
         <button class="btn btn-sm" onclick="importarExcelPrecios('cotizaciones')" style="border-color:var(--gold);color:var(--gold)">↑ Importar Excel</button>
-        <button class="btn btn-b btn-sm" onclick="exportarCotizaciones()">↓ Excel</button>
       </div>
     </div>
     <!-- KPIs -->
@@ -1309,7 +1308,6 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         <button class="btn btn-sm" onclick="cargarPreciosHistoricos()" style="border-color:#22d3a0;color:#22d3a0" title="Carga los 85 precios del historial Apr-2026 (no pisa precios ya cargados)">📥 Cargar histórico</button>
         <button class="btn btn-sm" onclick="importarPreciosDesdOCs()" style="border-color:var(--gold);color:var(--gold)">⬇ Desde OCs</button>
         <button class="btn btn-sm" onclick="importarExcelPrecios('maestro')" style="border-color:var(--blue);color:var(--blue)">↑ Importar Excel</button>
-        <button class="btn btn-b btn-sm" onclick="exportarMaestroPrecios()">↓ Excel</button>
       </div>
     </div>
     <div id="mp-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px"></div>
