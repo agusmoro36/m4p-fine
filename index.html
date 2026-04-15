@@ -3107,10 +3107,43 @@ function applyState(st) {
   if (st.preciosInsumos) S.preciosInsumos = st.preciosInsumos;
   if (st.compras) {
     S.compras = st.compras;
-    // Merge OCs semilla que no existan aún (por _sid)
+    // Merge OCs semilla: buscar por _sid exacto o por codigo+proveedor+cantidad
     _SEED_COMPRAS.forEach(sc => {
-      if(!S.compras.some(c=>c._sid===sc._sid)) S.compras.push(sc);
+      const existing = S.compras.find(c =>
+        c._sid === sc._sid ||
+        (!c._sid && c.codigo === sc.codigo &&
+         (c.proveedor||'').toUpperCase() === (sc.proveedor||'').toUpperCase() &&
+         parseFloat(c.cantidad) === parseFloat(sc.cantidad))
+      );
+      if(existing) {
+        if(!existing._sid) existing._sid = sc._sid;
+      } else {
+        S.compras.push(sc);
+      }
     });
+    // De-duplicar: si hay versión sin _sid Y con _sid del mismo OC,
+    // migrar los campos del usuario al registro con _sid y eliminar el duplicado
+    const toRemove = [];
+    S.compras.forEach(c => {
+      if(c._sid) return;
+      const withSid = S.compras.find(o =>
+        o._sid && o.codigo === c.codigo &&
+        (o.proveedor||'').toUpperCase() === (c.proveedor||'').toUpperCase() &&
+        parseFloat(o.cantidad) === parseFloat(c.cantidad)
+      );
+      if(withSid) {
+        // Migrar estado del usuario al registro canónico (con _sid)
+        withSid.pagada      = c.pagada;
+        withSid.entregada   = c.entregada;
+        withSid.estado      = c.estado || withSid.estado;
+        withSid.cant_recibida = c.cant_recibida || withSid.cant_recibida;
+        withSid.recepciones = c.recepciones || withSid.recepciones;
+        if(c.adjunto) withSid.adjunto = c.adjunto;
+        if(c.nro)     withSid.nro     = c.nro;
+        toRemove.push(c);
+      }
+    });
+    if(toRemove.length) S.compras = S.compras.filter(c => !toRemove.includes(c));
   }
   if (st.comprasPropuestas) {
     S.comprasPropuestas = st.comprasPropuestas;
