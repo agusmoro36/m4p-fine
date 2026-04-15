@@ -1255,6 +1255,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
           <option value="USD">USD</option>
           <option value="ARS">ARS</option>
         </select>
+        <button class="btn btn-sm" onclick="importarExcelPrecios('cotizaciones')" style="border-color:var(--gold);color:var(--gold)">↑ Importar Excel</button>
         <button class="btn btn-b btn-sm" onclick="exportarCotizaciones()">↓ Excel</button>
       </div>
     </div>
@@ -1292,6 +1293,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         </select>
         <button class="btn btn-sm" onclick="cargarPreciosHistoricos()" style="border-color:#22d3a0;color:#22d3a0" title="Carga los 85 precios del historial Apr-2026 (no pisa precios ya cargados)">📥 Cargar histórico</button>
         <button class="btn btn-sm" onclick="importarPreciosDesdOCs()" style="border-color:var(--gold);color:var(--gold)">⬇ Desde OCs</button>
+        <button class="btn btn-sm" onclick="importarExcelPrecios('maestro')" style="border-color:var(--blue);color:var(--blue)">↑ Importar Excel</button>
         <button class="btn btn-b btn-sm" onclick="exportarMaestroPrecios()">↓ Excel</button>
       </div>
     </div>
@@ -2626,6 +2628,7 @@ const S = {
     {nombre:'BI-ORIENT SA',codigo:'BI-ORIENT',contacto:'JUAN Martinez',email:'luisventas@bi-orient.com.ar',tel:'11-4627-1444',lt:15,ins:'Fundas PVC',rating:3,razon_social:'BI-ORIENT SA',cuit:'30-70760312-3',provincia:'Buenos Aires',direccion:'Tres Arroyos 329'},
   ],
   comprasPropuestas:[],
+  cotizacionesExtra:[],
   movimientos:[],
   mrpResultado: null,
   mrpHorizonte: ['mar','abr'],
@@ -3024,6 +3027,7 @@ function saveState() {
     preciosInsumos: S.preciosInsumos||{},
     compras: S.compras,
     comprasPropuestas: S.comprasPropuestas,
+    cotizacionesExtra: S.cotizacionesExtra||[],
     movimientos: S.movimientos,
     producciones: S.producciones,
     proveedores: S.proveedores,
@@ -3133,6 +3137,7 @@ function applyState(st) {
   if (st.comprasPropuestas) {
     S.comprasPropuestas = st.comprasPropuestas;
   }
+  if (st.cotizacionesExtra) S.cotizacionesExtra = st.cotizacionesExtra;
   if (st.movimientos) S.movimientos = st.movimientos;
   if (st.producciones) S.producciones = st.producciones;
   if (st.proveedores) {
@@ -8756,6 +8761,16 @@ function buildPriceHistory() {
     if(!hist[c.codigo]) hist[c.codigo] = [];
     hist[c.codigo].push(entry);
   });
+  // Incluir cotizaciones importadas desde Excel
+  (S.cotizacionesExtra||[]).forEach(ce => {
+    if(!ce.codigo || !(ce.precio > 0)) return;
+    if(!hist[ce.codigo]) hist[ce.codigo] = [];
+    hist[ce.codigo].push({
+      proveedor: ce.proveedor||'—', precio: parseFloat(ce.precio),
+      moneda: ce.moneda||'USD', fecha: ce.fecha||'',
+      cantidad: 0, descripcion: '', sid: '', estado: 'Excel',
+    });
+  });
   // Ordenar cada grupo: con fecha primero (más reciente al tope), sin fecha al final
   Object.keys(hist).forEach(cod => {
     hist[cod].sort((a, b) => {
@@ -9169,6 +9184,182 @@ function toggleDark(){
   // Exponer por si se quiere abrir desde un botón futuro
   window.openGlobalSearch = _open;
 })();
+
+// ══════════════════════════════════════
+// IMPORTAR EXCEL → MAESTRO DE PRECIOS / COTIZACIONES
+// ══════════════════════════════════════
+let _importPreciosData = null;
+
+function importarExcelPrecios(modo) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xlsx,.xls';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    document.body.removeChild(input);
+    if(!file) return;
+    try {
+      toast('Leyendo archivo...', '⏳', 2000);
+      const ab = await file.arrayBuffer();
+      const wb = XLSX.read(new Uint8Array(ab), {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, {defval:''});
+      if(!raw.length) { toast('El archivo está vacío', '⚠️'); return; }
+      const rows = raw.map(_mapRowPrecios).filter(r => r.codigo && r.precio > 0);
+      if(!rows.length) {
+        toast('No se encontraron filas válidas. Necesita columnas: Código, Precio', '⚠️', 6000);
+        return;
+      }
+      _importPreciosData = {rows, modo};
+      _mostrarModalImportPrecios(rows, modo);
+    } catch(e) {
+      toast('Error al leer el archivo: ' + (e.message||e), '⚠️', 5000);
+    }
+  };
+  input.click();
+}
+
+function _normImportKey(str) {
+  return (str||'').toString().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]/g,'');
+}
+
+function _mapRowPrecios(row) {
+  const keys = Object.keys(row);
+  const find = (...aliases) => {
+    for(const alias of aliases) {
+      const k = keys.find(k => {
+        const n = _normImportKey(k);
+        return n === alias || n.startsWith(alias);
+      });
+      if(k !== undefined) return row[k];
+    }
+    return '';
+  };
+  const monedaRaw = (find('moneda','currency','cur','divisa') || 'USD').toString().trim().toUpperCase();
+  const moneda = (monedaRaw === 'ARS' || monedaRaw.includes('PESO')) ? 'ARS' : 'USD';
+  return {
+    codigo:    (find('codigo','code','cod','insumo','item') || '').toString().trim().toUpperCase(),
+    precio:    parseFloat((find('precio','price','unit','valor','importe') || '0').toString().replace(',','.').replace(/[^0-9.]/g,'')) || 0,
+    moneda,
+    proveedor: (find('proveedor','supplier','prov','empresa') || '').toString().trim().toUpperCase(),
+    fecha:     _parseFechaImport(find('fecha','date','vigencia','actualiz') || ''),
+  };
+}
+
+function _parseFechaImport(v) {
+  if(!v) return new Date().toISOString().slice(0,10);
+  const s = v.toString().trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if(/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}$/.test(s)) {
+    const parts = s.split(/[\/\-]/);
+    const d = parts[0].padStart(2,'0'), m = parts[1].padStart(2,'0');
+    const y = parts[2].length === 2 ? '20'+parts[2] : parts[2];
+    return `${y}-${m}-${d}`;
+  }
+  const n = parseFloat(s);
+  if(!isNaN(n) && n > 40000) {
+    const d = new Date((n - 25569) * 86400 * 1000);
+    return d.toISOString().slice(0,10);
+  }
+  return new Date().toISOString().slice(0,10);
+}
+
+function _mostrarModalImportPrecios(rows, modo) {
+  document.getElementById('modal-import-precios')?.remove();
+  const existentes = rows.filter(r => S.preciosInsumos[r.codigo]).length;
+  const nuevos = rows.length - existentes;
+  const tituloModo = modo === 'maestro' ? '📋 Importar al Maestro de Precios' : '💰 Importar Cotizaciones';
+  const modal = document.createElement('div');
+  modal.id = 'modal-import-precios';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:28px;width:620px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,.4)">
+      <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px">${tituloModo}</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:20px">${rows.length} filas válidas detectadas</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">
+        ${[
+          {label:'TOTAL FILAS',val:rows.length,color:'var(--acc)'},
+          {label:'PRECIOS NUEVOS',val:nuevos,color:'var(--green)'},
+          {label:'ACTUALIZACIONES',val:existentes,color:'var(--gold)'}
+        ].map(k=>`<div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center">
+          <div style="font-size:22px;font-weight:700;color:${k.color};font-family:var(--mono)">${k.val}</div>
+          <div style="font-size:9px;color:var(--text3);margin-top:4px">${k.label}</div>
+        </div>`).join('')}
+      </div>
+      ${existentes > 0 ? `
+      <div style="background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.3);border-radius:8px;padding:12px 14px;margin-bottom:16px;display:flex;align-items:center;gap:10px">
+        <input type="checkbox" id="imp-overwrite" checked style="accent-color:var(--gold);width:16px;height:16px;cursor:pointer">
+        <label for="imp-overwrite" style="font-size:13px;color:var(--text);cursor:pointer">Reemplazar precios ya existentes (${existentes} insumos)</label>
+      </div>` : ''}
+      <div style="font-size:9px;color:var(--text3);font-family:var(--mono);letter-spacing:1.5px;margin-bottom:8px">VISTA PREVIA</div>
+      <div style="overflow:auto;max-height:220px;margin-bottom:20px;border:1px solid var(--border);border-radius:8px">
+        <table style="width:100%;border-collapse:collapse;font-size:11px">
+          <thead><tr style="background:var(--bg3);position:sticky;top:0">
+            ${['Código','Precio','Moneda','Proveedor','Fecha','Estado'].map(h=>`<th style="padding:7px 10px;text-align:left;color:var(--text3);font-weight:600;border-bottom:1px solid var(--border)">${h}</th>`).join('')}
+          </tr></thead>
+          <tbody>
+            ${rows.slice(0,10).map(r => {
+              const isNew = !S.preciosInsumos[r.codigo];
+              const sym = r.moneda==='ARS'?'$':'U$D';
+              return `<tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:5px 10px;font-family:var(--mono);color:var(--gold);font-weight:700">${r.codigo}</td>
+                <td style="padding:5px 10px;font-family:var(--mono);font-weight:700">${sym} ${fmt(r.precio,2)}</td>
+                <td style="padding:5px 10px">${r.moneda}</td>
+                <td style="padding:5px 10px;color:var(--text2);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.proveedor||'—'}</td>
+                <td style="padding:5px 10px;color:var(--text3);font-family:var(--mono);font-size:10px">${r.fecha}</td>
+                <td style="padding:5px 10px"><span style="font-size:9px;padding:2px 7px;border-radius:4px;background:${isNew?'rgba(34,211,160,.15)':'rgba(201,168,76,.12)'};color:${isNew?'var(--acc)':'var(--gold)'}">${isNew?'NUEVO':'REEMPLAZA'}</span></td>
+              </tr>`;
+            }).join('')}
+            ${rows.length > 10 ? `<tr><td colspan="6" style="padding:8px;text-align:center;color:var(--text3)">... y ${rows.length-10} filas más</td></tr>`:''}
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn btn-sm" onclick="document.getElementById('modal-import-precios').remove()">Cancelar</button>
+        <button class="btn btn-p btn-sm" onclick="_confirmarImportPrecios()">✓ Importar ${rows.length} precios</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function _confirmarImportPrecios() {
+  if(!_importPreciosData) return;
+  const {rows, modo} = _importPreciosData;
+  const overwrite = document.getElementById('imp-overwrite')?.checked !== false;
+  const hoy = new Date().toISOString().slice(0,10);
+  let importados = 0, omitidos = 0;
+
+  rows.forEach(r => {
+    const yaExiste = !!S.preciosInsumos[r.codigo];
+    if(yaExiste && !overwrite) { omitidos++; return; }
+    S.preciosInsumos[r.codigo] = {
+      precio: r.precio, moneda: r.moneda,
+      fuente: 'Excel', proveedor: r.proveedor||'',
+      fecha: r.fecha, updatedAt: hoy
+    };
+    // Cotizaciones: también agregar al historial extra
+    if(modo === 'cotizaciones') {
+      if(!S.cotizacionesExtra) S.cotizacionesExtra = [];
+      S.cotizacionesExtra.push({
+        codigo: r.codigo, proveedor: r.proveedor||'—',
+        precio: r.precio, moneda: r.moneda,
+        fecha: r.fecha, fuente: 'Excel'
+      });
+    }
+    importados++;
+  });
+
+  document.getElementById('modal-import-precios')?.remove();
+  _importPreciosData = null;
+  saveState();
+  if(modo === 'maestro') renderMaestroPrecios();
+  else renderCotizaciones();
+  toast(`✓ ${importados} precios importados${omitidos ? ` — ${omitidos} omitidos (ya existían)` : ''}`, '✓', 4000);
+}
 
 </script>
 </body>
