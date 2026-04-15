@@ -6335,6 +6335,7 @@ function renderProveedoresEnhanced() {
       <div class="card-body">
         ${p.tipo ? `<div class="card-row"><span class="card-label">Tipo</span><span class="card-val" style="font-size:10px">${p.tipo}</span></div>` : ''}
         ${p.telefono ? `<div class="card-row"><span class="card-label">Tel</span><span class="card-val">${p.telefono}</span></div>` : ''}
+        ${p.email ? `<div class="card-row"><span class="card-label">Email</span><span class="card-val" style="font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px"><a href="mailto:${p.email}" style="color:var(--text2);text-decoration:none" onclick="event.stopPropagation()">${p.email}</a></span></div>` : ''}
         ${p.direccion ? `<div class="card-row"><span class="card-label">Dir.</span><span class="card-val" style="font-size:10px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.direccion}</span></div>` : ''}
         ${p.condicion_pago ? `<div class="card-row"><span class="card-label">Cond. pago</span><span class="card-val" style="color:var(--gold);font-size:10px">${p.condicion_pago}</span></div>` : ''}
         ${withPrice > 0 ? `<div class="card-row"><span class="card-label">Con precio</span><span class="card-val" style="color:var(--acc)">${withPrice} / ${p.insumos.length}</span></div>` : ''}
