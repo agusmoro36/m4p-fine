@@ -6389,7 +6389,16 @@ function doLogin() {
   // Apuntar al espacio de datos correcto según usuario
   SB_STATE_KEY = auth.sbKey || 'mrp_fine_v8';
   document.getElementById('login-overlay').style.display = 'none';
-  if (auth.role === 'viewer') applyViewerMode();
+  if (auth.role === 'viewer') {
+    applyViewerMode();
+  } else {
+    // Admin: asegurar que no quede viewer-mode residual de sesión anterior
+    document.body.classList.remove('viewer-mode');
+    const si = document.getElementById('save-ind');
+    const sb = document.getElementById('sb-ind');
+    if(si) si.style.display = '';
+    if(sb) sb.style.display = '';
+  }
   if (user === 'test') toast('🧪 Modo TEST — datos separados de producción', '⚗', 4000);
   else toast('Bienvenida, ' + user + ' 👋', '✓', 2500);
   // Recargar datos frescos desde Supabase después del login
@@ -6410,7 +6419,7 @@ function checkSession() {
   const user = sessionStorage.getItem('mrp-user');
   if (role === 'admin' || role === 'viewer') {
     document.getElementById('login-overlay').style.display = 'none';
-    if (role === 'viewer') applyViewerMode();
+    if (role === 'viewer') { applyViewerMode(); } else { document.body.classList.remove('viewer-mode'); }
     // CRÍTICO: restaurar SB_STATE_KEY según usuario (se pierde en refresh)
     if (user && AUTH_USERS[user]) SB_STATE_KEY = AUTH_USERS[user].sbKey || 'mrp_fine_v8';
     return true;
