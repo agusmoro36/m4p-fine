@@ -6390,6 +6390,8 @@ function doLogin() {
   if (auth.role === 'viewer') applyViewerMode();
   if (user === 'test') toast('🧪 Modo TEST — datos separados de producción', '⚗', 4000);
   else toast('Bienvenida, ' + user + ' 👋', '✓', 2500);
+  // Recargar datos frescos desde Supabase después del login
+  loadFromSupabase();
 }
 
 function applyViewerMode() {
