@@ -3204,8 +3204,10 @@ async function loadFromSupabase() {
     return;
   }
 
-  // Supabase es más reciente → aplicar (si timestamps iguales, localStorage ya es correcto)
-  if(sbTs > lsTs) {
+  // Viewer: siempre aplica Supabase (ignora timestamps — su localStorage puede ser viejo)
+  // Admin: solo aplica si Supabase es genuinamente más nuevo
+  const isViewer = document.body.classList.contains('viewer-mode');
+  if(sbTs > lsTs || isViewer) {
     applyState(data.value);
     if(adjuntos) {
       S.compras.forEach(c => {
@@ -3215,7 +3217,8 @@ async function loadFromSupabase() {
       });
     }
     try { localStorage.setItem(LS_KEY, JSON.stringify(data.value)); } catch(e) {}
-    toast('☁ Datos actualizados desde la nube', '☁', 2000);
+    if(isViewer) toast('☁ Datos actualizados', '☁', 1500);
+    else toast('☁ Datos actualizados desde la nube', '☁', 2000);
     _reRenderActivePage();
   }
   sbIndicador('ok');
