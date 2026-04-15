@@ -3018,6 +3018,8 @@ function sbSuscribir() {
 }
 
 function saveState() {
+  // Viewer no puede escribir datos — proteger Supabase del admin
+  if(document.body.classList.contains('viewer-mode')) return;
   const payload = {
     preciosInsumos: S.preciosInsumos||{},
     compras: S.compras,
@@ -3179,7 +3181,7 @@ async function loadFromSupabase() {
   let lsTs = 0;
   try { lsTs = JSON.parse(localStorage.getItem(LS_KEY)||'{}')?.ts || 0; } catch(e) {}
 
-  if(lsTs > sbTs) {
+  if(lsTs > sbTs && !document.body.classList.contains('viewer-mode')) {
     // localStorage es más reciente (Supabase save anterior falló) → subir el local a la nube
     console.warn('localStorage más reciente que Supabase — sincronizando hacia la nube...');
     toast('⟳ Sincronizando cambios locales pendientes...', '⟳', 3000);
