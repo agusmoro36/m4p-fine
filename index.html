@@ -6311,9 +6311,14 @@ function renderProveedoresEnhanced() {
   const q = document.getElementById('s-prov').value.toLowerCase();
   const fTipo = document.getElementById('f-prov-tipo')?.value || '';
   const data = S.proveedores.filter(p => {
-    if(q && !p.nombre.toLowerCase().includes(q) && !p.contacto.toLowerCase().includes(q) &&
-       !p.insumos.some(i => i.insumo.toLowerCase().includes(q))) return false;
-    if(fTipo && p.tipo !== fTipo) return false;
+    if(q) {
+      const nombre   = (p.nombre||'').toLowerCase();
+      const contacto = (p.contacto||'').toLowerCase();
+      const email    = (p.email||'').toLowerCase();
+      const insumos  = (p.insumos||[]).some(i => (i.insumo||'').toLowerCase().includes(q));
+      if(!nombre.includes(q) && !contacto.includes(q) && !email.includes(q) && !insumos) return false;
+    }
+    if(fTipo && (p.tipo||'') !== fTipo) return false;
     return true;
   });
   document.getElementById('prov-count').textContent = data.length + ' proveedores';
@@ -6323,7 +6328,7 @@ function renderProveedoresEnhanced() {
       const priceStr = i.precio != null ? ` <span style="color:var(--acc);font-family:var(--mono);font-size:9px">${i.precio} ${i.moneda}</span>` : '';
       return `<div style="font-size:11px;color:var(--text2);padding:3px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><span>${i.insumo.slice(0,28)}</span>${priceStr}</div>`;
     }).join('');
-    const tipoColor = p.tipo.includes('empaque') ? 'chip-b' : p.tipo.includes('general') ? 'chip-p' : 'chip-g';
+    const tipoColor = (p.tipo||'').includes('empaque') ? 'chip-b' : (p.tipo||'').includes('general') ? 'chip-p' : 'chip-g';
     return `<div class="card">
       <div class="card-header">
         <div style="flex:1;min-width:0">
