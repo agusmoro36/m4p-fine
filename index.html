@@ -6424,8 +6424,10 @@ function doLogin() {
   }
   if (user === 'test') toast('🧪 Modo TEST — datos separados de producción', '⚗', 4000);
   else toast('Bienvenida, ' + user + ' 👋', '✓', 2500);
-  // Recargar datos frescos desde Supabase después del login
-  loadFromSupabase();
+  // Viewer: recargar desde Supabase (su localStorage puede ser más nuevo que la nube del admin)
+  // Admin: NO recargar — el loadFromSupabase inicial ya cargó los datos correctos,
+  //        y llamarlo de nuevo crea una condición de carrera que pisa cambios recientes
+  if(auth.role === 'viewer') loadFromSupabase();
 }
 
 function applyViewerMode() {
