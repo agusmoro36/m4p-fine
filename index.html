@@ -485,6 +485,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <span class="chip chip-r hide-mobile">50 críticos</span>
     <button class="btn btn-g btn-sm hide-mobile" onclick="exportarExcel()">↓ Exportar</button>
     <button onclick="toggleDark()" id="btn-dark" title="Modo oscuro" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;background:rgba(201,168,76,.07);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;transition:all .2s;flex-shrink:0" onmouseover="this.style.borderColor='var(--gold-dim)'" onmouseout="this.style.borderColor='var(--border)'">☀</button>
+    <button onclick="logout()" id="btn-logout" title="Cerrar sesión" style="display:flex;align-items:center;gap:5px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:5px 10px;cursor:pointer;color:var(--text3);font-family:var(--mono);font-size:10px;transition:all .2s" onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'" onmouseout="this.style.borderColor='rgba(239,68,68,.25)';this.style.color='var(--text3)'">⏻ <span class="hide-mobile">Salir</span></button>
     <button onclick="openGlobalSearch()" title="Buscar (Ctrl+K)" style="margin-left:auto;display:flex;align-items:center;gap:8px;background:rgba(201,168,76,.07);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;color:var(--text3);font-family:var(--mono);font-size:11px;transition:all .2s" onmouseover="this.style.borderColor='var(--gold-dim)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text3)'">
       <span>🔍</span><span class="hide-mobile">Buscar</span><kbd style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:9px;margin-left:4px">Ctrl K</kbd>
     </button>
@@ -6428,6 +6429,31 @@ function doLogin() {
   // Admin: NO recargar — el loadFromSupabase inicial ya cargó los datos correctos,
   //        y llamarlo de nuevo crea una condición de carrera que pisa cambios recientes
   if(auth.role === 'viewer') loadFromSupabase();
+}
+
+async function logout() {
+  const isViewer = document.body.classList.contains('viewer-mode');
+  const btn = document.getElementById('btn-logout');
+  if(btn) { btn.textContent = '⏳ Guardando...'; btn.disabled = true; }
+
+  if(!isViewer) {
+    // Admin: guardar antes de salir
+    try {
+      saveState();
+      // Esperar hasta 4s a que Supabase confirme
+      const ok = await Promise.race([
+        saveState._lastPromise || Promise.resolve(true),
+        new Promise(r => setTimeout(() => r('timeout'), 4000))
+      ]);
+      if(ok === false) {
+        toast('⚠ No se pudo guardar en la nube antes de salir. Tus datos están en este dispositivo.', '⚠️', 5000);
+      }
+    } catch(e) {}
+  }
+
+  // Limpiar sesión y recargar
+  try { sessionStorage.removeItem('mrp-role'); sessionStorage.removeItem('mrp-user'); } catch(e) {}
+  setTimeout(() => location.reload(), 600);
 }
 
 function applyViewerMode() {
