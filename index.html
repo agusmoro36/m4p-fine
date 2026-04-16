@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260416-008';
+  var VER = '20260416-009';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3247,9 +3247,32 @@ async function loadFromSupabase() {
   }
 
   // Siempre aplicar Supabase cuando sbTs >= lsTs (incluye el caso sbTs === lsTs).
-  // CRÍTICO: sin esto, los adjuntos quedan sin .data en memoria cuando los timestamps
-  // son iguales, y el próximo saveState() sobreescribe Supabase sin el PDF.
   applyState(data.value);
+
+  // ── Migración automática de adjuntos legacy ──────────────────────────────
+  // Las facturas guardadas antes de v-004 están en la fila separada 'mrp_fine_adjuntos_v8'.
+  // Si alguna OC tiene _adjKey pero no .data, cargamos esa fila y migramos inline.
+  const necesitaMigracion = S.compras.some(c => c.adjunto && c.adjunto._adjKey && !c.adjunto.data);
+  if(necesitaMigracion) {
+    sbLoadAdjuntos().then(legacyAdj => {
+      if(!legacyAdj) return;
+      let migradas = 0;
+      S.compras.forEach(c => {
+        if(c.adjunto && c.adjunto._adjKey && !c.adjunto.data && legacyAdj[c.adjunto._adjKey]) {
+          c.adjunto = legacyAdj[c.adjunto._adjKey];
+          migradas++;
+        }
+      });
+      if(migradas > 0) {
+        console.log(`Migradas ${migradas} facturas del sistema legacy → inline`);
+        saveState(); // guarda inline en el nuevo sistema
+        renderCompras && renderCompras();
+        toast(`✓ ${migradas} factura${migradas>1?'s':''} restaurada${migradas>1?'s':''} automáticamente`, '📎', 4000);
+      }
+    });
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
   // Guardar en localStorage sin base64 (límite ~5MB del browser)
   const lsPayload = {...data.value, compras: (data.value.compras||[]).map(c => {
     if(c.adjunto && c.adjunto.data) { const {data:_d, ...adjSinData} = c.adjunto; return {...c, adjunto: adjSinData}; }
