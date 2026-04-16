@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260416-012';
+  var VER = '20260416-013';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3113,25 +3113,19 @@ function saveState() {
     ts: Date.now()
   };
 
-  // Strip base64 del payload — los PDFs viven en filas separadas adj_* en Supabase
+  // localStorage: SIN base64 (límite 5MB del browser)
   const comprasSinBase64 = payload.compras.map(c => {
-    if(c.adjunto?.data) {
-      const {data, ...adjSinData} = c.adjunto;
-      return {...c, adjunto: adjSinData};
-    }
+    if(c.adjunto?.data) { const {data:_d,...s}=c.adjunto; return {...c, adjunto:s}; }
     return c;
   });
   const payloadSinAdj = {...payload, compras: comprasSinBase64};
+  try { localStorage.setItem(LS_KEY, JSON.stringify(payloadSinAdj)); } catch(e) {}
 
-  // localStorage: sin base64
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(payloadSinAdj));
-  } catch(e) { console.warn('localStorage save error', e); }
-
-  // Supabase main row: también sin base64 (lean, rápido)
-  let payloadParaSB = payloadSinAdj;
-  if((payloadParaSB.movimientos||[]).length > 500) {
-    payloadParaSB = {...payloadParaSB, movimientos: payloadParaSB.movimientos.slice(0, 500)};
+  // Supabase main row: CON base64 inline — garantiza persistencia cross-device
+  // (Supabase JSONB no tiene límite práctico de tamaño; localStorage sí)
+  let payloadParaSB = payload; // incluye adjunto.data
+  if((payload.movimientos||[]).length > 500) {
+    payloadParaSB = {...payload, movimientos: payload.movimientos.slice(0, 500)};
   }
 
   sbIndicador('sync');
