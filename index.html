@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260416-009';
+  var VER = '20260416-010';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3210,6 +3210,7 @@ function loadState() {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return;
     applyState(JSON.parse(raw));
+    _restaurarAdjuntosLS(); // restaurar adjuntos desde localStorage del dispositivo
   } catch(e) { console.warn('loadState error', e); }
 }
 
@@ -3248,6 +3249,9 @@ async function loadFromSupabase() {
 
   // Siempre aplicar Supabase cuando sbTs >= lsTs (incluye el caso sbTs === lsTs).
   applyState(data.value);
+
+  // Restaurar adjuntos desde localStorage del dispositivo (fuente primaria para binarios)
+  _restaurarAdjuntosLS();
 
   // ── Migración automática de adjuntos legacy ──────────────────────────────
   // Las facturas guardadas antes de v-004 están en la fila separada 'mrp_fine_adjuntos_v8'.
@@ -4820,15 +4824,40 @@ function setCampoCompra(idx, campo, valor){
 
 function delCompra(i){S.compras.splice(i,1);renderCompras();saveState();toast('OC eliminada','🗑️');}
 
-// ── Adjuntar factura a OC ──────────────────────────────────────────────────
+// ── Adjuntos: localStorage por OC (confiable, sin depender de Supabase para binarios) ──
+const ADJ_LS_PREFIX = 'mrp_adj_';
+function _adjKey(oc){ return oc._sid || oc._uid || ('oc_'+oc.codigo+'_'+(oc.proveedor||'')); }
+
+function _guardarAdjLS(oc, adjunto){
+  try { localStorage.setItem(ADJ_LS_PREFIX + _adjKey(oc), JSON.stringify(adjunto)); return true; }
+  catch(e){ console.warn('Adjunto demasiado grande para localStorage:', e); return false; }
+}
+function _cargarAdjLS(oc){
+  try { const r = localStorage.getItem(ADJ_LS_PREFIX + _adjKey(oc)); return r ? JSON.parse(r) : null; }
+  catch(e){ return null; }
+}
+function _borrarAdjLS(oc){
+  try { localStorage.removeItem(ADJ_LS_PREFIX + _adjKey(oc)); } catch(e){}
+}
+
+// Restaura adjuntos desde localStorage para todas las OCs que tienen referencia pero sin .data
+function _restaurarAdjuntosLS(){
+  let restaurados = 0;
+  S.compras.forEach(c => {
+    if(c.adjunto && c.adjunto.data) return; // ya tiene datos
+    const adj = _cargarAdjLS(c);
+    if(adj && adj.data){ c.adjunto = adj; restaurados++; }
+  });
+  return restaurados;
+}
+
 let _adjuntandoIdx = null;
-// prepararAdjunto: solo setea el índice — el label for="oc-file-input" abre el picker nativamente
-// (más confiable que inp.click() en Safari PWA standalone)
 function prepararAdjunto(idx){
   _adjuntandoIdx = idx;
   document.getElementById('oc-file-input').value = '';
 }
-function adjuntarFactura(idx){ prepararAdjunto(idx); } // alias por compatibilidad
+function adjuntarFactura(idx){ prepararAdjunto(idx); }
+
 function _onFileSelect(e){
   const file = e.target.files[0];
   if(!file || _adjuntandoIdx === null) return;
@@ -4836,28 +4865,24 @@ function _onFileSelect(e){
   const targetIdx = _adjuntandoIdx;
   _adjuntandoIdx = null;
   const sizeKB = Math.round(file.size / 1024);
-  toast(`⟳ Cargando factura (${sizeKB} KB)...`, '📎', 2000);
+  toast(`⟳ Cargando factura (${sizeKB} KB)...`, '📎', 1500);
   const reader = new FileReader();
   reader.onload = ev => {
-    S.compras[targetIdx].adjunto = {
-      nombre: file.name,
-      tipo: file.type,
-      data: ev.target.result,
-      tamaño: file.size
-    };
+    const adjunto = { nombre: file.name, tipo: file.type, data: ev.target.result, tamaño: file.size };
+    S.compras[targetIdx].adjunto = adjunto;
+    // Guardar en localStorage del dispositivo (inmediato, sin red)
+    const ok = _guardarAdjLS(S.compras[targetIdx], adjunto);
+    // También intentar guardar en Supabase (para sync multi-dispositivo)
     saveState();
     renderCompras();
-    // Verificar que el guardado en Supabase incluyó el adjunto
-    saveState._lastPromise && saveState._lastPromise.then(ok => {
-      if(ok) toast(`✓ Factura guardada en la nube (${sizeKB} KB)`, '☁', 4000);
-      else toast('⚠ No se pudo guardar la factura en la nube. Tocá ☁ Guardar para reintentar.', '⚠️', 8000);
-    });
+    toast(ok ? `✓ Factura guardada (${sizeKB} KB)` : `✓ Factura cargada (solo este dispositivo)`, '📎', 3000);
   };
   reader.readAsDataURL(file);
 }
+
 function verFactura(idx){
   const adj = S.compras[idx]?.adjunto;
-  if(!adj) return;
+  if(!adj || !adj.data) { toast('Factura no disponible en este dispositivo','⚠️',3000); return; }
   abrirVisorFactura(adj.data, adj.nombre, adj.tipo);
 }
 
@@ -4928,6 +4953,7 @@ function verFacturaDrive(url, label) {
 }
 function quitarFactura(idx){
   if(!confirm('¿Quitar la factura adjunta?')) return;
+  _borrarAdjLS(S.compras[idx]);
   delete S.compras[idx].adjunto;
   saveState();
   renderCompras();
