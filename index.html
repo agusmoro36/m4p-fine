@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260416-005';
+  var VER = '20260416-006';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3226,30 +3226,40 @@ async function loadFromSupabase() {
   let lsTs = 0;
   try { lsTs = JSON.parse(localStorage.getItem(LS_KEY)||'{}')?.ts || 0; } catch(e) {}
 
-  if(lsTs > sbTs && !document.body.classList.contains('viewer-mode')) {
+  const isViewer = document.body.classList.contains('viewer-mode');
+
+  if(lsTs > sbTs && !isViewer) {
+    // localStorage más reciente (Supabase save anterior falló).
+    // Antes de pushear, restaurar adjuntos desde Supabase para no perderlos.
+    (data.value?.compras || []).forEach(sbC => {
+      const localC = S.compras.find(c =>
+        (c._sid && c._sid === sbC._sid) || (c._uid && c._uid === sbC._uid)
+      );
+      if(localC && sbC.adjunto?.data && localC.adjunto && !localC.adjunto.data) {
+        localC.adjunto = sbC.adjunto; // recuperar adjunto data desde Supabase
+      }
+    });
     console.warn('localStorage más reciente que Supabase — sincronizando hacia la nube...');
     toast('⟳ Sincronizando cambios locales pendientes...', '⟳', 3000);
-    saveState(); // push localStorage → Supabase (con adjuntos que estén en memoria)
+    saveState(); // push estado local + adjuntos recuperados → Supabase
     sbIndicador('ok');
     sbSuscribir();
     return;
   }
 
-  // Viewer: siempre aplica Supabase (ignora timestamps — su localStorage puede ser viejo)
-  // Admin: solo aplica si Supabase es genuinamente más nuevo
-  const isViewer = document.body.classList.contains('viewer-mode');
-  if(sbTs > lsTs || isViewer) {
-    applyState(data.value);
-    // Guardar en localStorage sin base64 (para no saturar los 5MB del browser)
-    const lsPayload = {...data.value, compras: (data.value.compras||[]).map(c => {
-      if(c.adjunto && c.adjunto.data) { const {data:_, ...adjSinData} = c.adjunto; return {...c, adjunto: adjSinData}; }
-      return c;
-    })};
-    try { localStorage.setItem(LS_KEY, JSON.stringify(lsPayload)); } catch(e) {}
-    if(isViewer) toast('☁ Datos actualizados', '☁', 1500);
-    else toast('☁ Datos actualizados desde la nube', '☁', 2000);
-    _reRenderActivePage();
-  }
+  // Siempre aplicar Supabase cuando sbTs >= lsTs (incluye el caso sbTs === lsTs).
+  // CRÍTICO: sin esto, los adjuntos quedan sin .data en memoria cuando los timestamps
+  // son iguales, y el próximo saveState() sobreescribe Supabase sin el PDF.
+  applyState(data.value);
+  // Guardar en localStorage sin base64 (límite ~5MB del browser)
+  const lsPayload = {...data.value, compras: (data.value.compras||[]).map(c => {
+    if(c.adjunto && c.adjunto.data) { const {data:_d, ...adjSinData} = c.adjunto; return {...c, adjunto: adjSinData}; }
+    return c;
+  })};
+  try { localStorage.setItem(LS_KEY, JSON.stringify(lsPayload)); } catch(e) {}
+  if(isViewer) toast('☁ Datos actualizados', '☁', 1500);
+  else if(sbTs > lsTs) toast('☁ Datos actualizados desde la nube', '☁', 2000);
+  _reRenderActivePage();
 
   sbIndicador('ok');
   sbSuscribir();
