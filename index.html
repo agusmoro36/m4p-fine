@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260416-010';
+  var VER = '20260416-011';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -2968,6 +2968,51 @@ async function sbLoadAdjuntos() {
   } catch(e) { return null; }
 }
 
+// Guardar adjunto en fila propia de Supabase (key: adj_{ocKey})
+async function sbSaveAdjuntoFile(oc, adjunto) {
+  if(!SB_CLIENT) return false;
+  const key = 'adj_' + _adjKey(oc);
+  for(let i=0; i<3; i++) {
+    try {
+      const { error } = await SB_CLIENT.from(SB_TABLE).upsert({
+        key,
+        value: { nombre: adjunto.nombre, tipo: adjunto.tipo, data: adjunto.data, tamaño: adjunto.tamaño },
+        update_at: new Date().toISOString()
+      }, { onConflict: 'key' });
+      if(!error) return true;
+      console.warn(`sbSaveAdjuntoFile intento ${i+1}:`, error.message);
+    } catch(e) { console.warn(`sbSaveAdjuntoFile intento ${i+1}:`, e); }
+    if(i < 2) await new Promise(r => setTimeout(r, 1000*(i+1)));
+  }
+  return false;
+}
+
+// Cargar todos los adjuntos de las OCs que tienen referencia pero sin .data
+async function sbLoadAllAdjuntos() {
+  if(!SB_CLIENT) return {};
+  const keys = S.compras
+    .filter(c => c.adjunto && c.adjunto.nombre && !c.adjunto.data)
+    .map(c => 'adj_' + _adjKey(c));
+  if(!keys.length) return {};
+  try {
+    const { data, error } = await SB_CLIENT
+      .from(SB_TABLE).select('key, value')
+      .in('key', keys);
+    if(error || !data) return {};
+    const result = {};
+    data.forEach(row => { result[row.key.replace(/^adj_/, '')] = row.value; });
+    return result;
+  } catch(e) { return {}; }
+}
+
+// Borrar adjunto de Supabase
+async function sbDeleteAdjuntoFile(oc) {
+  if(!SB_CLIENT) return;
+  try {
+    await SB_CLIENT.from(SB_TABLE).delete().eq('key', 'adj_' + _adjKey(oc));
+  } catch(e) {}
+}
+
 async function sbLoad() {
   if(!SB_CLIENT) return null;
   try {
@@ -3068,33 +3113,25 @@ function saveState() {
     ts: Date.now()
   };
 
-  // localStorage: sin base64 (límite ~5MB en browsers)
-  // Solo eliminamos el campo .data de los adjuntos para ahorrar espacio en localStorage
+  // Strip base64 del payload — los PDFs viven en filas separadas adj_* en Supabase
   const comprasSinBase64 = payload.compras.map(c => {
-    if(c.adjunto && c.adjunto.data) {
+    if(c.adjunto?.data) {
       const {data, ...adjSinData} = c.adjunto;
       return {...c, adjunto: adjSinData};
     }
     return c;
   });
   const payloadSinAdj = {...payload, compras: comprasSinBase64};
+
+  // localStorage: sin base64
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(payloadSinAdj));
   } catch(e) { console.warn('localStorage save error', e); }
 
-  // Supabase: guardamos el payload COMPLETO con adjuntos inline (no fila separada)
-  // Supabase soporta JSONB grandes — eliminamos la complejidad de fila separada
-  // que causaba pérdida de adjuntos por subscription race condition
-  let payloadParaSB = payload;
-  let sbSize = 0;
-  try { sbSize = new Blob([JSON.stringify(payload)]).size; } catch(e) {}
-  if(sbSize > 15 * 1024 * 1024) {
-    // Si supera 15MB (muchos PDFs grandes), recortar movimientos y advertir
-    console.warn(`Payload SB grande: ${(sbSize/1024/1024).toFixed(1)}MB`);
-    payloadParaSB = {...payload, movimientos: (payload.movimientos||[]).slice(0, 200)};
-  } else if(sbSize > 900000) {
-    // Entre 900KB y 15MB: solo recortar movimientos si es necesario
-    payloadParaSB = {...payload, movimientos: (payload.movimientos||[]).slice(0, 500)};
+  // Supabase main row: también sin base64 (lean, rápido)
+  let payloadParaSB = payloadSinAdj;
+  if((payloadParaSB.movimientos||[]).length > 500) {
+    payloadParaSB = {...payloadParaSB, movimientos: payloadParaSB.movimientos.slice(0, 500)};
   }
 
   sbIndicador('sync');
@@ -3231,17 +3268,11 @@ async function loadFromSupabase() {
   if(lsTs > sbTs && !isViewer) {
     // localStorage más reciente (Supabase save anterior falló).
     // Antes de pushear, restaurar adjuntos desde Supabase para no perderlos.
-    (data.value?.compras || []).forEach(sbC => {
-      const localC = S.compras.find(c =>
-        (c._sid && c._sid === sbC._sid) || (c._uid && c._uid === sbC._uid)
-      );
-      if(localC && sbC.adjunto?.data && localC.adjunto && !localC.adjunto.data) {
-        localC.adjunto = sbC.adjunto; // recuperar adjunto data desde Supabase
-      }
-    });
+    // Restaurar adjuntos desde localStorage antes de pushear
+    _restaurarAdjuntosLS();
     console.warn('localStorage más reciente que Supabase — sincronizando hacia la nube...');
     toast('⟳ Sincronizando cambios locales pendientes...', '⟳', 3000);
-    saveState(); // push estado local + adjuntos recuperados → Supabase
+    saveState(); // push estado local → Supabase
     sbIndicador('ok');
     sbSuscribir();
     return;
@@ -3250,8 +3281,26 @@ async function loadFromSupabase() {
   // Siempre aplicar Supabase cuando sbTs >= lsTs (incluye el caso sbTs === lsTs).
   applyState(data.value);
 
-  // Restaurar adjuntos desde localStorage del dispositivo (fuente primaria para binarios)
+  // Restaurar adjuntos: primero localStorage (rápido, offline), luego Supabase (cloud)
   _restaurarAdjuntosLS();
+
+  // Cargar adjuntos desde Supabase (filas adj_*) — funciona desde cualquier dispositivo
+  sbLoadAllAdjuntos().then(adjMap => {
+    let actualizados = 0;
+    S.compras.forEach(c => {
+      if(c.adjunto && !c.adjunto.data) {
+        const k = _adjKey(c);
+        if(adjMap[k]) {
+          c.adjunto = adjMap[k];
+          _guardarAdjLS(c, adjMap[k]); // cachear en localStorage para acceso offline
+          actualizados++;
+        }
+      }
+    });
+    if(actualizados > 0) {
+      renderCompras && renderCompras();
+    }
+  });
 
   // ── Migración automática de adjuntos legacy ──────────────────────────────
   // Las facturas guardadas antes de v-004 están en la fila separada 'mrp_fine_adjuntos_v8'.
@@ -4757,7 +4806,6 @@ function renderCompras(){
 
     // Botón de factura — usa <label for> para máxima compatibilidad (PWA, Safari standalone)
     const tieneData = c.adjunto && c.adjunto.data;
-    const tieneRef  = c.adjunto && c.adjunto.nombre && !tieneData;
     const btnFactura = tieneData
       ? `<button class="btn btn-sm" onclick="verFactura(${idx})" title="${c.adjunto.nombre}"
            style="font-size:10px;padding:3px 7px;color:var(--acc);border-color:var(--acc);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
@@ -4767,8 +4815,8 @@ function renderCompras(){
            style="font-size:10px;padding:3px 6px;color:var(--text3);border-color:var(--border)">✕</button>`
       : `<label for="oc-file-input" onclick="prepararAdjunto(${idx})" class="btn btn-sm"
            title="Adjuntar factura (PDF/JPG/PNG)"
-           style="font-size:10px;padding:3px 9px;cursor:pointer;color:${tieneRef?'var(--red)':'var(--gold2)'};border-color:${tieneRef?'rgba(239,68,68,.4)':'rgba(212,175,55,.4)'};background:${tieneRef?'rgba(239,68,68,.06)':'rgba(212,175,55,.06)'};display:inline-flex;align-items:center">
-           ${tieneRef ? '⚠ Re-adjuntar' : '📎 Factura'}
+           style="font-size:10px;padding:3px 9px;cursor:pointer;color:var(--gold2);border-color:rgba(212,175,55,.4);background:rgba(212,175,55,.06);display:inline-flex;align-items:center">
+           📎 Factura
          </label>`;
 
     const ocNum='OC-'+String(idx+1).padStart(3,'0');
@@ -4870,12 +4918,17 @@ function _onFileSelect(e){
   reader.onload = ev => {
     const adjunto = { nombre: file.name, tipo: file.type, data: ev.target.result, tamaño: file.size };
     S.compras[targetIdx].adjunto = adjunto;
-    // Guardar en localStorage del dispositivo (inmediato, sin red)
-    const ok = _guardarAdjLS(S.compras[targetIdx], adjunto);
-    // También intentar guardar en Supabase (para sync multi-dispositivo)
+    // Backup inmediato en localStorage
+    _guardarAdjLS(S.compras[targetIdx], adjunto);
+    // Guardar referencia en estado principal
     saveState();
     renderCompras();
-    toast(ok ? `✓ Factura guardada (${sizeKB} KB)` : `✓ Factura cargada (solo este dispositivo)`, '📎', 3000);
+    toast(`⟳ Subiendo factura a la nube (${sizeKB} KB)...`, '☁', 3000);
+    // Guardar PDF en fila propia de Supabase (para sync multi-dispositivo)
+    sbSaveAdjuntoFile(S.compras[targetIdx], adjunto).then(ok => {
+      if(ok) toast(`✓ Factura guardada en la nube (${sizeKB} KB)`, '☁', 4000);
+      else toast('⚠ No se guardó en la nube. Disponible solo en este dispositivo. Tocá ☁ Guardar para reintentar.', '⚠️', 8000);
+    });
   };
   reader.readAsDataURL(file);
 }
@@ -4953,6 +5006,7 @@ function verFacturaDrive(url, label) {
 }
 function quitarFactura(idx){
   if(!confirm('¿Quitar la factura adjunta?')) return;
+  sbDeleteAdjuntoFile(S.compras[idx]);
   _borrarAdjLS(S.compras[idx]);
   delete S.compras[idx].adjunto;
   saveState();
