@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260416-011';
+  var VER = '20260416-012';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -4804,20 +4804,23 @@ function renderCompras(){
       ? `<span style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px;display:inline-block" title="${c.productos}">${c.productos}</span>`
       : '—';
 
-    // Botón de factura — usa <label for> para máxima compatibilidad (PWA, Safari standalone)
+    // Botón de factura — usa <label for> para máxima compatibilidad (PWA, Safari standalone, Downloads)
     const tieneData = c.adjunto && c.adjunto.data;
+    const esViewer = document.body.classList.contains('viewer-mode');
     const btnFactura = tieneData
       ? `<button class="btn btn-sm" onclick="verFactura(${idx})" title="${c.adjunto.nombre}"
            style="font-size:10px;padding:3px 7px;color:var(--acc);border-color:var(--acc);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
            📄 ${c.adjunto.nombre.length>12 ? c.adjunto.nombre.slice(0,10)+'…' : c.adjunto.nombre}
          </button>
-         <button class="btn btn-sm" onclick="quitarFactura(${idx})" title="Quitar factura"
-           style="font-size:10px;padding:3px 6px;color:var(--text3);border-color:var(--border)">✕</button>`
-      : `<label for="oc-file-input" onclick="prepararAdjunto(${idx})" class="btn btn-sm"
-           title="Adjuntar factura (PDF/JPG/PNG)"
-           style="font-size:10px;padding:3px 9px;cursor:pointer;color:var(--gold2);border-color:rgba(212,175,55,.4);background:rgba(212,175,55,.06);display:inline-flex;align-items:center">
-           📎 Factura
-         </label>`;
+         ${!esViewer ? `<button class="btn btn-sm" onclick="quitarFactura(${idx})" title="Quitar factura"
+           style="font-size:10px;padding:3px 6px;color:var(--text3);border-color:var(--border)">✕</button>` : ''}`
+      : (!esViewer
+          ? `<label for="oc-file-input" onclick="prepararAdjunto(${idx})" class="btn btn-sm"
+               title="Adjuntar factura (PDF/JPG/PNG)"
+               style="font-size:10px;padding:3px 9px;cursor:pointer;color:var(--gold2);border-color:rgba(212,175,55,.4);background:rgba(212,175,55,.06);display:inline-flex;align-items:center">
+               📎 Factura
+             </label>`
+          : '');
 
     const ocNum='OC-'+String(idx+1).padStart(3,'0');
     return `<tr style="${rowDim}cursor:pointer" onclick="exportarOCPDF(${idx})" title="Ver / imprimir OC">
@@ -4901,6 +4904,7 @@ function _restaurarAdjuntosLS(){
 
 let _adjuntandoIdx = null;
 function prepararAdjunto(idx){
+  if(document.body.classList.contains('viewer-mode')){ toast('El viewer no puede adjuntar facturas','⚠️',2000); return; }
   _adjuntandoIdx = idx;
   document.getElementById('oc-file-input').value = '';
 }
