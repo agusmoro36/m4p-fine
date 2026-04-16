@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260416-006';
+  var VER = '20260416-007';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -618,7 +618,6 @@ body.viewer-mode .page-filters select { pointer-events:auto }
           <option value="jun" selected>Hasta Junio</option>
         </select>
         <input type="file" id="fi-plan-direct" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event,'plan')">
-        <input type="file" id="oc-file-input" accept=".pdf,.jpg,.jpeg,.png,.xml" style="display:none" onchange="_onFileSelect(event)">
         <button class="btn btn-b btn-sm" onclick="document.getElementById('fi-plan-direct').click()">↑ Importar Excel</button>
         <button class="btn btn-p" onclick="openM('m-plan')">+ Nueva Orden</button>
       </div>
@@ -9446,5 +9445,7 @@ function _confirmarImportPrecios() {
 }
 
 </script>
+<!-- Input de archivo para adjuntar facturas — fuera de todos los page divs para que funcione desde cualquier página -->
+<input type="file" id="oc-file-input" accept=".pdf,.jpg,.jpeg,.png,.xml" style="display:none;position:fixed" onchange="_onFileSelect(event)">
 </body>
 </html>
