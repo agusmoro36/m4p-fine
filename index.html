@@ -6,10 +6,18 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
+<!-- PWA: permite instalar como app desde Safari (Archivo > Agregar al Dock) o Chrome -->
+<link rel="manifest" href="/m4p-fine/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fine MRP">
+<link rel="apple-touch-icon" href="/m4p-fine/icon.svg">
+<meta name="theme-color" content="#c9a84c">
+<title>MRP · Fine Company</title>
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260416-004';
+  var VER = '20260416-005';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
