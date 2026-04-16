@@ -9,7 +9,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260416-003';
+  var VER = '20260416-004';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3019,7 +3019,8 @@ function sbSuscribir() {
     }, (payload) => {
       if(_sbIgnoreNext) { _sbIgnoreNext = false; return; }
       const nuevo = payload.new?.value;
-      if(!nuevo) return;
+      // Ignorar actualizaciones de filas que no son el estado principal (ej: fila de adjuntos legacy)
+      if(!nuevo || payload.new?.key !== SB_STATE_KEY) return;
       applyState(nuevo);
       // Re-renderizar página activa
       const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
@@ -3060,52 +3061,49 @@ function saveState() {
     ts: Date.now()
   };
 
-  // Separar adjuntos PDF del payload principal para no superar límites de tamaño
-  // Los adjuntos van a una fila separada en Supabase (key: mrp_fine_adjuntos_v8)
-  const adjuntosMap = {};
+  // localStorage: sin base64 (límite ~5MB en browsers)
+  // Solo eliminamos el campo .data de los adjuntos para ahorrar espacio en localStorage
   const comprasSinBase64 = payload.compras.map(c => {
     if(c.adjunto && c.adjunto.data) {
-      const adjKey = c._sid || c.id || ('oc_'+c.codigo+'_'+c.proveedor);
-      adjuntosMap[adjKey] = c.adjunto;
-      return {...c, adjunto:{nombre:c.adjunto.nombre,tipo:c.adjunto.tipo,tamaño:c.adjunto.tamaño,_adjKey:adjKey}};
+      const {data, ...adjSinData} = c.adjunto;
+      return {...c, adjunto: adjSinData};
     }
     return c;
   });
   const payloadSinAdj = {...payload, compras: comprasSinBase64};
-
-  // localStorage: sin base64
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(payloadSinAdj));
   } catch(e) { console.warn('localStorage save error', e); }
 
-  // Chequeo de tamaño antes de enviar
-  let jsonSize = 0;
-  try { jsonSize = new Blob([JSON.stringify(payloadSinAdj)]).size; } catch(e) {}
-  if(jsonSize > 900000) {
-    console.warn(`Payload grande: ${(jsonSize/1024).toFixed(0)}KB — recortando movimientos...`);
-    // Mantener solo los últimos 500 movimientos para no superar límite
-    if(payloadSinAdj.movimientos && payloadSinAdj.movimientos.length > 500) {
-      payloadSinAdj.movimientos = payloadSinAdj.movimientos.slice(0, 500);
-    }
+  // Supabase: guardamos el payload COMPLETO con adjuntos inline (no fila separada)
+  // Supabase soporta JSONB grandes — eliminamos la complejidad de fila separada
+  // que causaba pérdida de adjuntos por subscription race condition
+  let payloadParaSB = payload;
+  let sbSize = 0;
+  try { sbSize = new Blob([JSON.stringify(payload)]).size; } catch(e) {}
+  if(sbSize > 15 * 1024 * 1024) {
+    // Si supera 15MB (muchos PDFs grandes), recortar movimientos y advertir
+    console.warn(`Payload SB grande: ${(sbSize/1024/1024).toFixed(1)}MB`);
+    payloadParaSB = {...payload, movimientos: (payload.movimientos||[]).slice(0, 200)};
+  } else if(sbSize > 900000) {
+    // Entre 900KB y 15MB: solo recortar movimientos si es necesario
+    payloadParaSB = {...payload, movimientos: (payload.movimientos||[]).slice(0, 500)};
   }
 
-  // Supabase: estado principal liviano (sin base64) + adjuntos en fila separada
   sbIndicador('sync');
-  const _sbPromise = Promise.all([
-    sbSave(payloadSinAdj),
-    sbSaveAdjuntos(adjuntosMap)
-  ]).then(([ok]) => {
-    if(ok !== false) { sbIndicador('ok'); return true; }
-    else {
+  const _sbPromise = sbSave(payloadParaSB)
+    .then(ok => {
+      if(ok !== false) { sbIndicador('ok'); return true; }
+      else {
+        sbIndicador('error');
+        toast('⚠ No se pudo guardar en la nube. Tus cambios están solo en este dispositivo. Tocá ☁ Guardar para reintentar.', '⚠️', 9000);
+        return false;
+      }
+    }).catch(e => {
       sbIndicador('error');
-      toast('⚠ No se pudo guardar en la nube. Tus cambios están solo en este dispositivo. Tocá ☁ Guardar para reintentar.', '⚠️', 9000);
+      toast('⚠ Error de conexión al guardar. Tocá ☁ Guardar para reintentar.', '⚠️', 9000);
       return false;
-    }
-  }).catch(e => {
-    sbIndicador('error');
-    toast('⚠ Error de conexión al guardar. Tocá ☁ Guardar para reintentar.', '⚠️', 9000);
-    return false;
-  });
+    });
   saveState._lastPromise = _sbPromise; // exponer para guardarNube()
 
   // Indicador visual
@@ -3210,7 +3208,9 @@ function loadState() {
 
 async function loadFromSupabase() {
   sbIndicador('sync');
-  const [data, adjuntos] = await Promise.all([sbLoad(), sbLoadAdjuntos()]);
+  // Los adjuntos ahora van INLINE en el estado principal (no en fila separada)
+  // Esto elimina la race condition y la complejidad del sistema anterior
+  const data = await sbLoad();
   if(!data) { sbIndicador('offline'); sbSuscribir(); return; }
 
   // Comparar timestamps: solo aplicar Supabase si es igual o más reciente que localStorage
@@ -3219,18 +3219,9 @@ async function loadFromSupabase() {
   try { lsTs = JSON.parse(localStorage.getItem(LS_KEY)||'{}')?.ts || 0; } catch(e) {}
 
   if(lsTs > sbTs && !document.body.classList.contains('viewer-mode')) {
-    // localStorage es más reciente → restaurar adjuntos ANTES de hacer el push,
-    // así saveState() incluye todos los PDFs en adjuntosMap y no sobreescribe Supabase con mapa vacío
-    if(adjuntos) {
-      S.compras.forEach(c => {
-        if(c.adjunto && c.adjunto._adjKey && adjuntos[c.adjunto._adjKey]) {
-          c.adjunto = adjuntos[c.adjunto._adjKey];
-        }
-      });
-    }
     console.warn('localStorage más reciente que Supabase — sincronizando hacia la nube...');
     toast('⟳ Sincronizando cambios locales pendientes...', '⟳', 3000);
-    saveState(); // push localStorage → Supabase
+    saveState(); // push localStorage → Supabase (con adjuntos que estén en memoria)
     sbIndicador('ok');
     sbSuscribir();
     return;
@@ -3241,21 +3232,15 @@ async function loadFromSupabase() {
   const isViewer = document.body.classList.contains('viewer-mode');
   if(sbTs > lsTs || isViewer) {
     applyState(data.value);
-    try { localStorage.setItem(LS_KEY, JSON.stringify(data.value)); } catch(e) {}
+    // Guardar en localStorage sin base64 (para no saturar los 5MB del browser)
+    const lsPayload = {...data.value, compras: (data.value.compras||[]).map(c => {
+      if(c.adjunto && c.adjunto.data) { const {data:_, ...adjSinData} = c.adjunto; return {...c, adjunto: adjSinData}; }
+      return c;
+    })};
+    try { localStorage.setItem(LS_KEY, JSON.stringify(lsPayload)); } catch(e) {}
     if(isViewer) toast('☁ Datos actualizados', '☁', 1500);
     else toast('☁ Datos actualizados desde la nube', '☁', 2000);
     _reRenderActivePage();
-  }
-
-  // Restaurar adjuntos SIEMPRE (independiente del resultado de timestamps)
-  // Garantiza que S.compras[i].adjunto.data esté en memoria para verFactura() y para saveState()
-  // Sin esto, al guardar cualquier cambio el adjuntosMap queda vacío y borra los PDFs de Supabase
-  if(adjuntos) {
-    S.compras.forEach(c => {
-      if(c.adjunto && c.adjunto._adjKey && adjuntos[c.adjunto._adjKey]) {
-        c.adjunto = adjuntos[c.adjunto._adjKey];
-      }
-    });
   }
 
   sbIndicador('ok');
