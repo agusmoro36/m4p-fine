@@ -9,7 +9,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260416-002';
+  var VER = '20260416-003';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -499,6 +499,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <span class="chip chip-r hide-mobile">50 críticos</span>
     <button class="btn btn-g btn-sm hide-mobile" onclick="exportarExcel()">↓ Exportar</button>
     <button onclick="toggleDark()" id="btn-dark" title="Modo oscuro" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;background:rgba(201,168,76,.07);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;transition:all .2s;flex-shrink:0" onmouseover="this.style.borderColor='var(--gold-dim)'" onmouseout="this.style.borderColor='var(--border)'">☀</button>
+    <span id="user-chip" style="display:none;align-items:center;gap:5px;background:rgba(201,168,76,.08);border:1px solid var(--gold-dim2);border-radius:8px;padding:5px 10px;font-family:var(--mono);font-size:10px;color:var(--gold2);letter-spacing:.3px;flex-shrink:0"></span>
     <button onclick="logout()" id="btn-logout" title="Cerrar sesión" style="display:flex;align-items:center;gap:5px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:5px 10px;cursor:pointer;color:var(--text3);font-family:var(--mono);font-size:10px;transition:all .2s" onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'" onmouseout="this.style.borderColor='rgba(239,68,68,.25)';this.style.color='var(--text3)'">⏻ <span class="hide-mobile">Salir</span></button>
     <button onclick="openGlobalSearch()" title="Buscar (Ctrl+K)" style="margin-left:auto;display:flex;align-items:center;gap:8px;background:rgba(201,168,76,.07);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;color:var(--text3);font-family:var(--mono);font-size:11px;transition:all .2s" onmouseover="this.style.borderColor='var(--gold-dim)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text3)'">
       <span>🔍</span><span class="hide-mobile">Buscar</span><kbd style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:9px;margin-left:4px">Ctrl K</kbd>
@@ -6453,6 +6454,7 @@ function doLogin() {
     if(si) si.style.display = '';
     if(sb) sb.style.display = '';
   }
+  setUserChip(user, auth.role);
   if (user === 'test') toast('🧪 Modo TEST — datos separados de producción', '⚗', 4000);
   else toast('Bienvenida, ' + user + ' 👋', '✓', 2500);
   // Viewer: recargar desde Supabase (su localStorage puede ser más nuevo que la nube del admin)
@@ -6495,6 +6497,26 @@ function applyViewerMode() {
   if(sb) sb.style.display='none';
 }
 
+function setUserChip(user, role) {
+  const chip = document.getElementById('user-chip');
+  if(!chip) return;
+  const isViewer = role === 'viewer';
+  const icon = isViewer ? '👁' : '👤';
+  const label = user ? user.charAt(0).toUpperCase() + user.slice(1) : '—';
+  const roleLabel = isViewer ? 'VIEWER' : 'ADMIN';
+  chip.innerHTML = `${icon} ${label} <span style="opacity:.5;margin-left:2px">${roleLabel}</span>`;
+  chip.style.display = 'flex';
+  if(isViewer) {
+    chip.style.background = 'rgba(100,116,139,.1)';
+    chip.style.borderColor = 'rgba(100,116,139,.3)';
+    chip.style.color = 'var(--text3)';
+  } else {
+    chip.style.background = 'rgba(201,168,76,.08)';
+    chip.style.borderColor = 'var(--gold-dim2)';
+    chip.style.color = 'var(--gold2)';
+  }
+}
+
 function checkSession() {
   const role = sessionStorage.getItem('mrp-role');
   const user = sessionStorage.getItem('mrp-user');
@@ -6503,6 +6525,7 @@ function checkSession() {
     if (role === 'viewer') { applyViewerMode(); } else { document.body.classList.remove('viewer-mode'); }
     // CRÍTICO: restaurar SB_STATE_KEY según usuario (se pierde en refresh)
     if (user && AUTH_USERS[user]) SB_STATE_KEY = AUTH_USERS[user].sbKey || 'mrp_fine_v8';
+    setUserChip(user, role);
     return true;
   }
   return false;
