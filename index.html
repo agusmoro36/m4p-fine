@@ -9,7 +9,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260416-001';
+  var VER = '20260416-002';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3218,7 +3218,15 @@ async function loadFromSupabase() {
   try { lsTs = JSON.parse(localStorage.getItem(LS_KEY)||'{}')?.ts || 0; } catch(e) {}
 
   if(lsTs > sbTs && !document.body.classList.contains('viewer-mode')) {
-    // localStorage es más reciente (Supabase save anterior falló) → subir el local a la nube
+    // localStorage es más reciente → restaurar adjuntos ANTES de hacer el push,
+    // así saveState() incluye todos los PDFs en adjuntosMap y no sobreescribe Supabase con mapa vacío
+    if(adjuntos) {
+      S.compras.forEach(c => {
+        if(c.adjunto && c.adjunto._adjKey && adjuntos[c.adjunto._adjKey]) {
+          c.adjunto = adjuntos[c.adjunto._adjKey];
+        }
+      });
+    }
     console.warn('localStorage más reciente que Supabase — sincronizando hacia la nube...');
     toast('⟳ Sincronizando cambios locales pendientes...', '⟳', 3000);
     saveState(); // push localStorage → Supabase
@@ -3232,18 +3240,23 @@ async function loadFromSupabase() {
   const isViewer = document.body.classList.contains('viewer-mode');
   if(sbTs > lsTs || isViewer) {
     applyState(data.value);
-    if(adjuntos) {
-      S.compras.forEach(c => {
-        if(c.adjunto && c.adjunto._adjKey && adjuntos[c.adjunto._adjKey]) {
-          c.adjunto = adjuntos[c.adjunto._adjKey];
-        }
-      });
-    }
     try { localStorage.setItem(LS_KEY, JSON.stringify(data.value)); } catch(e) {}
     if(isViewer) toast('☁ Datos actualizados', '☁', 1500);
     else toast('☁ Datos actualizados desde la nube', '☁', 2000);
     _reRenderActivePage();
   }
+
+  // Restaurar adjuntos SIEMPRE (independiente del resultado de timestamps)
+  // Garantiza que S.compras[i].adjunto.data esté en memoria para verFactura() y para saveState()
+  // Sin esto, al guardar cualquier cambio el adjuntosMap queda vacío y borra los PDFs de Supabase
+  if(adjuntos) {
+    S.compras.forEach(c => {
+      if(c.adjunto && c.adjunto._adjKey && adjuntos[c.adjunto._adjKey]) {
+        c.adjunto = adjuntos[c.adjunto._adjKey];
+      }
+    });
+  }
+
   sbIndicador('ok');
   sbSuscribir();
 }
