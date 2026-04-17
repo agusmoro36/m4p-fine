@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260416-015';
+  var VER = '20260417-016';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3290,6 +3290,7 @@ async function loadFromSupabase() {
     console.warn('localStorage más reciente que Supabase — sincronizando hacia la nube...');
     toast('⟳ Sincronizando cambios locales pendientes...', '⟳', 3000);
     saveState(); // push estado local → Supabase
+    _reRenderActivePage(); // re-renderizar para mostrar adjuntos restaurados
     sbIndicador('ok');
     sbSuscribir();
     return;
@@ -3298,9 +3299,11 @@ async function loadFromSupabase() {
   // Siempre aplicar Supabase cuando sbTs >= lsTs (incluye el caso sbTs === lsTs).
   // El estado de Supabase NO tiene base64 (saveState siempre lo stripea).
   applyState(data.value);
-
-  // Guardar en localStorage (siempre sin base64 para no superar el límite ~5MB)
-  const _lsVal = {...data.value, compras: (data.value.compras||[]).map(c => {
+  // applyState() ya mergeó OCs locales (_uid) que no están en Supabase todavía.
+  // CRÍTICO: guardar S.compras (post-merge) en localStorage, NO data.value.compras.
+  // Si usáramos data.value.compras, perderíamos las OCs creadas localmente que
+  // todavía no se sincronizaron a Supabase (ej: OC creada y adjuntada esta sesión).
+  const _lsVal = {...data.value, compras: S.compras.map(c => {
     if(c.adjunto?.data){ const{data:_d,...s}=c.adjunto; return{...c,adjunto:s}; } return c;
   })};
   try { localStorage.setItem(LS_KEY, JSON.stringify(_lsVal)); } catch(e) {}
