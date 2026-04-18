@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260417-016';
+  var VER = '20260418-018';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -1322,6 +1322,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         <button class="btn btn-sm" onclick="cargarPreciosHistoricos()" style="border-color:#22d3a0;color:#22d3a0" title="Carga los 85 precios del historial Apr-2026 (no pisa precios ya cargados)">📥 Cargar histórico</button>
         <button class="btn btn-sm" onclick="importarPreciosDesdOCs()" style="border-color:var(--gold);color:var(--gold)">⬇ Desde OCs</button>
         <button class="btn btn-sm" onclick="importarExcelPrecios('maestro')" style="border-color:var(--blue);color:var(--blue)">↑ Importar Excel</button>
+        <button class="btn btn-sm" onclick="exportarMaestroPrecios()" style="border-color:var(--green);color:var(--green)">↓ Exportar Excel</button>
       </div>
     </div>
     <div id="mp-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px"></div>
@@ -2915,7 +2916,8 @@ const SB_TABLE = 'app_state';
 let SB_STATE_KEY = 'mrp_fine_v8'; // se sobreescribe en login según usuario
 
 let SB_CLIENT = null;
-let _sbIgnoreNext = false; // evitar loop al recibir propio cambio
+let _sbIgnoreNext = false;  // evitar loop al recibir propio cambio
+let _lastLocalTs  = 0;      // timestamp del último saveState local (guard contra estado viejo del sub)
 
 try {
   SB_CLIENT = supabase.createClient(SB_URL, SB_KEY);
@@ -3092,8 +3094,14 @@ function sbSuscribir() {
     }, (payload) => {
       if(_sbIgnoreNext) { _sbIgnoreNext = false; return; }
       const nuevo = payload.new?.value;
-      // Ignorar actualizaciones de filas que no son el estado principal (ej: fila de adjuntos legacy)
+      // Ignorar actualizaciones de filas que no son el estado principal (ej: fila de adjuntos)
       if(!nuevo || payload.new?.key !== SB_STATE_KEY) return;
+      // No pisar cambios locales más recientes (guard contra race condition multi-dispositivo)
+      const nuevoTs = nuevo.ts || 0;
+      if(nuevoTs < _lastLocalTs) {
+        console.warn('[sub] Ignorando estado entrante más viejo que local:', nuevoTs, '<', _lastLocalTs);
+        return;
+      }
       applyState(nuevo);
       // Re-renderizar página activa
       const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
@@ -3133,6 +3141,7 @@ function saveState() {
     stock: D.stock,
     ts: Date.now()
   };
+  _lastLocalTs = payload.ts; // registrar timestamp local ANTES de cualquier await
 
   // Siempre strip base64 del payload — los PDFs viven en filas adj_* separadas en Supabase.
   // Esto mantiene el row principal pequeño (rápido) y evita límites de tamaño.
@@ -3263,7 +3272,10 @@ function loadState() {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return;
-    applyState(JSON.parse(raw));
+    const parsed = JSON.parse(raw);
+    applyState(parsed);
+    // Inicializar _lastLocalTs para que el subscription guard arranque con el ts local
+    if(parsed.ts) _lastLocalTs = parsed.ts;
     _restaurarAdjuntosLS(); // restaurar adjuntos desde localStorage del dispositivo
   } catch(e) { console.warn('loadState error', e); }
 }
@@ -4630,13 +4642,18 @@ function confirmarRecepcion(idx) {
     toast('📦 +'+fmt(cant,3)+' recibidos · Pendiente: '+fmt(pendiente,3), '📦', 4000);
   }
 
+  // CRÍTICO: guardar SIEMPRE de inmediato (no dentro del timeout de animación).
+  // Si saveState() fuera dentro del setTimeout, un evento del subscription de Supabase
+  // podría llegar durante los 360ms y revertir entregada→false antes del save.
+  saveState();
+
   const card = document.getElementById('rec-card-'+idx);
   if(card && c.entregada) {
     card.style.transition = 'opacity .35s, transform .35s';
     card.style.opacity = '0'; card.style.transform = 'translateY(-8px)';
-    setTimeout(()=>{ saveState(); renderRecepcion(); }, 360);
+    setTimeout(()=>{ renderRecepcion(); }, 360);
   } else {
-    saveState(); renderRecepcion();
+    renderRecepcion();
   }
 }
 
@@ -4664,13 +4681,16 @@ function cerrarOCManual(idx) {
   } else {
     toast('🔒 OC cerrada','🔒',3000);
   }
+  // Guardar SIEMPRE de inmediato (ver mismo comentario en confirmarRecepcion)
+  saveState();
+
   const card = document.getElementById('rec-card-'+idx);
   if(card) {
     card.style.transition = 'opacity .35s, transform .35s';
     card.style.opacity = '0'; card.style.transform = 'translateY(-8px)';
-    setTimeout(()=>{ saveState(); renderRecepcion(); renderCompras(); }, 360);
+    setTimeout(()=>{ renderRecepcion(); renderCompras(); }, 360);
   } else {
-    saveState(); renderRecepcion(); renderCompras();
+    renderRecepcion(); renderCompras();
   }
 }
 
