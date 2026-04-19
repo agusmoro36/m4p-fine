@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260418-019';
+  var VER = '20260418-020';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -1232,6 +1232,12 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         <option value="mar" selected>Marzo 2026</option>
         <option value="abr">Abril 2026</option>
       </select>
+      <div style="display:flex;align-items:center;gap:5px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:4px 10px">
+        <span style="font-size:9px;font-family:var(--mono);color:var(--text3);letter-spacing:.5px">TC ARS/USD</span>
+        <input type="number" id="f-costos-tc" value="1200" min="1" step="10"
+          style="width:72px;background:transparent;border:none;font-family:var(--mono);font-size:12px;color:var(--gold);text-align:right;outline:none"
+          oninput="renderCostos()" title="Tipo de cambio ARS por 1 USD — afecta todos los precios en ARS">
+      </div>
       <button class="btn btn-sm" onclick="abrirEditarPrecio(null)" style="border-color:var(--gold);color:var(--gold)">✏ Editar precios</button>
       <button class="btn btn-b btn-sm" onclick="exportarCostos()">↓ Excel</button>
     </div>
@@ -8335,6 +8341,13 @@ function buildOCBody() {
 // DASHBOARD DE COSTOS
 // ══════════════════════════════════════
 
+// Tipo de cambio ARS→USD para normalizar costos
+function _getTCambio() {
+  const v = parseFloat(document.getElementById('f-costos-tc')?.value) || parseFloat(S.tcambio) || 1200;
+  S.tcambio = v;
+  return v;
+}
+
 // Construye mapa {codigo_insumo: {precio, fuente}} desde OCs y PROVEEDORES_EXCEL
 function buildPreciosMap() {
   const map = {};
@@ -8382,17 +8395,20 @@ function calcCostoProducto(prod_codigo, preciosMap) {
   const bom = D.bom[prod_codigo];
   if(!bom || !bom.insumos) return {costo:0, costo_batch:0, lote:1, cobertura:0, detalle:[], sinPrecio:[]};
   const lote = bom.lote_min || 1;
+  const tc = _getTCambio(); // ARS por USD
   let costo_batch = 0, conPrecio = 0;
   const detalle = [], sinPrecio = [];
   bom.insumos.forEach(ins => {
     const p = preciosMap[ins.codigo];
     if(p && p.precio > 0) {
-      const subtotal_batch = ins.cantidad * p.precio;          // costo para el batch completo
-      const cant_unit = ins.cantidad / lote;                   // consumo por unidad
-      const subtotal_unit = subtotal_batch / lote;             // costo por unidad
+      // Normalizar siempre a USD: si el precio está en ARS, dividir por TC
+      const precioUSD = (p.moneda === 'ARS') ? p.precio / tc : p.precio;
+      const subtotal_batch = ins.cantidad * precioUSD;         // costo batch en USD
+      const cant_unit      = ins.cantidad / lote;              // consumo por unidad
+      const subtotal_unit  = subtotal_batch / lote;            // costo por unidad en USD
       costo_batch += subtotal_batch;
       conPrecio++;
-      detalle.push({...ins, cant_unit, precio: p.precio, subtotal: subtotal_unit, subtotal_batch, fuente: p.fuente});
+      detalle.push({...ins, cant_unit, precio: precioUSD, precioOrig: p.precio, moneda: p.moneda||'USD', subtotal: subtotal_unit, subtotal_batch, fuente: p.fuente});
     } else {
       sinPrecio.push({...ins, cant_unit: ins.cantidad / lote});
     }
@@ -8543,16 +8559,18 @@ function renderCostosComparador() {
   });
 
   // Filas comparadoras
+  const tc = _getTCambio();
+  const toUSD = (p) => p && p.precio > 0 ? ((p.moneda==='ARS') ? p.precio/tc : p.precio) : 0;
   const rows = [];
   insumos.forEach((ins, cod) => {
     const current      = preciosMap[cod];
     const histEntries  = (hist[cod]||[]).filter(h => h.precio > 0);
     if(!current && !histEntries.length) return;
-    const currentPrice = current?.precio || 0;
-    const best = histEntries.length
-      ? histEntries.reduce((mn,e) => e.precio < mn.precio ? e : mn, histEntries[0])
-      : null;
-    const bestPrice = best?.precio || 0;
+    const currentPrice = toUSD(current); // siempre en USD
+    // Normalizar historial a USD para comparar correctamente
+    const histUSD = histEntries.map(e => ({...e, precioUSD: (e.moneda==='ARS') ? e.precio/tc : e.precio}));
+    const best = histUSD.length ? histUSD.reduce((mn,e) => e.precioUSD < mn.precioUSD ? e : mn, histUSD[0]) : null;
+    const bestPrice = best?.precioUSD || 0;
     const ahorro    = currentPrice>0 && bestPrice>0 && bestPrice<currentPrice ? currentPrice-bestPrice : 0;
     const ahorroPct = ahorro>0 && currentPrice>0 ? ahorro/currentPrice*100 : 0;
     const prodsUsando = insProdMap[cod] || [];
