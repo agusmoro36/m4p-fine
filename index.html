@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260418-018';
+  var VER = '20260418-019';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -1241,6 +1241,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <div class="tab active" onclick="costosTab('productos',this)">📦 Por producto</div>
     <div class="tab" onclick="costosTab('insumos',this)">🧪 Por insumo</div>
     <div class="tab" onclick="costosTab('cobertura',this)">📋 Cobertura de precios</div>
+    <div class="tab" onclick="costosTab('comparador',this);renderCostosComparador()">🔀 Comparador de precios</div>
   </div>
   <div class="tab-pane active" id="ct-productos">
     <div class="tbl-wrap"><table>
@@ -1270,6 +1271,21 @@ body.viewer-mode .page-filters select { pointer-events:auto }
   </div>
   <div class="tab-pane" id="ct-cobertura">
     <div id="costos-cobertura-body"></div>
+  </div>
+  <div class="tab-pane" id="ct-comparador">
+    <div id="costos-comp-kpis" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px"></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr>
+        <th>Código</th><th>Insumo</th>
+        <th class="tr">Precio actual</th>
+        <th class="tr">Mejor OC disponible</th>
+        <th>Proveedor</th>
+        <th class="tr">Ahorro/kg · impacto mes</th>
+        <th>Productos</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="tbl-costos-comp"></tbody>
+    </table></div>
   </div>
 </div>
 
@@ -1897,7 +1913,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
 </div>
 
 <div class="overlay" id="m-costo-det">
-  <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto">
+  <div class="modal" style="max-width:860px;max-height:90vh;overflow-y:auto">
     <button class="modal-close" onclick="closeM('m-costo-det')">✕</button>
     <div class="modal-title" id="costo-det-title">Detalle de costos</div>
     <div id="costo-det-body"></div>
@@ -8504,9 +8520,185 @@ function costosTab(id, el) {
   document.getElementById('ct-'+id).classList.add('active');
 }
 
+// ── COMPARADOR DE PRECIOS ──────────────────────────────────────────────
+function renderCostosComparador() {
+  const preciosMap = buildPreciosMap();
+  const hist = buildPriceHistory();
+  const insumos = _getAllBOMInsumos();
+  const mes = document.getElementById('f-costos-mes')?.value || 'mar';
+
+  // Mapa insumo → productos que lo usan
+  const insProdMap = {};
+  Object.entries(D.bom).forEach(([prodCod, bom]) => {
+    const lote = bom.lote_min || 1;
+    (bom.insumos||[]).forEach(ins => {
+      if(!insProdMap[ins.codigo]) insProdMap[ins.codigo] = [];
+      insProdMap[ins.codigo].push({
+        prod_codigo: prodCod,
+        cant_unit:   ins.cantidad / lote,
+        prod_nombre: bom.nombre || prodCod,
+        lote
+      });
+    });
+  });
+
+  // Filas comparadoras
+  const rows = [];
+  insumos.forEach((ins, cod) => {
+    const current      = preciosMap[cod];
+    const histEntries  = (hist[cod]||[]).filter(h => h.precio > 0);
+    if(!current && !histEntries.length) return;
+    const currentPrice = current?.precio || 0;
+    const best = histEntries.length
+      ? histEntries.reduce((mn,e) => e.precio < mn.precio ? e : mn, histEntries[0])
+      : null;
+    const bestPrice = best?.precio || 0;
+    const ahorro    = currentPrice>0 && bestPrice>0 && bestPrice<currentPrice ? currentPrice-bestPrice : 0;
+    const ahorroPct = ahorro>0 && currentPrice>0 ? ahorro/currentPrice*100 : 0;
+    const prodsUsando = insProdMap[cod] || [];
+    let impactoMes = 0;
+    prodsUsando.forEach(pu => {
+      const prodObj = D.productos.find(p=>p.codigo===pu.prod_codigo);
+      impactoMes += ahorro * pu.cant_unit * (prodObj?.[mes]||0);
+    });
+    rows.push({cod, ins, current, currentPrice, best, bestPrice, ahorro, ahorroPct, prodsUsando, impactoMes, histCount: histEntries.length});
+  });
+
+  rows.sort((a,b) => b.impactoMes - a.impactoMes || b.ahorro - a.ahorro);
+
+  // KPIs
+  const totalAhorro   = rows.reduce((s,r)=>s+r.impactoMes,0);
+  const conMejor      = rows.filter(r=>r.ahorro>0).length;
+  const yaOptimo      = rows.filter(r=>r.currentPrice>0&&r.bestPrice>0&&r.bestPrice>=r.currentPrice).length;
+  const sinCotiz      = rows.filter(r=>r.histCount===0).length;
+  document.getElementById('costos-comp-kpis').innerHTML = [
+    {label:'Ahorro potencial (mes)',     val:'U$D '+fmt(totalAhorro,0), color:'var(--green)', sub:'si usás el mejor precio en todo'},
+    {label:'Con precio más bajo en OC',  val:conMejor,                  color:'var(--gold)',  sub:'insumos con OC más barata disponible'},
+    {label:'Ya al precio óptimo',        val:yaOptimo,                  color:'var(--blue)',  sub:'precio actual ≤ mejor OC histórica'},
+    {label:'Sin cotizaciones en OC',     val:sinCotiz,                  color:'var(--text3)', sub:'no hay historial disponible'},
+  ].map(k=>`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;flex:1;min-width:170px">
+    <div style="font-size:9px;color:var(--text3);font-family:var(--mono);letter-spacing:1.5px;margin-bottom:6px">${k.label.toUpperCase()}</div>
+    <div style="font-size:20px;font-weight:700;color:${k.color};font-family:var(--mono)">${k.val}</div>
+    <div style="font-size:10px;color:var(--text3);margin-top:3px">${k.sub}</div>
+  </div>`).join('');
+
+  // Tabla
+  const tbody = document.getElementById('tbl-costos-comp');
+  if(!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text3)">Sin datos para comparar — cargá precios en el Maestro</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => {
+    const currStr = r.currentPrice>0
+      ? `<span style="font-family:var(--mono);font-weight:700;color:var(--gold)">U$D ${fmt(r.currentPrice,2)}</span>
+         <span style="font-size:9px;color:var(--text3);margin-left:4px">(${r.current?.fuente||'Manual'})</span>`
+      : `<span style="font-size:10px;color:var(--text3)">Sin precio</span>`;
+    const bestStr = r.best
+      ? `<span style="font-family:var(--mono);font-weight:700;color:${r.ahorro>0?'var(--green)':'var(--text2)'}">U$D ${fmt(r.bestPrice,2)}</span>`
+      : `<span style="color:var(--text3)">—</span>`;
+    const provStr = r.best
+      ? `<div style="font-size:11px">${r.best.proveedor}</div>
+         ${r.best.fecha?`<div style="font-size:9px;color:var(--text3);font-family:var(--mono)">${r.best.fecha.slice(0,7)}</div>`:''}`
+      : '—';
+    const ahorroStr = r.ahorro>0
+      ? `<div style="color:var(--green);font-family:var(--mono);font-weight:700">-U$D ${fmt(r.ahorro,2)}/kg <span style="font-size:9px">(${fmt(r.ahorroPct,1)}%)</span></div>
+         ${r.impactoMes>0?`<div style="font-size:10px;color:var(--green)">Ahorro mes: U$D ${fmt(r.impactoMes,0)}</div>`:''}`
+      : r.bestPrice>0&&r.currentPrice>0
+        ? `<span style="font-size:10px;color:var(--text3)">≈ ya al mejor precio</span>`
+        : '—';
+    const prodsStr = r.prodsUsando.map(pu=>
+      `<span style="font-size:9px;font-family:var(--mono);background:var(--bg3);padding:1px 5px;border-radius:3px;border:1px solid var(--border)">${pu.prod_codigo}</span>`
+    ).join(' ');
+    return `<tr>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:700">${r.cod}</td>
+      <td style="font-size:12px;max-width:190px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${r.ins.nombre}">${r.ins.nombre}</td>
+      <td class="tr">${currStr}</td>
+      <td class="tr">${bestStr}</td>
+      <td>${provStr}</td>
+      <td class="tr">${ahorroStr}</td>
+      <td style="max-width:130px">${prodsStr}</td>
+      <td style="white-space:nowrap">
+        ${r.best&&r.ahorro>0?`<button class="btn btn-sm" onclick="aplicarMejorPrecioComp('${r.cod}',${r.bestPrice},'${r.best.proveedor}','${r.best.moneda||'USD'}','${r.best.fecha||''}')" style="font-size:9px;padding:3px 7px;border-color:var(--green);color:var(--green)" title="Aplicar precio U$D ${fmt(r.bestPrice,2)} de ${r.best.proveedor}">✓ Usar</button>`:''}
+        ${r.histCount>0?`<button class="btn btn-sm" onclick="verCotizacionesInsumo('${r.cod}')" style="font-size:9px;padding:3px 6px;margin-left:3px" title="${r.histCount} cotizaciones en OC">📋 ${r.histCount}</button>`:''}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function aplicarMejorPrecioComp(cod, precio, proveedor, moneda, fecha) {
+  if(!confirm(`¿Aplicar precio U$D ${fmt(precio,2)}/kg de ${proveedor} para ${cod}?\nSe guardará en el Maestro de Precios.`)) return;
+  if(!S.preciosInsumos) S.preciosInsumos = {};
+  S.preciosInsumos[cod] = {
+    precio:    precio,
+    moneda:    moneda || 'USD',
+    proveedor: proveedor || '',
+    fuente:    'OC',
+    fecha:     fecha || '',
+    updatedAt: new Date().toISOString().slice(0,10)
+  };
+  saveState();
+  renderCostosComparador();
+  toast(`✓ ${cod} → U$D ${fmt(precio,2)}/kg (${proveedor})`, '✓', 3000);
+}
+
+function verCotizacionesInsumo(cod) {
+  const hist     = buildPriceHistory();
+  const entries  = (hist[cod]||[]).filter(h=>h.precio>0);
+  const insumos  = _getAllBOMInsumos();
+  const ins      = insumos.get(cod);
+  const nombre   = ins?.nombre || cod;
+  const current  = (S.preciosInsumos||{})[cod];
+  if(!entries.length) { toast('Sin historial de OC para este insumo','⚠️',2500); return; }
+
+  const sorted   = [...entries].sort((a,b)=>a.precio-b.precio);
+  const minPrecio = sorted[0].precio;
+
+  const html = `
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">${nombre} · ${entries.length} cotización${entries.length>1?'es':''} en historial de OCs</div>
+    ${current?`<div style="background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.3);border-radius:7px;padding:9px 14px;margin-bottom:12px;font-size:12px">
+      <span style="color:var(--text3)">Precio actual en uso:</span>
+      <strong style="color:var(--gold);font-family:var(--mono);margin-left:6px">U$D ${fmt(current.precio,2)}</strong>
+      ${current.proveedor?`<span style="color:var(--text3);margin-left:6px">· ${current.proveedor}</span>`:''}
+      <span style="font-size:9px;color:var(--text3);margin-left:6px">(${current.fuente||'Manual'})</span>
+    </div>`:''}
+    <div class="tbl-wrap"><table>
+      <thead><tr>
+        <th class="tr">Precio</th><th>Moneda</th><th>Proveedor</th>
+        <th>Fecha</th><th class="tr">Cant. OC</th><th></th>
+      </tr></thead>
+      <tbody>${sorted.map(e=>{
+        const esMejor = e.precio===minPrecio;
+        const sym = e.moneda==='ARS'?'$':'U$D';
+        return `<tr style="${esMejor?'background:rgba(34,197,94,.06)':''}">
+          <td class="tr">
+            <strong style="font-family:var(--mono);font-size:${esMejor?'14':'12'}px;color:${esMejor?'var(--green)':'var(--text)'}">
+              ${sym} ${fmt(e.precio,2)}
+            </strong>
+            ${esMejor?'<span style="font-size:9px;color:var(--green);margin-left:4px">⭐ más barato</span>':''}
+          </td>
+          <td><span style="font-size:9px;font-family:var(--mono)">${e.moneda||'USD'}</span></td>
+          <td style="font-size:12px">${e.proveedor}</td>
+          <td style="font-size:11px;color:var(--text3);font-family:var(--mono)">${e.fecha||'—'}</td>
+          <td class="tr" style="font-size:11px;color:var(--text3)">${e.cantidad>0?fmt(e.cantidad,0)+' kg':'—'}</td>
+          <td>
+            <button class="btn btn-sm" onclick="aplicarMejorPrecioComp('${cod}',${e.precio},'${e.proveedor}','${e.moneda||'USD'}','${e.fecha||''}');closeM('m-costo-det')"
+              style="font-size:9px;padding:2px 7px;border-color:var(--gold);color:var(--gold)">
+              Usar precio
+            </button>
+          </td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+
+  document.getElementById('costo-det-title').textContent = `Cotizaciones OC · ${cod} — ${nombre}`;
+  document.getElementById('costo-det-body').innerHTML = html;
+  openM('m-costo-det');
+}
+
 function verDetalleProductoCosto(prod) {
   const mes = document.getElementById('f-costos-mes')?.value || 'mar';
   const preciosMap = buildPreciosMap();
+  const hist = buildPriceHistory();
   const {costo, costo_batch, lote, cobertura, detalle, sinPrecio} = calcCostoProducto(prod, preciosMap);
   const p = D.productos.find(x=>x.codigo===prod);
   const cant = p?.[mes]||0;
@@ -8514,20 +8706,42 @@ function verDetalleProductoCosto(prod) {
 
   const rows = [...detalle.sort((a,b)=>b.subtotal-a.subtotal).map(d=>{
     const pctCosto = costo > 0 ? (d.subtotal/costo*100) : 0;
+    const histEntries = (hist[d.codigo]||[]).filter(h=>h.precio>0);
+    const best = histEntries.length ? histEntries.reduce((mn,e)=>e.precio<mn.precio?e:mn, histEntries[0]) : null;
+    const bestBadge = best && best.precio < d.precio
+      ? `<div style="font-size:9px;color:var(--green);cursor:pointer;margin-top:2px"
+           onclick="document.getElementById('sim-p-${d.codigo}').value=${best.precio};simCostoCalc('${prod}',${lote},${costo})"
+           title="OC más barata disponible — clic para aplicar">
+           💡 mejor: U$D ${fmt(best.precio,2)} · ${best.proveedor}
+         </div>`
+      : '';
     return `<tr>
       <td class="td-code">${d.codigo}</td>
       <td class="td-name">${d.nombre}</td>
       <td class="td-mono tr" style="color:var(--text3)">${fmt(d.cantidad,4)} ${d.um||'kg'}</td>
       <td class="td-mono tr">${fmt(d.cant_unit,5)} ${d.um||'kg'}</td>
-      <td class="td-mono tr" style="color:var(--gold)">U$D ${fmt(d.precio,2)}</td>
-      <td class="td-mono tr" style="font-weight:700">U$D ${fmt(d.subtotal,4)}</td>
-      <td style="min-width:70px">
-        <div style="font-size:9px;color:var(--text3);font-family:var(--mono)">${fmt(pctCosto,1)}%</div>
-        <div style="height:3px;background:var(--border);border-radius:2px;margin-top:2px"><div style="height:100%;width:${Math.min(100,pctCosto)}%;background:var(--gold);border-radius:2px"></div></div>
+      <td class="tr">
+        <div style="display:flex;align-items:center;gap:4px;justify-content:flex-end">
+          <span style="font-size:10px;color:var(--text3)">U$D</span>
+          <input id="sim-p-${d.codigo}" type="number" value="${d.precio}" min="0" step="0.01"
+            style="width:78px;padding:3px 5px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:12px;color:var(--gold);text-align:right;outline:none"
+            oninput="simCostoCalc('${prod}',${lote},${costo})">
+        </div>
+        ${bestBadge}
       </td>
-      <td><span style="font-size:9px;color:var(--text3)">${d.fuente}</span></td></tr>`;
+      <td class="td-mono tr" id="sim-sub-${d.codigo}" data-cant="${d.cant_unit}" style="font-weight:700;color:var(--text)">U$D ${fmt(d.subtotal,4)}</td>
+      <td style="min-width:72px">
+        <div id="sim-pct-${d.codigo}" style="font-size:9px;color:var(--text3);font-family:var(--mono)">${fmt(pctCosto,1)}%</div>
+        <div style="height:3px;background:var(--border);border-radius:2px;margin-top:2px">
+          <div id="sim-bfill-${d.codigo}" style="height:100%;width:${Math.min(100,pctCosto)}%;background:var(--gold);border-radius:2px;transition:width .2s"></div>
+        </div>
+      </td>
+      <td><span style="font-size:9px;color:var(--text3)">${d.fuente}</span>
+        ${histEntries.length ? `<button class="btn btn-sm" onclick="verCotizacionesInsumo('${d.codigo}')" style="font-size:9px;padding:1px 5px;margin-left:4px" title="${histEntries.length} cotizaciones">📋</button>` : ''}
+      </td>
+    </tr>`;
   }), ...sinPrecio.map(d=>
-    `<tr style="opacity:.5"><td class="td-code">${d.codigo}</td><td class="td-name">${d.nombre}</td>
+    `<tr style="opacity:.55"><td class="td-code">${d.codigo}</td><td class="td-name">${d.nombre}</td>
     <td class="td-mono tr" style="color:var(--text3)">${fmt(d.cantidad,4)} ${d.um||'kg'}</td>
     <td class="td-mono tr">${fmt(d.cant_unit,5)} ${d.um||'kg'}</td>
     <td class="tc" colspan="3"><span style="font-size:10px;color:var(--red)">sin precio</span>
@@ -8537,37 +8751,90 @@ function verDetalleProductoCosto(prod) {
 
   const el = document.getElementById('costo-det-body');
   if(el) {
-    document.getElementById('costo-det-title').textContent = prod+' — '+(bom?.nombre||'')+' · U$D '+fmt(costo,2)+'/u';
+    document.getElementById('costo-det-title').textContent = `${prod} — ${bom?.nombre||''}`;
     el.innerHTML = `
-      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
-        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:140px">
+      <div id="sim-kpis" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:130px">
           <div style="font-size:9px;color:var(--text3);letter-spacing:1px;margin-bottom:4px">TAMAÑO DE LOTE</div>
-          <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--text)">${fmt(lote,0)} <span style="font-size:12px;color:var(--text3)">unidades</span></div>
+          <div style="font-size:18px;font-weight:700;font-family:var(--mono)">${fmt(lote,0)} <span style="font-size:11px;color:var(--text3)">u.</span></div>
         </div>
-        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:140px">
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:130px">
           <div style="font-size:9px;color:var(--text3);letter-spacing:1px;margin-bottom:4px">COSTO / LOTE</div>
-          <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--blue)">U$D ${fmt(costo_batch,2)}</div>
+          <div id="sim-costo-batch" style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--blue)">U$D ${fmt(costo_batch,2)}</div>
         </div>
-        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:140px">
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:160px">
           <div style="font-size:9px;color:var(--text3);letter-spacing:1px;margin-bottom:4px">COSTO / UNIDAD</div>
-          <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--gold)">U$D ${fmt(costo,4)}</div>
+          <div style="display:flex;align-items:baseline;gap:8px">
+            <div id="sim-costo-unit" style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--gold)">U$D ${fmt(costo,4)}</div>
+            <div id="sim-delta" style="font-size:12px;font-family:var(--mono);font-weight:700"></div>
+          </div>
         </div>
-        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:140px">
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:130px">
           <div style="font-size:9px;color:var(--text3);letter-spacing:1px;margin-bottom:4px">TOTAL MES (${cant} u.)</div>
-          <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--text)">U$D ${fmt(costo*cant,0)}</div>
+          <div id="sim-costo-mes" style="font-size:18px;font-weight:700;font-family:var(--mono)">U$D ${fmt(costo*cant,0)}</div>
         </div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:7px 12px">
+        🧮 Simulador activo — editá cualquier precio y el costo se recalcula al instante · 💡 verde = hay un precio más barato en historial de OCs (clic para aplicar)
       </div>
       <div class="tbl-wrap"><table><thead><tr>
         <th>Código</th><th>Insumo</th>
-        <th class="tr">Cant/lote</th>
-        <th class="tr">Cant/u</th>
-        <th class="tr">Precio</th>
+        <th class="tr">Cant/lote</th><th class="tr">Cant/u</th>
+        <th class="tr">Precio U$D/kg</th>
         <th class="tr">Costo/u</th>
-        <th class="tr">% del costo</th>
-        <th>Fuente</th>
+        <th class="tr">% costo</th>
+        <th>Fuente / OCs</th>
       </tr></thead><tbody>${rows}</tbody></table></div>`;
     openM('m-costo-det');
   }
+}
+
+function simCostoCalc(prod, lote, costoOrig) {
+  const bom = D.bom[prod];
+  if(!bom) return;
+  let newBatch = 0;
+  (bom.insumos||[]).forEach(ins => {
+    const inp = document.getElementById('sim-p-'+ins.codigo);
+    if(!inp) return;
+    const precio = parseFloat(inp.value) || 0;
+    const subBatch = ins.cantidad * precio;
+    const subUnit = subBatch / lote;
+    newBatch += subBatch;
+    const subEl = document.getElementById('sim-sub-'+ins.codigo);
+    if(subEl) subEl.textContent = 'U$D ' + fmt(subUnit, 4);
+  });
+  const newUnit = newBatch / lote;
+  const unitEl   = document.getElementById('sim-costo-unit');
+  const batchEl  = document.getElementById('sim-costo-batch');
+  const mesEl    = document.getElementById('sim-costo-mes');
+  const deltaEl  = document.getElementById('sim-delta');
+  if(unitEl)  unitEl.textContent  = 'U$D ' + fmt(newUnit, 4);
+  if(batchEl) batchEl.textContent = 'U$D ' + fmt(newBatch, 2);
+  const mes = document.getElementById('f-costos-mes')?.value || 'mar';
+  const prodObj = D.productos.find(x=>x.codigo===prod);
+  const cant = prodObj?.[mes]||0;
+  if(mesEl) mesEl.textContent = 'U$D ' + fmt(newUnit*cant, 0);
+  if(deltaEl) {
+    const delta = newUnit - costoOrig;
+    if(Math.abs(delta) < 0.00005) { deltaEl.textContent=''; }
+    else {
+      const sign = delta>0?'+':'';
+      deltaEl.style.color = delta>0 ? 'var(--red)' : 'var(--green)';
+      deltaEl.textContent = sign + fmt(delta,4);
+    }
+  }
+  // Actualizar porcentajes
+  (bom.insumos||[]).forEach(ins => {
+    const inp = document.getElementById('sim-p-'+ins.codigo);
+    if(!inp) return;
+    const precio = parseFloat(inp.value)||0;
+    const subUnit = (ins.cantidad*precio)/lote;
+    const pct = newUnit>0 ? (subUnit/newUnit*100) : 0;
+    const pctEl   = document.getElementById('sim-pct-'+ins.codigo);
+    const fillEl  = document.getElementById('sim-bfill-'+ins.codigo);
+    if(pctEl)  pctEl.textContent      = fmt(pct,1)+'%';
+    if(fillEl) fillEl.style.width     = Math.min(100,pct)+'%';
+  });
 }
 
 function abrirEditarPrecio(cod) {
