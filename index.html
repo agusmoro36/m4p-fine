@@ -873,6 +873,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
           <option value="vencido">Vencidos</option>
         </select>
         <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-stock" placeholder="Buscar..." oninput="renderStock();renderStockUbicacion()"></div>
+        <button class="btn btn-sm" onclick="exportarStockExcel()" style="border-color:var(--acc);color:var(--acc)">📥 Exportar</button>
         <button class="btn btn-p btn-sm" onclick="abrirTransferir(null)">↔ Transferir</button>
         <button class="btn btn-sm" onclick="abrirAjusteStock(null)" style="border-color:var(--gold);color:var(--gold)">✏ Ajuste</button>
       </div>
@@ -5801,6 +5802,21 @@ function renderStock(){
   renderPag('pag-stock',data.length,25,S.stockPage,p=>{S.stockPage=p;renderStock();});
 }
 function sortStock(col){if(S.stockSort.col===col)S.stockSort.dir*=-1;else{S.stockSort.col=col;S.stockSort.dir=1;}S.stockPage=1;renderStock();}
+
+function exportarStockExcel(){
+  const rows = [['Código','Nombre','Stock','UM','Depósito','Sala 1','Sala 2']];
+  getStockArr().sort((a,b)=>a.codigo.localeCompare(b.codigo)).forEach(s=>{
+    const u = getUbic(s);
+    rows.push([s.codigo, s.nombre, s.stock, s.um||'kg', u.deposito||0, u.sala1||0, u.sala2||0]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:36},{wch:10},{wch:6},{wch:10},{wch:10},{wch:10}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Stock');
+  const fecha = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Stock_Insumos_${fecha}.xlsx`);
+  toast('✓ Stock exportado', '📥', 2500);
+}
 
 // ══════════════════════════════════════
 // CALCULADORA MRP
