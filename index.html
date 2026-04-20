@@ -3233,22 +3233,22 @@ function applyState(st) {
     sessionOCs.forEach(oc => {
       if(!S.compras.find(c => c._uid === oc._uid)) S.compras.push(oc);
     });
-
-    // Merge OCs semilla: buscar por _sid exacto o por codigo+proveedor+cantidad
-    _SEED_COMPRAS.forEach(sc => {
-      const existing = S.compras.find(c =>
-        c._sid === sc._sid ||
-        (!c._sid && !c._uid && c.codigo === sc.codigo &&
-         (c.proveedor||'').toUpperCase() === (sc.proveedor||'').toUpperCase() &&
-         parseFloat(c.cantidad) === parseFloat(sc.cantidad))
-      );
-      if(existing) {
-        if(!existing._sid) existing._sid = sc._sid;
-      } else {
-        S.compras.push(sc);
-      }
-    });
   }
+  // Merge OCs semilla SIEMPRE (independiente de si st.compras existe)
+  // Así las nuevas semillas aparecen al cargar versión nueva, incluso con caché viejo
+  _SEED_COMPRAS.forEach(sc => {
+    const existing = S.compras.find(c =>
+      c._sid === sc._sid ||
+      (!c._sid && !c._uid && c.codigo === sc.codigo &&
+       (c.proveedor||'').toUpperCase() === (sc.proveedor||'').toUpperCase() &&
+       parseFloat(c.cantidad) === parseFloat(sc.cantidad))
+    );
+    if(existing) {
+      if(!existing._sid) existing._sid = sc._sid;
+    } else {
+      S.compras.push(sc);
+    }
+  });
   if (st.comprasPropuestas) {
     S.comprasPropuestas = st.comprasPropuestas;
   }
@@ -4767,7 +4767,7 @@ function filterCompras(){
   const fEnt=document.getElementById('f-oc-entregada')?.value||'';
   return S.compras.filter(c=>{
     if(fp&&c.proveedor!==fp) return false;
-    if(q&&!c.codigo.toLowerCase().includes(q)&&!c.descripcion.toLowerCase().includes(q)&&!c.proveedor.toLowerCase().includes(q)) return false;
+    if(q&&!(c.nro||'').toLowerCase().includes(q)&&!(c.codigo||'').toLowerCase().includes(q)&&!(c.descripcion||'').toLowerCase().includes(q)&&!(c.proveedor||'').toLowerCase().includes(q)) return false;
     if(fPag==='si'&&!c.pagada) return false;
     if(fPag==='no'&&c.pagada) return false;
     if(fEnt==='si'&&!c.entregada) return false;
@@ -4882,9 +4882,10 @@ function renderCompras(){
              </label>`
           : '');
 
-    const ocNum='OC-'+String(idx+1).padStart(3,'0');
+    const ocNum = c.nro || ('OC-'+String(idx+1).padStart(3,'0'));
+    const nroSub = c.nro && c.fecha ? `<div style="font-size:9px;color:var(--text3);font-family:var(--mono)">${c.fecha}</div>` : '';
     return `<tr style="${rowDim}cursor:pointer" onclick="exportarOCPDF(${idx})" title="Ver / imprimir OC">
-      <td class="td-code" style="font-size:10px;color:var(--gold2);white-space:nowrap;font-family:var(--mono)">${ocNum}</td>
+      <td class="td-code" style="font-size:10px;color:var(--gold2);white-space:nowrap;font-family:var(--mono)">${ocNum}${nroSub}</td>
       <td>${codigoCell}</td>
       <td class="td-name" style="max-width:190px">${descCell}${loteStr}${vencStr}${obsSnip}</td>
       <td>${prodCell}</td>
@@ -7972,7 +7973,7 @@ function _buildOCPdf() {
   const lt   = document.getElementById('oc-pdf-lt')?.value   || '';
   const cond = (document.getElementById('oc-pdf-cond')?.value || '').trim();
   const prov = _lookupProv(c.proveedor);
-  const ocNum  = 'OC-' + String(idx+1).padStart(4,'0') + '-2026';
+  const ocNum  = c.nro || ('OC-' + String(idx+1).padStart(4,'0') + '-2026');
   const fecha  = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'long',year:'numeric'});
   const numPrecio = Number(c.precio)||0;
   const numCant   = Number(c.cantidad)||0;
@@ -8264,7 +8265,7 @@ function buildOCBody() {
 
   const prov = _lookupProv(c.proveedor);
 
-  const ocNum  = 'OC-' + String(idx+1).padStart(4,'0') + '-2026';
+  const ocNum  = c.nro || ('OC-' + String(idx+1).padStart(4,'0') + '-2026');
   const fecha  = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'long',year:'numeric'});
   const numTotal = Number(c.total_usd)||0;
   const numPrecio= Number(c.precio)||0;
