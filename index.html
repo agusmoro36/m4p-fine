@@ -6604,6 +6604,27 @@ function renderProveedoresEnhanced() {
   }).join('') || '<div class="empty"><div class="empty-text">Sin resultados</div></div>';
 }
 
+// Exportar insumos de un proveedor a Excel
+function exportarInsumosProveedor(idx) {
+  const p = S.proveedores[idx];
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  const bomMap = _getAllBOMInsumos();
+  const nameToCode = new Map();
+  bomMap.forEach((v, cod) => { nameToCode.set(norm(v.nombre), cod); });
+  const rows = [['Código','Insumo','Precio','Moneda','Presentación','Lead Time','Tipo']];
+  p.insumos.forEach(ins => {
+    const cod = nameToCode.get(norm(ins.insumo)) || '';
+    rows.push([cod, ins.insumo, ins.precio ?? '', ins.moneda || '', ins.presentacion || '', ins.lt || '', ins.tipo || '']);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:36},{wch:12},{wch:9},{wch:20},{wch:11},{wch:12}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Insumos');
+  const fecha = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Insumos_${p.nombre.replace(/\s+/g,'_')}_${fecha}.xlsx`);
+  toast('Excel exportado ✓', '📥', 2500);
+}
+
 // Modal to show all supplier insumos
 function verInsumos(i) {
   const p = S.proveedores[i];
@@ -6616,7 +6637,10 @@ function verInsumos(i) {
   modal.className = 'overlay open';
   modal.innerHTML = `<div class="modal modal-lg" style="position:relative">
     <button class="modal-close" onclick="this.closest('.overlay').remove()">✕</button>
-    <div class="modal-title">${p.nombre} — Insumos y Precios</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div class="modal-title" style="margin-bottom:0">${p.nombre} — Insumos y Precios</div>
+      <button class="btn btn-sm" onclick="exportarInsumosProveedor(${i})" style="border-color:var(--green);color:var(--green);flex-shrink:0">↓ Exportar Excel</button>
+    </div>
     <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
       ${p.email ? `<span class="chip chip-b">✉ ${p.email}</span>` : ''}
       ${p.telefono ? `<span class="chip chip-g">📞 ${p.telefono}</span>` : ''}
