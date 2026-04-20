@@ -8950,6 +8950,8 @@ function guardarPrecioSim(cod, prod, lote, costoOrig) {
   if (btn) { btn.textContent = '✓'; btn.style.color = 'var(--green)'; btn.style.borderColor = 'var(--green)'; btn.disabled = true; }
   toast(`💾 ${cod} — U$D ${fmt(precio,4)} guardado en maestro de precios`, '✓', 2500);
   simCostoCalc(prod, lote, costoOrig);
+  // Actualizar tabla principal de costos en segundo plano
+  if(typeof renderCostos === 'function') renderCostos();
 }
 
 function abrirEditarPrecio(cod) {
