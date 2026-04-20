@@ -505,7 +505,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <span class="chip chip-g hide-mobile"><span class="dot"></span>Sistema Activo</span>
     <span class="chip chip-b hide-mobile">385 insumos</span>
     <span class="chip chip-r hide-mobile">50 críticos</span>
-    <button class="btn btn-g btn-sm hide-mobile" onclick="exportarExcel()">↓ Exportar</button>
+    <button class="btn btn-g btn-sm hide-mobile" onclick="exportarPaginaActual()">↓ Exportar</button>
     <button onclick="toggleDark()" id="btn-dark" title="Modo oscuro" style="display:flex;align-items:center;justify-content:center;width:32px;height:32px;background:rgba(201,168,76,.07);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:15px;transition:all .2s;flex-shrink:0" onmouseover="this.style.borderColor='var(--gold-dim)'" onmouseout="this.style.borderColor='var(--border)'">☀</button>
     <span id="user-chip" style="display:none;align-items:center;gap:5px;background:rgba(201,168,76,.08);border:1px solid var(--gold-dim2);border-radius:8px;padding:5px 10px;font-family:var(--mono);font-size:10px;color:var(--gold2);letter-spacing:.3px;flex-shrink:0"></span>
     <button onclick="logout()" id="btn-logout" title="Cerrar sesión" style="display:flex;align-items:center;gap:5px;background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:5px 10px;cursor:pointer;color:var(--text3);font-family:var(--mono);font-size:10px;transition:all .2s" onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'" onmouseout="this.style.borderColor='rgba(239,68,68,.25)';this.style.color='var(--text3)'">⏻ <span class="hide-mobile">Salir</span></button>
@@ -873,7 +873,6 @@ body.viewer-mode .page-filters select { pointer-events:auto }
           <option value="vencido">Vencidos</option>
         </select>
         <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-stock" placeholder="Buscar..." oninput="renderStock();renderStockUbicacion()"></div>
-        <button class="btn btn-sm" onclick="exportarStockExcel()" style="border-color:var(--acc);color:var(--acc)">📥 Exportar</button>
         <button class="btn btn-p btn-sm" onclick="abrirTransferir(null)">↔ Transferir</button>
         <button class="btn btn-sm" onclick="abrirAjusteStock(null)" style="border-color:var(--gold);color:var(--gold)">✏ Ajuste</button>
       </div>
@@ -6423,6 +6422,18 @@ function exportarExcel(){
   XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(comprasData),'Compras Abr');
   XLSX.writeFile(wb,'MRP_FineCo_'+new Date().toISOString().slice(0,10)+'.xlsx');
   toast('Excel exportado correctamente','↓');
+}
+
+function exportarPaginaActual(){
+  const page = document.querySelector('.page.active')?.id || '';
+  if(page === 'page-stock')           exportarStockExcel();
+  else if(page === 'page-compras')    exportarOC();
+  else if(page === 'page-facturas')   exportarFacturas();
+  else if(page === 'page-mrp')        exportarMRP();
+  else if(page === 'page-planificador') exportarPlanificador();
+  else if(page === 'page-costos')     exportarCostos();
+  else if(page === 'page-maestroprecios') exportarMaestroPrecios();
+  else                                exportarExcel();
 }
 
 function exportarOC(){
