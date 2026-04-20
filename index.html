@@ -3250,8 +3250,22 @@ function applyState(st) {
   if (st.movimientos) S.movimientos = st.movimientos;
   if (st.producciones) S.producciones = st.producciones;
   if (st.proveedores) {
-    // Merge: el estado guardado prevalece, pero agrega los del código que falten
+    // Merge: el estado guardado prevalece para datos editados por el usuario,
+    // pero los insumos SIEMPRE se refrescan desde PROVEEDORES_EXCEL (datos maestros)
     S.proveedores = st.proveedores;
+    if(typeof PROVEEDORES_EXCEL !== 'undefined') {
+      // Actualizar insumos de cada proveedor con los datos más recientes del código
+      S.proveedores.forEach(sp => {
+        const excelProv = PROVEEDORES_EXCEL.find(p => p.nombre.toUpperCase() === (sp.nombre||'').toUpperCase());
+        if(excelProv) sp.insumos = excelProv.insumos || [];
+      });
+      // Agregar proveedores del Excel que no estén en el estado guardado
+      PROVEEDORES_EXCEL.forEach(ep => {
+        const key = ep.nombre.toUpperCase();
+        if(!S.proveedores.some(p => (p.nombre||'').toUpperCase() === key))
+          S.proveedores.push({...ep});
+      });
+    }
     _DEFAULT_PROVEEDORES.forEach(dp => {
       const key = (dp.codigo||dp.nombre||'').toUpperCase();
       if(!S.proveedores.some(p=>(p.codigo||p.nombre||'').toUpperCase()===key))
