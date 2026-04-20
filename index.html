@@ -1919,7 +1919,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
 </div>
 
 <div class="overlay" id="m-costo-det">
-  <div class="modal" style="max-width:min(1100px,96vw);max-height:90vh;overflow-y:auto;overflow-x:hidden">
+  <div class="modal" style="width:min(1080px,calc(100vw - 40px));max-width:none;max-height:90vh;overflow-y:auto">
     <button class="modal-close" onclick="closeM('m-costo-det')">✕</button>
     <div class="modal-title" id="costo-det-title">Detalle de costos</div>
     <div id="costo-det-body"></div>
@@ -8861,13 +8861,15 @@ function verDetalleProductoCosto(prod) {
       <div style="font-size:10px;color:var(--text3);margin-bottom:10px;font-family:var(--mono);background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:7px 12px">
         🧮 Simulador activo — editá cualquier precio y el costo se recalcula al instante · 💡 verde = hay un precio más barato en historial de OCs (clic para aplicar)
       </div>
-      <div class="tbl-wrap" style="overflow-x:auto"><table style="min-width:700px"><thead><tr>
-        <th>Código</th><th>Insumo</th>
-        <th class="tr">Cant/lote</th><th class="tr">Cant/u</th>
-        <th class="tr">Precio U$D/kg</th>
-        <th class="tr">Costo/u</th>
-        <th class="tr">% costo</th>
-        <th>Fuente / OCs</th>
+      <div class="tbl-wrap" style="overflow-x:auto"><table style="min-width:660px;table-layout:auto"><thead><tr>
+        <th style="width:72px">Código</th>
+        <th>Insumo</th>
+        <th class="tr" style="width:80px">Cant/lote</th>
+        <th class="tr" style="width:80px">Cant/u</th>
+        <th class="tr" style="width:116px">Precio U$D</th>
+        <th class="tr" style="width:90px">Costo/u</th>
+        <th style="width:68px">%</th>
+        <th style="width:64px">OCs</th>
       </tr></thead><tbody>${rows}</tbody></table></div>`;
     openM('m-costo-det');
   }
