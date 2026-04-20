@@ -3108,9 +3108,12 @@ function sbIndicador(estado) {
   txt.textContent = label;
 }
 
+let _sbChannel = null; // canal activo — evitar duplicados
 function sbSuscribir() {
   if(!SB_CLIENT) return;
-  SB_CLIENT.channel('mrp-sync')
+  // Cancelar suscripción anterior antes de crear una nueva
+  if(_sbChannel) { try { _sbChannel.unsubscribe(); } catch(e) {} _sbChannel = null; }
+  _sbChannel = SB_CLIENT.channel('mrp-sync')
     .on('postgres_changes', {
       event: 'UPDATE', schema: 'public', table: SB_TABLE
     }, (payload) => {
@@ -3153,7 +3156,8 @@ function saveState() {
     cotizacionesExtra: S.cotizacionesExtra||[],
     movimientos: S.movimientos,
     producciones: S.producciones,
-    proveedores: S.proveedores,
+    // Guardar proveedores SIN insumos (los insumos vienen de PROVEEDORES_EXCEL al cargar)
+    proveedores: S.proveedores.map(({insumos:_, ...rest}) => rest),
     productos: D.productos,
     mrpResultado: S.mrpResultado,
     facturasToggles: typeof facturasState !== 'undefined'
