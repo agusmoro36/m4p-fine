@@ -8950,8 +8950,40 @@ function guardarPrecioSim(cod, prod, lote, costoOrig) {
   if (btn) { btn.textContent = '✓'; btn.style.color = 'var(--green)'; btn.style.borderColor = 'var(--green)'; btn.disabled = true; }
   toast(`💾 ${cod} — U$D ${fmt(precio,4)} guardado en maestro de precios`, '✓', 2500);
   simCostoCalc(prod, lote, costoOrig);
-  // Actualizar tabla principal de costos en segundo plano
-  if(typeof renderCostos === 'function') renderCostos();
+  // Actualizar la fila del producto en la tabla principal
+  _actualizarFilaCostos(prod);
+}
+
+function _actualizarFilaCostos(prod_codigo) {
+  const tbl = document.getElementById('tbl-costos-prod');
+  if(!tbl) return;
+  const mes = document.getElementById('f-costos-mes')?.value || 'mar';
+  const preciosMap = buildPreciosMap();
+  const {costo, costo_batch, lote, cobertura, detalle, sinPrecio} = calcCostoProducto(prod_codigo, preciosMap);
+  const p = D.productos.find(x => x.codigo === prod_codigo);
+  if(!p) return;
+  const cant = p[mes] || 0;
+  const cobColor = cobertura>=80?'var(--green)':cobertura>=50?'var(--gold)':'var(--red)';
+  const bar = `<div style="height:4px;background:var(--border);border-radius:2px;margin-top:3px"><div style="height:100%;width:${cobertura}%;background:${cobColor};border-radius:2px"></div></div>`;
+  // Buscar la fila del producto en tbl-costos-prod por código
+  const rows = tbl.querySelectorAll('tr');
+  rows.forEach(tr => {
+    if(tr.querySelector('.td-mono') && tr.textContent.includes(prod_codigo)) {
+      tr.innerHTML = `
+        <td><div style="font-weight:700;font-family:var(--mono);font-size:11px">${p.codigo}</div><div style="font-size:12px;color:var(--text2)">${p.descripcion||p.nombre||''}</div></td>
+        <td class="td-mono tr">${fmt(cant,0)} u.</td>
+        <td class="td-mono tr" style="color:var(--gold);font-weight:700">U$D ${fmt(costo,2)}</td>
+        <td class="td-mono tr" style="font-weight:700">U$D ${fmt(costo*cant,0)}</td>
+        <td style="min-width:120px">
+          <div style="font-size:10px;color:${cobColor};font-family:var(--mono)">${cobertura}% (${detalle.length}/${detalle.length+sinPrecio.length})</div>
+          ${bar}
+          ${sinPrecio.length?`<div style="font-size:9px;color:var(--red);margin-top:2px">Sin precio: ${sinPrecio.map(i=>i.codigo).join(', ')}</div>`:''}
+        </td>
+        <td><button class="btn btn-sm" onclick="verDetalleProductoCosto('${p.codigo}')" style="font-size:10px;padding:3px 7px">Ver</button></td>`;
+    }
+  });
+  // También actualizar KPIs globales
+  if(typeof renderCostos === 'function') setTimeout(() => renderCostos(), 50);
 }
 
 function abrirEditarPrecio(cod) {
