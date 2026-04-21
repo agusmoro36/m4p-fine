@@ -6251,31 +6251,77 @@ function processImport(file,type){
       let count=0;
 
       if(type==='stock'){
-        // Leer todas las filas como arrays crudos
         const allRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-        const codPat  = /^(MP|PK)-\d/i;
+        const codPat  = /^(MP|PK|INS)-\d/i;
 
-        // Buscar en TODAS las filas: si col[0] tiene formato MP-XXXX o PK-XXXX → es dato
-        // No importa dónde estén los headers
-        allRows.forEach(row => {
-          const cod = String(row[0]||'').trim().toUpperCase();
-          if(!codPat.test(cod)) return; // saltar filas sin código válido
+        // Detectar fila de headers buscando columnas clave
+        let hRow = -1, cols = {};
+        for(let i = 0; i < Math.min(allRows.length, 10); i++){
+          const r = allRows[i].map(c => String(c||'').toLowerCase().trim());
+          const hasCode = r.findIndex(c => ['item_id','codigo','código','cod'].includes(c));
+          const hasCant = r.findIndex(c => ['cantidad','stock','qty','quantity'].includes(c));
+          if(hasCode >= 0 && hasCant >= 0){
+            hRow = i;
+            cols.cod    = hasCode;
+            cols.nom    = r.findIndex(c => ['nombre','name','descripcion','descripción'].includes(c));
+            cols.cant   = hasCant;
+            cols.lote   = r.findIndex(c => ['lote','batch','lot'].includes(c));
+            cols.ubic   = r.findIndex(c => ['ubicacion','ubicación','location','ubic'].includes(c));
+            cols.venc   = r.findIndex(c => ['vencimiento','venc','expiry','expiration','fecha_vto'].includes(c));
+            cols.prov   = r.findIndex(c => ['proveedor','supplier','prov'].includes(c));
+            break;
+          }
+        }
 
-          // Nombre: columna 1
-          const nom = String(row[1]||'').trim();
-          // Stock: buscar primer valor numérico en columnas 2 en adelante
-          let stk = 0;
-          for(let c = 2; c < row.length; c++){
-            const v = parseFloat(String(row[c]||'').replace(',','.'));
-            if(!isNaN(v)){ stk = v; break; }
+        // Agrupar por código: sumar cantidades, acumular lotes
+        const grouped = {};
+        const startRow = hRow >= 0 ? hRow + 1 : 0;
+        allRows.slice(startRow).forEach(row => {
+          const getRaw = (idx) => idx >= 0 ? String(row[idx]||'').trim() : '';
+          // Si hay headers detectados usar esos índices, sino buscar en col[0] o col[2]
+          let cod = hRow >= 0
+            ? getRaw(cols.cod).toUpperCase()
+            : String(row[0]||row[2]||'').trim().toUpperCase();
+          if(!codPat.test(cod)) return;
+
+          const nom  = hRow >= 0 ? getRaw(cols.nom)  : String(row[1]||'').trim();
+          const lote = hRow >= 0 ? getRaw(cols.lote) : '';
+          const ubic = hRow >= 0 ? getRaw(cols.ubic) : '';
+          const venc = hRow >= 0 ? getRaw(cols.venc) : '';
+          const prov = hRow >= 0 ? getRaw(cols.prov) : '';
+          let cant = 0;
+          if(hRow >= 0 && cols.cant >= 0){
+            cant = parseFloat(String(row[cols.cant]||'').replace(',','.')) || 0;
+          } else {
+            for(let c = 2; c < row.length; c++){
+              const v = parseFloat(String(row[c]||'').replace(',','.'));
+              if(!isNaN(v)){ cant = v; break; }
+            }
           }
 
-          if(!D.stock[cod]) D.stock[cod] = {nombre: nom||cod, stock:0};
-          if(nom) D.stock[cod].nombre = nom;
-          D.stock[cod].stock = stk;
+          if(!grouped[cod]) grouped[cod] = {nombre: nom||cod, total: 0, lotes: []};
+          if(nom) grouped[cod].nombre = nom;
+          grouped[cod].total += cant;
+          if(lote || venc || ubic) {
+            grouped[cod].lotes.push({
+              lote:       lote  || '',
+              cantidad:   cant,
+              vencimiento:venc  || '',
+              ubicacion:  ubic  || '',
+              proveedor:  prov  || '',
+              fecha:      new Date().toISOString().slice(0,10)
+            });
+          }
+        });
+
+        // Aplicar al D.stock
+        Object.entries(grouped).forEach(([cod, g]) => {
+          if(!D.stock[cod]) D.stock[cod] = {nombre: g.nombre, stock: 0};
+          D.stock[cod].nombre = g.nombre;
+          D.stock[cod].stock  = Math.round(g.total * 1000) / 1000;
+          if(g.lotes.length) D.stock[cod].lotes = g.lotes;
           if(!D.stock[cod].ubicaciones) D.stock[cod].ubicaciones = {deposito:0, sala1:0, sala2:0};
-          const u = D.stock[cod].ubicaciones;
-          u.deposito = Math.round((stk - (u.sala1||0) - (u.sala2||0)) * 1000) / 1000;
+          D.stock[cod].ubicaciones.deposito = Math.round((g.total - (D.stock[cod].ubicaciones.sala1||0) - (D.stock[cod].ubicaciones.sala2||0)) * 1000) / 1000;
           count++;
         });
 
