@@ -619,6 +619,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         </select>
         <input type="file" id="fi-plan-direct" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event,'plan')">
         <button class="btn btn-b btn-sm" onclick="document.getElementById('fi-plan-direct').click()">↑ Importar Excel</button>
+        <button class="btn btn-sm" onclick="abrirEditarPlan()" style="border-color:var(--gold);color:var(--gold)">✏ Editar cantidades</button>
         <button class="btn btn-p" onclick="openM('m-plan')">+ Nueva Orden</button>
       </div>
     </div>
@@ -1388,6 +1389,38 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <div class="modal-footer">
       <button class="btn btn-g" onclick="closeM('m-plan')">Cancelar</button>
       <button class="btn btn-p" onclick="addPlan()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDITAR PLAN -->
+<div class="overlay" id="m-edit-plan">
+  <div class="modal" style="max-width:960px;width:95vw">
+    <button class="modal-close" onclick="closeM('m-edit-plan')">✕</button>
+    <div class="modal-title">✏ Editar Plan de Producción</div>
+    <p style="font-size:11px;color:var(--text3);margin:0 0 16px">Modificá las cantidades por mes. <strong style="color:var(--gold2)">Abril</strong> está resaltado por ser el mes en curso. Guardá y el MRP se puede recalcular automáticamente.</p>
+    <div style="overflow-x:auto;max-height:60vh;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r2)">
+      <table style="width:100%;border-collapse:collapse;min-width:700px">
+        <thead style="position:sticky;top:0;z-index:2">
+          <tr style="font-size:10px;text-transform:uppercase;letter-spacing:.5px">
+            <th style="text-align:left;padding:8px 10px;background:var(--bg3);border-bottom:1px solid var(--border);color:var(--text3)">Código</th>
+            <th style="text-align:left;padding:8px 10px;background:var(--bg3);border-bottom:1px solid var(--border);color:var(--text2)">Producto</th>
+            <th style="text-align:right;padding:8px 10px;background:var(--bg3);border-bottom:1px solid var(--border);color:var(--text3)">Ene</th>
+            <th style="text-align:right;padding:8px 10px;background:var(--bg3);border-bottom:1px solid var(--border);color:var(--text3)">Feb</th>
+            <th style="text-align:right;padding:8px 10px;background:var(--bg3);border-bottom:1px solid var(--border);color:var(--text3)">Mar</th>
+            <th style="text-align:right;padding:8px 6px;background:rgba(201,168,76,.15);border-bottom:2px solid var(--gold);color:var(--gold2);font-weight:700">▶ Abr</th>
+            <th style="text-align:right;padding:8px 10px;background:var(--bg3);border-bottom:1px solid var(--border);color:var(--text3)">May</th>
+            <th style="text-align:right;padding:8px 10px;background:var(--bg3);border-bottom:1px solid var(--border);color:var(--text3)">Jun</th>
+            <th style="text-align:right;padding:8px 10px;background:var(--bg3);border-bottom:1px solid var(--border);color:var(--text3)">Total</th>
+          </tr>
+        </thead>
+        <tbody id="tbl-edit-plan"></tbody>
+      </table>
+    </div>
+    <div class="modal-footer" style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn btn-g" onclick="closeM('m-edit-plan')">Cancelar</button>
+      <button class="btn btn-b" onclick="guardarPlanEdicion(false)">✓ Guardar cambios</button>
+      <button class="btn btn-p" onclick="guardarPlanEdicion(true)" style="font-weight:700">⚡ Guardar y correr MRP</button>
     </div>
   </div>
 </div>
@@ -4052,6 +4085,64 @@ function renderPlan(){
 function deletePlan(cod){
   const p=D.productos.find(x=>x.codigo===cod);
   if(p&&confirm(`¿Eliminar ${cod} del plan?`)){p.feb=0;p.mar=0;p.abr=0;renderPlan();toast('Orden eliminada','🗑️');}
+}
+
+// ── EDITAR PLAN ─────────────────────────────────────────────────────────────
+const _EP_MESES = [{l:'Ene',k:'ene'},{l:'Feb',k:'feb'},{l:'Mar',k:'mar'},{l:'Abr',k:'abr'},{l:'May',k:'may'},{l:'Jun',k:'jun'}];
+
+function abrirEditarPlan(){
+  document.getElementById('tbl-edit-plan').innerHTML = D.productos.map((p, i) => {
+    const cells = _EP_MESES.map(m => {
+      const isAbr = m.k === 'abr';
+      const val = p[m.k] || 0;
+      return `<td style="padding:5px 6px;${isAbr?'background:rgba(201,168,76,.07);':''}" >
+        <input type="number" min="0" step="1" value="${val||''}" placeholder="0"
+          data-idx="${i}" data-mes="${m.k}" class="plan-edit-inp"
+          style="width:72px;text-align:right;font-family:var(--mono);font-size:12px;
+                 background:var(--bg2);border:1px solid ${isAbr?'var(--gold)':'var(--border)'};
+                 border-radius:4px;padding:4px 6px;color:${val>0?'var(--text)':'var(--text3)'};
+                 ${isAbr&&val>0?'font-weight:700;':''}transition:border-color .15s"
+          onfocus="this.style.borderColor='var(--gold)';this.style.color='var(--text)'"
+          onblur="this.style.borderColor='${isAbr?'var(--gold)':'var(--border)'}'"
+          oninput="_epRecalcRow(this)">
+      </td>`;
+    }).join('');
+    const total = _EP_MESES.reduce((s,m) => s+(p[m.k]||0), 0);
+    return `<tr style="border-bottom:1px solid var(--border)" id="ep-row-${i}">
+      <td style="padding:6px 10px;font-family:var(--mono);font-size:10px;color:var(--text3);white-space:nowrap">${p.codigo}</td>
+      <td style="padding:6px 10px;font-size:12px;font-weight:500;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${p.descripcion}">${p.descripcion}</td>
+      ${cells}
+      <td style="padding:6px 10px;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold2);text-align:right;white-space:nowrap" id="ep-tot-${i}">${total>0?fmtU(total):'—'}</td>
+    </tr>`;
+  }).join('');
+  openM('m-edit-plan');
+}
+
+function _epRecalcRow(inp){
+  const idx = inp.dataset.idx;
+  const row = document.getElementById('ep-row-'+idx);
+  let total = 0;
+  row.querySelectorAll('.plan-edit-inp').forEach(el => total += parseFloat(el.value)||0);
+  const tot = document.getElementById('ep-tot-'+idx);
+  if(tot) tot.textContent = total > 0 ? fmtU(total) : '—';
+}
+
+function guardarPlanEdicion(irMRP){
+  document.querySelectorAll('.plan-edit-inp').forEach(inp => {
+    const idx = parseInt(inp.dataset.idx);
+    const mes = inp.dataset.mes;
+    if(D.productos[idx]) D.productos[idx][mes] = parseFloat(inp.value) || 0;
+  });
+  saveState();
+  renderPlan();
+  closeM('m-edit-plan');
+  if(irMRP){
+    toast('Plan guardado — corriendo MRP…','⚡',3000);
+    go('mrp');
+    setTimeout(()=>correrMRP(), 350);
+  } else {
+    toast('✓ Plan de producción actualizado','✏',2500);
+  }
 }
 
 // ══════════════════════════════════════
