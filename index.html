@@ -887,6 +887,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
           <th onclick="sortStock('codigo')">Código ↕</th>
           <th onclick="sortStock('nombre')">Insumo ↕</th>
           <th class="tr" onclick="sortStock('stock')">Total ↕</th>
+          <th style="font-size:10px;color:var(--text2)">📍 Rack</th>
           <th class="tr" style="color:#4a7fd4;font-size:10px">📦 Depósito</th>
           <th class="tr" style="color:var(--gold2);font-size:10px">⚖ Sala P.1</th>
           <th class="tr" style="color:var(--yellow);font-size:10px">⚖ Sala P.2</th>
@@ -5781,10 +5782,16 @@ function renderStock(){
     const rowStyle = dias !== null && dias < 0 ? 'background:rgba(239,68,68,.06)' : dias !== null && dias <= 30 ? 'background:rgba(249,115,22,.04)' : '';
     const u=getUbic(s), dep=u.deposito||0, s1=u.sala1||0, s2=u.sala2||0;
     const fmtUbic=(v,color)=>v>0?`<span style="font-family:var(--mono);font-size:11px;color:${color};font-weight:600">${fmt(v,2)}</span>`:`<span style="color:var(--text3);font-size:10px">—</span>`;
+    // Rack positions: lotes únicos con ubicacion
+    const racks = [...new Set((s.lotes||[]).map(l=>l.ubicacion).filter(Boolean))];
+    const rackCell = racks.length
+      ? racks.map(r=>`<span style="display:inline-block;font-family:var(--mono);font-size:9px;background:rgba(201,168,76,.1);border:1px solid var(--gold-dim);border-radius:4px;padding:1px 5px;color:var(--gold2);margin:1px">${r}</span>`).join('')
+      : `<span style="color:var(--text3);font-size:10px">—</span>`;
     return`<tr style="${rowStyle}">
       <td class="td-code">${s.codigo}</td>
       <td class="td-name">${s.nombre}</td>
       <td class="td-mono tr"><b>${fmt(s.stock,2)}</b> <span style="font-size:9px;color:var(--text3)">${s.um||'kg'}</span></td>
+      <td style="max-width:120px">${rackCell}</td>
       <td class="tr" style="background:rgba(74,127,212,.04)">${fmtUbic(dep,'#4a7fd4')}</td>
       <td class="tr" style="background:rgba(201,168,76,.04)">${fmtUbic(s1,'var(--gold2)')}</td>
       <td class="tr" style="background:rgba(184,150,12,.04)">${fmtUbic(s2,'var(--yellow)')}</td>
@@ -5803,10 +5810,18 @@ function renderStock(){
 function sortStock(col){if(S.stockSort.col===col)S.stockSort.dir*=-1;else{S.stockSort.col=col;S.stockSort.dir=1;}S.stockPage=1;renderStock();}
 
 function exportarStockExcel(){
-  const rows = [['Código','Nombre','Stock','UM','Depósito','Sala 1','Sala 2']];
+  const rows = [['Código','Nombre','Stock','UM','Rack','Lote','Vencimiento','Depósito','Sala 1','Sala 2']];
   getStockArr().sort((a,b)=>a.codigo.localeCompare(b.codigo)).forEach(s=>{
     const u = getUbic(s);
-    rows.push([s.codigo, s.nombre, s.stock, s.um||'kg', u.deposito||0, u.sala1||0, u.sala2||0]);
+    const racks = [...new Set((s.lotes||[]).map(l=>l.ubicacion).filter(Boolean))].join(', ');
+    const loteReciente = (s.lotes||[])[0];
+    rows.push([
+      s.codigo, s.nombre, s.stock, s.um||'kg',
+      racks,
+      loteReciente?.lote || '',
+      loteReciente?.vencimiento || '',
+      u.deposito||0, u.sala1||0, u.sala2||0
+    ]);
   });
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [{wch:12},{wch:36},{wch:10},{wch:6},{wch:10},{wch:10},{wch:10}];
