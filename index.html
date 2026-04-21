@@ -888,6 +888,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
           <th onclick="sortStock('nombre')">Insumo ↕</th>
           <th class="tr" onclick="sortStock('stock')">Total ↕</th>
           <th style="font-size:10px;color:var(--text2)">📍 Rack</th>
+          <th style="font-size:10px;color:var(--text2)">🏷 Lote</th>
           <th class="tr" style="color:#4a7fd4;font-size:10px">📦 Depósito</th>
           <th class="tr" style="color:var(--gold2);font-size:10px">⚖ Sala P.1</th>
           <th class="tr" style="color:var(--yellow);font-size:10px">⚖ Sala P.2</th>
@@ -5792,6 +5793,10 @@ function renderStock(){
       <td class="td-name">${s.nombre}</td>
       <td class="td-mono tr"><b>${fmt(s.stock,2)}</b> <span style="font-size:9px;color:var(--text3)">${s.um||'kg'}</span></td>
       <td style="max-width:120px">${rackCell}</td>
+      <td style="max-width:110px">${(s.lotes||[]).length
+        ? (s.lotes||[]).map(l=>l.lote).filter(Boolean).slice(0,3).map(l=>`<div style="font-family:var(--mono);font-size:9px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${l}">${l}</div>`).join('')
+        : `<span style="color:var(--text3);font-size:10px">—</span>`
+      }</td>
       <td class="tr" style="background:rgba(74,127,212,.04)">${fmtUbic(dep,'#4a7fd4')}</td>
       <td class="tr" style="background:rgba(201,168,76,.04)">${fmtUbic(s1,'var(--gold2)')}</td>
       <td class="tr" style="background:rgba(184,150,12,.04)">${fmtUbic(s2,'var(--yellow)')}</td>
