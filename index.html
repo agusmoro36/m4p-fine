@@ -6349,85 +6349,157 @@ function processImport(file,type){
         const allRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
         const codPat  = /^(MP|PK|INS)-\d/i;
 
-        // Detectar fila de headers buscando columnas clave
+        // Detectar fila de headers buscando columnas clave (flexible: "codigo interno", "stock (kg)", etc.)
         let hRow = -1, cols = {};
         for(let i = 0; i < Math.min(allRows.length, 10); i++){
           const r = allRows[i].map(c => String(c||'').toLowerCase().trim());
-          const hasCode = r.findIndex(c => ['item_id','codigo','código','cod'].includes(c));
-          const hasCant = r.findIndex(c => ['cantidad','stock','qty','quantity'].includes(c));
+          const hasCode = r.findIndex(c => ['item_id','codigo','código','cod'].includes(c) || c.startsWith('codigo'));
+          const hasCant = r.findIndex(c => ['cantidad','stock','qty','quantity'].includes(c) || c.startsWith('stock'));
           if(hasCode >= 0 && hasCant >= 0){
             hRow = i;
             cols.cod    = hasCode;
-            cols.nom    = r.findIndex(c => ['nombre','name','descripcion','descripción'].includes(c));
+            cols.nom    = r.findIndex(c => ['nombre','name','descripcion','descripción'].includes(c) || c.includes('artículo') || c.includes('articulo'));
             cols.cant   = hasCant;
             cols.lote   = r.findIndex(c => ['lote','batch','lot'].includes(c));
             cols.ubic   = r.findIndex(c => ['ubicacion','ubicación','location','ubic'].includes(c));
             cols.venc   = r.findIndex(c => ['vencimiento','venc','expiry','expiration','fecha_vto'].includes(c));
             cols.prov   = r.findIndex(c => ['proveedor','supplier','prov'].includes(c));
+            cols.estado = r.findIndex(c => ['estado','status','state'].includes(c));
             break;
           }
         }
 
-        // Agrupar por código: sumar cantidades, acumular lotes
-        const grouped = {};
-        const startRow = hRow >= 0 ? hRow + 1 : 0;
-        allRows.slice(startRow).forEach(row => {
-          const getRaw = (idx) => idx >= 0 ? String(row[idx]||'').trim() : '';
-          // Si hay headers detectados usar esos índices, sino buscar en col[0] o col[2]
-          let cod = hRow >= 0
-            ? getRaw(cols.cod).toUpperCase()
-            : String(row[0]||row[2]||'').trim().toUpperCase();
-          if(!codPat.test(cod)) return;
+        // Detectar si es formato Salas de Pesado (columna Estado con valores "SALA PESADO")
+        let esSalas = false;
+        if(hRow >= 0 && cols.estado >= 0){
+          esSalas = allRows.slice(hRow+1, hRow+15).some(r =>
+            String(r[cols.estado]||'').toUpperCase().includes('SALA')
+          );
+        }
 
-          const nom  = hRow >= 0 ? getRaw(cols.nom)  : String(row[1]||'').trim();
-          const lote = hRow >= 0 ? getRaw(cols.lote) : '';
-          const ubic = hRow >= 0 ? getRaw(cols.ubic) : '';
-          const venc = hRow >= 0 ? getRaw(cols.venc) : '';
-          const prov = hRow >= 0 ? getRaw(cols.prov) : '';
-          let cant = 0;
-          if(hRow >= 0 && cols.cant >= 0){
-            cant = parseFloat(String(row[cols.cant]||'').replace(',','.')) || 0;
-          } else {
-            for(let c = 2; c < row.length; c++){
-              const v = parseFloat(String(row[c]||'').replace(',','.'));
-              if(!isNaN(v)){ cant = v; break; }
-            }
-          }
+        if(esSalas){
+          // ── MODO SALAS DE PESADO ─────────────────────────────────────────
+          const salaMap = {}; // cod → {nombre, sala1, sala2, lotes[]}
+          allRows.slice(hRow+1).forEach(row => {
+            const getRaw = idx => idx >= 0 ? String(row[idx]||'').trim() : '';
+            const estado = getRaw(cols.estado).toUpperCase();
+            const esSala1 = estado.includes('SALA PESADO 1') || estado.includes('SALA P.1') || estado === 'S1';
+            const esSala2 = estado.includes('SALA PESADO 2') || estado.includes('SALA P.2') || estado === 'S2';
+            if(!esSala1 && !esSala2) return;
 
-          if(!grouped[cod]) grouped[cod] = {nombre: nom||cod, total: 0, lotes: []};
-          if(nom) grouped[cod].nombre = nom;
-          grouped[cod].total += cant;
-          if(lote || venc || ubic) {
-            grouped[cod].lotes.push({
-              lote:       lote  || '',
+            let cod = getRaw(cols.cod).toUpperCase();
+            if(!codPat.test(cod)) return;
+
+            const cant = parseFloat(getRaw(cols.cant).replace(',','.')) || 0;
+            if(cant <= 0) return;
+
+            const nom  = getRaw(cols.nom);
+            const lote = getRaw(cols.lote);
+            const venc = getRaw(cols.venc);
+            const prov = getRaw(cols.prov);
+
+            if(!salaMap[cod]) salaMap[cod] = {nombre: nom||cod, sala1:0, sala2:0, lotes:[]};
+            if(nom) salaMap[cod].nombre = nom;
+            if(esSala1) salaMap[cod].sala1 = Math.round((salaMap[cod].sala1 + cant) * 1000) / 1000;
+            if(esSala2) salaMap[cod].sala2 = Math.round((salaMap[cod].sala2 + cant) * 1000) / 1000;
+
+            salaMap[cod].lotes.push({
+              lote:       lote || '',
               cantidad:   cant,
-              vencimiento:venc  || '',
-              ubicacion:  ubic  || '',
-              proveedor:  prov  || '',
+              vencimiento:venc || '',
+              ubicacion:  esSala1 ? 'Sala P.1' : 'Sala P.2',
+              proveedor:  prov || '',
               fecha:      new Date().toISOString().slice(0,10)
             });
+          });
+
+          // Aplicar al D.stock — sólo actualiza sala1/sala2, preserva depósito
+          Object.entries(salaMap).forEach(([cod, g]) => {
+            if(!D.stock[cod]) D.stock[cod] = {nombre: g.nombre, stock:0, lotes:[]};
+            if(!D.stock[cod].ubicaciones) D.stock[cod].ubicaciones = {deposito:0, sala1:0, sala2:0};
+            D.stock[cod].ubicaciones.sala1 = g.sala1;
+            D.stock[cod].ubicaciones.sala2 = g.sala2;
+            const dep = D.stock[cod].ubicaciones.deposito || 0;
+            D.stock[cod].stock = Math.round((dep + g.sala1 + g.sala2) * 1000) / 1000;
+            // Reemplazar lotes de sala, mantener lotes de depósito
+            const lotesDeposito = (D.stock[cod].lotes||[]).filter(l =>
+              !l.ubicacion || !l.ubicacion.toLowerCase().includes('sala')
+            );
+            D.stock[cod].lotes = [...lotesDeposito, ...g.lotes];
+            count++;
+          });
+
+          const statusEl = document.getElementById('import-status-stock');
+          if(statusEl){
+            statusEl.innerHTML = count > 0
+              ? `<span class="pill pill-ok">✓ ${count} insumos de salas de pesado actualizados</span>`
+              : `<span class="pill pill-warn">⚠ 0 filas importadas — revisar el formato del archivo</span>`;
           }
-        });
+          if(count === 0) toast('No se importó nada','⚠️',5000);
+          else toast(`✓ ${count} insumos de salas de pesado actualizados`,'🏭');
 
-        // Aplicar al D.stock
-        Object.entries(grouped).forEach(([cod, g]) => {
-          if(!D.stock[cod]) D.stock[cod] = {nombre: g.nombre, stock: 0};
-          D.stock[cod].nombre = g.nombre;
-          D.stock[cod].stock  = Math.round(g.total * 1000) / 1000;
-          if(g.lotes.length) D.stock[cod].lotes = g.lotes;
-          if(!D.stock[cod].ubicaciones) D.stock[cod].ubicaciones = {deposito:0, sala1:0, sala2:0};
-          D.stock[cod].ubicaciones.deposito = Math.round((g.total - (D.stock[cod].ubicaciones.sala1||0) - (D.stock[cod].ubicaciones.sala2||0)) * 1000) / 1000;
-          count++;
-        });
+        } else {
+          // ── MODO STOCK DEPÓSITO ──────────────────────────────────────────
+          const grouped = {};
+          const startRow = hRow >= 0 ? hRow + 1 : 0;
+          allRows.slice(startRow).forEach(row => {
+            const getRaw = (idx) => idx >= 0 ? String(row[idx]||'').trim() : '';
+            let cod = hRow >= 0
+              ? getRaw(cols.cod).toUpperCase()
+              : String(row[0]||row[2]||'').trim().toUpperCase();
+            if(!codPat.test(cod)) return;
 
-        const statusEl = document.getElementById('import-status-stock');
-        if(statusEl){
-          statusEl.innerHTML = count > 0
-            ? `<span class="pill pill-ok">✓ ${count} insumos importados</span>`
-            : `<span class="pill pill-warn">⚠ 0 filas importadas — el Excel no tiene códigos MP-XXXX o PK-XXXX en la columna A</span>`;
+            const nom  = hRow >= 0 ? getRaw(cols.nom)  : String(row[1]||'').trim();
+            const lote = hRow >= 0 ? getRaw(cols.lote) : '';
+            const ubic = hRow >= 0 ? getRaw(cols.ubic) : '';
+            const venc = hRow >= 0 ? getRaw(cols.venc) : '';
+            const prov = hRow >= 0 ? getRaw(cols.prov) : '';
+            let cant = 0;
+            if(hRow >= 0 && cols.cant >= 0){
+              cant = parseFloat(String(row[cols.cant]||'').replace(',','.')) || 0;
+            } else {
+              for(let c = 2; c < row.length; c++){
+                const v = parseFloat(String(row[c]||'').replace(',','.'));
+                if(!isNaN(v)){ cant = v; break; }
+              }
+            }
+
+            if(!grouped[cod]) grouped[cod] = {nombre: nom||cod, total: 0, lotes: []};
+            if(nom) grouped[cod].nombre = nom;
+            grouped[cod].total += cant;
+            if(lote || venc || ubic) {
+              grouped[cod].lotes.push({
+                lote:       lote  || '',
+                cantidad:   cant,
+                vencimiento:venc  || '',
+                ubicacion:  ubic  || '',
+                proveedor:  prov  || '',
+                fecha:      new Date().toISOString().slice(0,10)
+              });
+            }
+          });
+
+          // Aplicar al D.stock
+          Object.entries(grouped).forEach(([cod, g]) => {
+            if(!D.stock[cod]) D.stock[cod] = {nombre: g.nombre, stock: 0};
+            D.stock[cod].nombre = g.nombre;
+            D.stock[cod].stock  = Math.round(g.total * 1000) / 1000;
+            if(g.lotes.length) D.stock[cod].lotes = g.lotes;
+            if(!D.stock[cod].ubicaciones) D.stock[cod].ubicaciones = {deposito:0, sala1:0, sala2:0};
+            D.stock[cod].ubicaciones.deposito = Math.round((g.total - (D.stock[cod].ubicaciones.sala1||0) - (D.stock[cod].ubicaciones.sala2||0)) * 1000) / 1000;
+            count++;
+          });
+
+          const statusEl = document.getElementById('import-status-stock');
+          if(statusEl){
+            statusEl.innerHTML = count > 0
+              ? `<span class="pill pill-ok">✓ ${count} insumos importados</span>`
+              : `<span class="pill pill-warn">⚠ 0 filas importadas — el Excel no tiene códigos MP-XXXX o PK-XXXX en la columna A</span>`;
+          }
+          if(count === 0) toast('No se importó nada','⚠️',5000);
+          else toast(`✓ ${count} insumos de stock actualizados`,'📊');
         }
-        if(count === 0) toast('No se importó nada','⚠️',5000);
-        else toast(`✓ ${count} insumos de stock actualizados`,'📊');
+
         saveState();
         go('stock'); // navegar directo a stock para ver los cambios
       } else if(type==='mrp'){
