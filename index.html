@@ -3181,11 +3181,17 @@ function saveState() {
   });
   const payloadSinAdj = {...payload, compras: comprasSinBase64};
 
-  // localStorage: sin base64
+  // localStorage: completo (incluye lotes de stock — solo disponible en este dispositivo)
   try { localStorage.setItem(LS_KEY, JSON.stringify(payloadSinAdj)); } catch(e) {}
 
-  // Supabase main row: también sin base64 (lean → rápido, sin riesgo de payload grande)
-  let payloadParaSB = payloadSinAdj;
+  // Supabase main row: strip lotes de stock (pueden ser muy pesados tras imports grandes)
+  // Los lotes quedan en localStorage del dispositivo; el stock total sí se sincroniza
+  const stockParaSB = {};
+  Object.entries(payload.stock||{}).forEach(([k,v]) => {
+    const {lotes:_lotes, ...rest} = v;
+    stockParaSB[k] = rest;
+  });
+  let payloadParaSB = {...payloadSinAdj, stock: stockParaSB};
   if((payloadParaSB.movimientos||[]).length > 500) {
     payloadParaSB = {...payloadParaSB, movimientos: payloadParaSB.movimientos.slice(0, 500)};
   }
@@ -3223,6 +3229,16 @@ function applyState(st) {
   // inicial; Supabase prevalece sobre ellos para reflejar movimientos reales.
   if (st.stock) {
     Object.assign(D.stock, st.stock);
+    // Restaurar lotes desde localStorage si el estado de Supabase no los trae
+    // (los lotes se stripean del payload de Supabase por tamaño, quedan en localStorage)
+    try {
+      const ls = JSON.parse(localStorage.getItem(LS_KEY)||'{}');
+      if(ls.stock) {
+        Object.entries(ls.stock).forEach(([k,v]) => {
+          if(v.lotes && D.stock[k] && !D.stock[k].lotes) D.stock[k].lotes = v.lotes;
+        });
+      }
+    } catch(e) {}
   }
   if (st.preciosInsumos) S.preciosInsumos = st.preciosInsumos;
   if (st.compras) {
@@ -3248,7 +3264,7 @@ function applyState(st) {
     if(existing) {
       if(!existing._sid) existing._sid = sc._sid;
     } else {
-      S.compras.push(sc);
+      S.compras.push({...sc}); // copia, no referencia directa al seed
     }
   });
   if (st.comprasPropuestas) {
