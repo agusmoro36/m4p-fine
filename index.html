@@ -3112,6 +3112,50 @@ function sbIndicador(estado) {
   txt.textContent = label;
 }
 
+// ── OC States: guardado dedicado para pagada/entregada/comentarios ──────────────
+const OC_STATES_LS = 'mrp_fine_oc_states';
+
+function _captureOCStates() {
+  // Captura el estado actual de todas las OCs identificables
+  const map = {};
+  S.compras.forEach(c => {
+    const key = c._sid || c._uid || (c.codigo + '_' + (c.proveedor||'') + '_' + c.cantidad);
+    map[key] = { pagada: c.pagada, entregada: c.entregada,
+                 comentarios: c.comentarios ? JSON.parse(JSON.stringify(c.comentarios)) : [],
+                 obs: c.obs || '', cant_recibida: c.cant_recibida,
+                 recepciones: c.recepciones ? JSON.parse(JSON.stringify(c.recepciones)) : undefined };
+  });
+  return map;
+}
+
+function _restoreOCStates(map) {
+  if(!map) return;
+  S.compras.forEach(c => {
+    const key = c._sid || c._uid || (c.codigo + '_' + (c.proveedor||'') + '_' + c.cantidad);
+    if(!map[key]) return;
+    const s = map[key];
+    c.pagada     = s.pagada;
+    c.entregada  = s.entregada;
+    c.obs        = s.obs;
+    if(s.comentarios?.length) c.comentarios = s.comentarios;
+    if(s.cant_recibida != null) c.cant_recibida = s.cant_recibida;
+    if(s.recepciones)           c.recepciones   = s.recepciones;
+  });
+}
+
+function _saveOCStates() {
+  // Guarda en localStorage dedicado — sobrevive a applyState()
+  try { localStorage.setItem(OC_STATES_LS, JSON.stringify(_captureOCStates())); } catch(e) {}
+}
+
+function _loadOCStates() {
+  // Restaura desde localStorage dedicado — llamar al final de applyState()
+  try {
+    const raw = localStorage.getItem(OC_STATES_LS);
+    if(raw) _restoreOCStates(JSON.parse(raw));
+  } catch(e) {}
+}
+
 let _sbChannel = null; // canal activo — evitar duplicados
 function sbSuscribir() {
   if(!SB_CLIENT) return;
@@ -3125,13 +3169,18 @@ function sbSuscribir() {
       const nuevo = payload.new?.value;
       // Ignorar actualizaciones de filas que no son el estado principal (ej: fila de adjuntos)
       if(!nuevo || payload.new?.key !== SB_STATE_KEY) return;
-      // No pisar cambios locales más recientes (guard contra race condition multi-dispositivo)
+      // GUARD CRÍTICO: ignorar si el estado entrante es igual o más viejo que el local.
+      // Esto previene que el evento de nuestra propia save (mismo ts) pise los cambios locales.
       const nuevoTs = nuevo.ts || 0;
-      if(nuevoTs < _lastLocalTs) {
-        console.warn('[sub] Ignorando estado entrante más viejo que local:', nuevoTs, '<', _lastLocalTs);
+      if(nuevoTs <= _lastLocalTs) {
+        console.warn('[sub] Ignorando estado entrante (ts <= local):', nuevoTs, '<=', _lastLocalTs);
         return;
       }
+      // Solo aplicar si viene de otro dispositivo (ts estrictamente mayor al local)
+      // Preservar estados de OCs locales antes de aplicar el estado remoto
+      const ocStatesLocales = _captureOCStates();
       applyState(nuevo);
+      _restoreOCStates(ocStatesLocales); // no pisar toggles locales con sync remoto
       // Re-renderizar página activa
       const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
       if(activePage) {
@@ -3326,6 +3375,9 @@ function applyState(st) {
     }
   }
   actualizarBadgePropuestas();
+  // Restaurar estados de OC desde localStorage dedicado — SIEMPRE al final de applyState
+  // Garantiza que pagada/entregada/comentarios/recepciones nunca son pisados por sync remoto
+  _loadOCStates();
 }
 
 function loadState() {
@@ -4702,9 +4754,8 @@ function confirmarRecepcion(idx) {
     toast('📦 +'+fmt(cant,3)+' recibidos · Pendiente: '+fmt(pendiente,3), '📦', 4000);
   }
 
-  // CRÍTICO: guardar SIEMPRE de inmediato (no dentro del timeout de animación).
-  // Si saveState() fuera dentro del setTimeout, un evento del subscription de Supabase
-  // podría llegar durante los 360ms y revertir entregada→false antes del save.
+  // CRÍTICO: guardar SIEMPRE de inmediato
+  _saveOCStates(); // guardado dedicado — sobrevive a cualquier applyState()
   saveState();
 
   const card = document.getElementById('rec-card-'+idx);
@@ -4950,6 +5001,7 @@ function setCampoCompra(idx, campo, valor){
   // Solo actualizar el campo — el stock se impacta ÚNICAMENTE desde Recepción Depósito
   c[campo] = valor;
 
+  _saveOCStates(); // guardado dedicado — sobrevive a cualquier applyState()
   renderCompras();
   saveState();
 }
@@ -5171,6 +5223,7 @@ function agregarComentario() {
   c.comentarios.push({texto, fecha});
   document.getElementById('com-texto').value = '';
   renderHiloComentarios(c);
+  _saveOCStates(); // guardado dedicado
   renderCompras();
   saveState();
   toast('Comentario agregado','💬');
