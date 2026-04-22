@@ -3252,6 +3252,18 @@ function sbSuscribir() {
       const ocStatesLocales = _captureOCStates();
       applyState(nuevo);
       _restoreOCStates(ocStatesLocales); // no pisar toggles locales con sync remoto
+      // Persistir el resultado mergeado (movimientos + producciones) en localStorage
+      // para que el próximo reload ya tenga los datos de ambos dispositivos
+      try {
+        const lsRaw = localStorage.getItem(LS_KEY);
+        const lsObj = lsRaw ? JSON.parse(lsRaw) : {};
+        localStorage.setItem(LS_KEY, JSON.stringify({
+          ...lsObj,
+          movimientos:  S.movimientos,   // post-merge
+          producciones: S.producciones,  // post-merge
+          ts: nuevo.ts                   // ts del sync para que lsTs = sbTs en next reload
+        }));
+      } catch(e) {}
       // Re-renderizar página activa
       const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
       if(activePage) {
@@ -3391,8 +3403,22 @@ function applyState(st) {
     S.comprasPropuestas = st.comprasPropuestas;
   }
   if (st.cotizacionesExtra) S.cotizacionesExtra = st.cotizacionesExtra;
-  if (st.movimientos) S.movimientos = st.movimientos;
-  if (st.producciones) S.producciones = st.producciones;
+  if (st.movimientos) {
+    // MERGE por id: unión de local + remoto — ningún movimiento se pierde en sync entre dispositivos
+    const localMovIds = new Set((S.movimientos||[]).map(m=>m.id).filter(Boolean));
+    const nuevosDeRemoto = (st.movimientos||[]).filter(m => !localMovIds.has(m.id));
+    S.movimientos = [...(S.movimientos||[]), ...nuevosDeRemoto]
+      .sort((a,b) => new Date(b.fecha||0) - new Date(a.fecha||0))
+      .slice(0, 1000);
+  }
+  if (st.producciones) {
+    // MERGE por id: unión de local + remoto
+    const localProdIds = new Set((S.producciones||[]).map(p=>p.id).filter(Boolean));
+    const nuevasDeRemoto = (st.producciones||[]).filter(p => !localProdIds.has(p.id));
+    S.producciones = [...(S.producciones||[]), ...nuevasDeRemoto]
+      .sort((a,b) => new Date(b.fecha||0) - new Date(a.fecha||0))
+      .slice(0, 500);
+  }
   if (st.proveedores) {
     // Merge: el estado guardado prevalece para datos editados por el usuario,
     // pero los insumos SIEMPRE se refrescan desde PROVEEDORES_EXCEL (datos maestros)
@@ -3495,13 +3521,16 @@ async function loadFromSupabase() {
   // Siempre aplicar Supabase cuando sbTs >= lsTs (incluye el caso sbTs === lsTs).
   // El estado de Supabase NO tiene base64 (saveState siempre lo stripea).
   applyState(data.value);
-  // applyState() ya mergeó OCs locales (_uid) que no están en Supabase todavía.
-  // CRÍTICO: guardar S.compras (post-merge) en localStorage, NO data.value.compras.
-  // Si usáramos data.value.compras, perderíamos las OCs creadas localmente que
-  // todavía no se sincronizaron a Supabase (ej: OC creada y adjuntada esta sesión).
-  const _lsVal = {...data.value, compras: S.compras.map(c => {
-    if(c.adjunto?.data){ const{data:_d,...s}=c.adjunto; return{...c,adjunto:s}; } return c;
-  })};
+  // applyState() ya mergeó OCs locales (_uid), movimientos y producciones.
+  // CRÍTICO: guardar en localStorage los valores POST-MERGE, no data.value directo.
+  // Así cada campo tiene el union de local + remoto, sin pérdidas.
+  const _lsVal = {...data.value,
+    compras: S.compras.map(c => {
+      if(c.adjunto?.data){ const{data:_d,...s}=c.adjunto; return{...c,adjunto:s}; } return c;
+    }),
+    movimientos:  S.movimientos,   // post-merge (local + remoto)
+    producciones: S.producciones   // post-merge (local + remoto)
+  };
   try { localStorage.setItem(LS_KEY, JSON.stringify(_lsVal)); } catch(e) {}
 
   // 1) Restaurar adjuntos desde localStorage del dispositivo (rápido, offline)
