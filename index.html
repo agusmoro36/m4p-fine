@@ -3192,6 +3192,41 @@ function _loadOCStates() {
   } catch(e) {}
 }
 
+// ── Plan cantidades: mismo patrón que OC states ─────────────────────────────
+const PLAN_QTY_LS = 'mrp_fine_plan_qty';
+
+function _savePlanQty() {
+  try {
+    const snap = {
+      ts: Date.now(),
+      data: D.productos.map(p => ({
+        codigo: p.codigo,
+        ene: p.ene||0, feb: p.feb||0, mar: p.mar||0,
+        abr: p.abr||0, may: p.may||0, jun: p.jun||0
+      }))
+    };
+    localStorage.setItem(PLAN_QTY_LS, JSON.stringify(snap));
+  } catch(e) {}
+}
+
+function _loadPlanQty(incomingTs) {
+  // Solo restaura si nuestro snapshot local es igual o más reciente que el estado entrante.
+  // Si el sync viene de otro dispositivo con ts MAYOR, sus cantidades prevalecen.
+  try {
+    const raw = localStorage.getItem(PLAN_QTY_LS);
+    if(!raw) return;
+    const snap = JSON.parse(raw);
+    if(snap.ts < (incomingTs || 0)) return; // estado entrante es más nuevo → no pisar
+    snap.data.forEach(sp => {
+      const found = D.productos.find(p => p.codigo === sp.codigo);
+      if(found) Object.assign(found, {
+        ene: sp.ene, feb: sp.feb, mar: sp.mar,
+        abr: sp.abr, may: sp.may, jun: sp.jun
+      });
+    });
+  } catch(e) {}
+}
+
 let _sbChannel = null; // canal activo — evitar duplicados
 function sbSuscribir() {
   if(!SB_CLIENT) return;
@@ -3412,8 +3447,9 @@ function applyState(st) {
   }
   actualizarBadgePropuestas();
   // Restaurar estados de OC desde localStorage dedicado — SIEMPRE al final de applyState
-  // Garantiza que pagada/entregada/comentarios/recepciones nunca son pisados por sync remoto
   _loadOCStates();
+  // Restaurar cantidades del plan si nuestro snapshot local es igual o más reciente
+  _loadPlanQty(st.ts || 0);
 }
 
 function loadState() {
@@ -4086,7 +4122,13 @@ function renderPlan(){
 }
 function deletePlan(cod){
   const p=D.productos.find(x=>x.codigo===cod);
-  if(p&&confirm(`¿Eliminar ${cod} del plan?`)){p.feb=0;p.mar=0;p.abr=0;renderPlan();toast('Orden eliminada','🗑️');}
+  if(p&&confirm(`¿Eliminar ${cod} del plan?`)){
+    p.ene=0;p.feb=0;p.mar=0;p.abr=0;p.may=0;p.jun=0;
+    _savePlanQty();
+    saveState();
+    renderPlan();
+    toast('Orden eliminada','🗑️');
+  }
 }
 
 // ── EDITAR PLAN ─────────────────────────────────────────────────────────────
@@ -4135,6 +4177,7 @@ function guardarPlanEdicion(irMRP){
     const mes = inp.dataset.mes;
     if(D.productos[idx]) D.productos[idx][mes] = parseFloat(inp.value) || 0;
   });
+  _savePlanQty(); // snapshot dedicado — sobrevive a cualquier applyState()
   saveState();
   renderPlan();
   closeM('m-edit-plan');
@@ -6792,6 +6835,7 @@ function addPlan(){
   if(p){p[mes]=(p[mes]||0)+qty;}
   closeM('m-plan');
   renderPlan();
+  _savePlanQty();
   saveState();
   toast('Orden de producción agregada','✓');
 }
