@@ -3303,8 +3303,14 @@ function applyState(st) {
     const localTs    = S.stockImportTs || 0;
     if (incomingTs >= localTs) {
       if (incomingTs > localTs) S.stockImportTs = incomingTs;
-      Object.assign(D.stock, st.stock);
-      // Restaurar lotes desde LS (pueden venir sin lotes desde Supabase por tamaño)
+      // Merge preservando lotes: Supabase no manda lotes (son pesados),
+      // el hardcodeado y el LS sí los tienen → no los pisamos
+      Object.entries(st.stock).forEach(([k, v]) => {
+        const lotesExistentes = D.stock[k]?.lotes;
+        D.stock[k] = D.stock[k] ? {...D.stock[k], ...v} : {...v};
+        if (!v.lotes && lotesExistentes) D.stock[k].lotes = lotesExistentes;
+      });
+      // Restaurar lotes desde LS como segunda fuente
       try {
         const ls = JSON.parse(localStorage.getItem(LS_KEY)||'{}');
         if (ls.stock && (ls.stockImportTs || 0) >= incomingTs) {
