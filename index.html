@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-002';
+  var VER = '20260423-003';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -2010,6 +2010,51 @@ body.viewer-mode .page-filters select { pointer-events:auto }
   </div>
 </div>
 
+<div class="overlay" id="m-revalida">
+  <div class="modal" style="max-width:480px">
+    <button class="modal-close" onclick="closeM('m-revalida')">✕</button>
+    <div class="modal-title">📎 Carta de Reválida</div>
+    <input type="hidden" id="rev-cod">
+    <div class="fg">
+      <div class="fl">
+        <label>Insumo</label>
+        <input id="rev-nombre" class="finp" style="width:100%;background:var(--bg2);color:var(--text3)" readonly>
+      </div>
+      <!-- Adjunto existente -->
+      <div id="rev-existente" style="display:none;padding:10px 14px;background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.3);border-radius:8px;margin-bottom:4px">
+        <div style="font-size:11px;color:var(--gold2);font-weight:600;margin-bottom:6px">📎 Carta adjunta</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="rev-adj-nombre" style="font-size:12px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+          <button class="btn btn-sm" onclick="verRevalida()" style="font-size:10px;padding:3px 8px;border-color:#4a7fd4;color:#4a7fd4">👁 Ver</button>
+        </div>
+        <div id="rev-adj-meta" style="font-size:10px;color:var(--text3);margin-top:4px"></div>
+      </div>
+      <!-- Nuevo archivo -->
+      <div class="fl">
+        <label id="rev-file-label">Adjuntar carta de reválida <span style="color:var(--text3);font-weight:400">(PDF o imagen)</span></label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="file" id="rev-file-input" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="_onRevalidaFileChange(this)">
+          <button class="btn btn-sm" onclick="document.getElementById('rev-file-input').click()" style="font-size:11px;padding:5px 12px;border-color:var(--text3);color:var(--text2)">📁 Elegir archivo</button>
+          <span id="rev-file-sel" style="font-size:11px;color:var(--text3)">Sin archivo seleccionado</span>
+        </div>
+      </div>
+      <!-- Nueva fecha de vencimiento -->
+      <div class="fl">
+        <label>Nueva fecha de vencimiento (según la carta)</label>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input id="rev-venc" type="date" class="finp" style="flex:1;min-width:160px">
+          <span id="rev-venc-actual" style="font-size:11px;color:var(--text3)"></span>
+        </div>
+      </div>
+      <div id="rev-preview" style="display:none;padding:10px 14px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);border-radius:6px;font-size:12px;margin-top:4px"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-p" style="flex:1" onclick="guardarRevalida()">✓ Guardar reválida</button>
+      <button class="btn" onclick="closeM('m-revalida')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <datalist id="prov-list"></datalist>
 <datalist id="insumo-list"></datalist>
 
@@ -2674,6 +2719,7 @@ const S = {
   importHistory:[],
   preciosInsumos:{},
   facturasExtra:[],   // facturas agregadas manualmente (no están en FACTURAS_DATA)
+  revalidas:{},       // cartas de reválida: {codigo: {nombre,tipo,tamaño,vencimientoRevalida,fecha}}
 };
 
 // ══════════════════════════════════════
@@ -3033,6 +3079,38 @@ async function sbDeleteAdjuntoFile(oc) {
   } catch(e) {}
 }
 
+// ── Reválidas Supabase (key: rev_{codigo}) ──────────────────────────────────
+async function sbSaveRevalida(codigo, adjunto) {
+  if(!SB_CLIENT) return false;
+  const key = 'rev_' + codigo;
+  for(let i=0; i<3; i++) {
+    try {
+      const { error } = await SB_CLIENT.from(SB_TABLE).upsert({
+        key,
+        value: { nombre: adjunto.nombre, tipo: adjunto.tipo, data: adjunto.data, tamaño: adjunto.tamaño },
+        update_at: new Date().toISOString()
+      }, { onConflict: 'key' });
+      if(!error) return true;
+      console.warn(`sbSaveRevalida intento ${i+1}:`, error.message);
+    } catch(e) { console.warn(`sbSaveRevalida intento ${i+1}:`, e); }
+    if(i < 2) await new Promise(r => setTimeout(r, 1000*(i+1)));
+  }
+  return false;
+}
+
+async function sbCargarRevalida(codigo) {
+  if(!SB_CLIENT) return null;
+  try {
+    const key = 'rev_' + codigo;
+    const { data, error } = await SB_CLIENT
+      .from(SB_TABLE).select('value')
+      .eq('key', key).single();
+    if(error || !data) return null;
+    return data.value;
+  } catch(e) { return null; }
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 // Cargar un adjunto específico desde Supabase (on-demand, para verFactura)
 async function sbCargarAdjunto(oc) {
   if(!SB_CLIENT) return null;
@@ -3272,6 +3350,7 @@ function saveState() {
       ? facturasState.reduce((acc,f)=>{acc[f._id]={pagada:f.pagada,entregada:f.entregada};return acc;},{})
       : {},
     facturasExtra: S.facturasExtra||[],
+    revalidas: S.revalidas||{},
     stock: D.stock,
     stockSeedVersion: STOCK_SEED_VERSION,
     ts: Date.now()
@@ -3450,6 +3529,7 @@ function applyState(st) {
     const existIds = new Set(facturasState.map(f=>f._id));
     st.facturasExtra.forEach(f => { if(!existIds.has(f._id)) facturasState.push(f); });
   }
+  if (st.revalidas) S.revalidas = {...(S.revalidas||{}), ...st.revalidas};
   if (st.ts) {
     const ts = document.getElementById('save-ts');
     if(ts) {
@@ -6054,11 +6134,12 @@ function renderStock(){
       <td class="tr" style="background:rgba(184,150,12,.04)">${fmtUbic(s2,'var(--yellow)')}</td>
       <td><div class="sbar"><div class="sbar-bg"><div class="sbar-fill" style="width:${pct.toFixed(1)}%;background:${cls}"></div></div><span class="pill ${s.stock<=0?'pill-crit':pct<10?'pill-low':pct<40?'pill-warn':'pill-ok'}" style="font-size:8px">${s.stock<=0?'0':pct<10?'crítico':pct<40?'bajo':'ok'}</span></div></td>
       <td>${vencPill(s._venc)}</td>
-      <td style="display:flex;gap:4px">
+      <td style="display:flex;gap:4px;flex-wrap:wrap">
         <button class="btn btn-sm" onclick="abrirAjusteStock('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:var(--gold);color:var(--gold)" title="Ajustar stock">✏</button>
         <button class="btn btn-sm" onclick="abrirTransferir('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:#4a7fd4;color:#4a7fd4" title="Transferir">↔</button>
         <button class="btn btn-sm" onclick="verMovimientosInsumo('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:var(--text3);color:var(--text3)" title="Ver historial de movimientos">⏱</button>
         <button class="btn btn-sm" onclick="abrirRegistrarLote('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:#22c55e;color:#22c55e" title="Registrar lote / vencimiento">📅</button>
+        <button class="btn btn-sm" onclick="abrirRevalida('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:${(S.revalidas||{})[s.codigo]?'var(--gold)':'var(--text3)'};color:${(S.revalidas||{})[s.codigo]?'var(--gold)':'var(--text3)'};${(S.revalidas||{})[s.codigo]?'background:rgba(201,168,76,.1)':''}" title="${(S.revalidas||{})[s.codigo]?'Reválida adjunta — ver/editar':'Adjuntar carta de reválida'}">📎${(S.revalidas||{})[s.codigo]?'<span style="font-size:7px;margin-left:2px;color:#22c55e">●</span>':''}</button>
       </td>
     </tr>`;
   }).join('');
@@ -8272,6 +8353,156 @@ function guardarLote() {
   closeM('m-lote');
   renderStock();
   toast('✓ Lote registrado — '+cod+(num?' · '+num:'')+(venc?' · Vence: '+venc.split('-').reverse().join('/'):''),'📅',4000);
+}
+
+// ══════════════════════════════════════
+// REVÁLIDAS
+// ══════════════════════════════════════
+const REV_LS_PREFIX = 'mrp_rev_';
+let _revalidaData = {};    // caché en memoria: {codigo: 'data:application/pdf;base64,...'}
+let _revalidaFileTmp = null; // archivo cargado en el modal antes de guardar
+
+function _guardarRevalidaLS(codigo, adjunto){
+  try { localStorage.setItem(REV_LS_PREFIX + codigo, JSON.stringify(adjunto)); return true; }
+  catch(e){ return false; }
+}
+function _cargarRevalidaLS(codigo){
+  try { const r = localStorage.getItem(REV_LS_PREFIX + codigo); return r ? JSON.parse(r) : null; }
+  catch(e){ return null; }
+}
+
+function _onRevalidaFileChange(input) {
+  const file = input.files[0];
+  if(!file) return;
+  if(file.size > 10 * 1024 * 1024){ toast('Archivo muy grande (máx 10 MB)','⚠️',3000); input.value=''; return; }
+  const sizeKB = Math.round(file.size / 1024);
+  document.getElementById('rev-file-sel').textContent = `${file.name} (${sizeKB} KB)`;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    _revalidaFileTmp = { nombre: file.name, tipo: file.type, data: ev.target.result, tamaño: file.size };
+    const prev = document.getElementById('rev-preview');
+    prev.style.display = '';
+    prev.innerHTML = `<span style="color:#22c55e">✓ Archivo listo</span> · <b>${file.name}</b> · ${sizeKB} KB`;
+  };
+  reader.readAsDataURL(file);
+}
+
+function abrirRevalida(cod) {
+  if(document.body.classList.contains('viewer-mode')){ toast('Solo el administrador puede adjuntar reválidas','⚠️',2500); return; }
+  const s = D.stock[cod];
+  if(!s) return;
+  _revalidaFileTmp = null;
+  document.getElementById('rev-cod').value = cod;
+  document.getElementById('rev-nombre').value = cod + ' — ' + (s.nombre||cod);
+  document.getElementById('rev-file-input').value = '';
+  document.getElementById('rev-file-sel').textContent = 'Sin archivo seleccionado';
+  document.getElementById('rev-preview').style.display = 'none';
+  // Vencimiento actual del insumo
+  const vencActual = proximaVenc(s);
+  const vencEl = document.getElementById('rev-venc-actual');
+  vencEl.innerHTML = vencActual
+    ? 'Actual: ' + vencPill(vencActual)
+    : '<span style="color:var(--text3)">Sin vencimiento registrado</span>';
+  // Datos de reválida existente
+  const rev = (S.revalidas||{})[cod];
+  const existEl = document.getElementById('rev-existente');
+  if(rev) {
+    existEl.style.display = '';
+    document.getElementById('rev-adj-nombre').textContent = rev.nombre || '—';
+    const meta = [
+      rev.vencimientoRevalida ? 'Nuevo vencimiento: ' + rev.vencimientoRevalida.split('-').reverse().join('/') : '',
+      rev.fecha ? 'Cargada el ' + rev.fecha.split('-').reverse().join('/') : '',
+      rev.tamaño ? Math.round(rev.tamaño/1024) + ' KB' : ''
+    ].filter(Boolean).join(' · ');
+    document.getElementById('rev-adj-meta').textContent = meta;
+    document.getElementById('rev-venc').value = rev.vencimientoRevalida || vencActual || '';
+    document.getElementById('rev-file-label').textContent = 'Reemplazar carta de reválida';
+  } else {
+    existEl.style.display = 'none';
+    document.getElementById('rev-venc').value = vencActual || '';
+    document.getElementById('rev-file-label').textContent = 'Adjuntar carta de reválida';
+  }
+  openM('m-revalida');
+}
+
+function guardarRevalida() {
+  const cod  = document.getElementById('rev-cod').value;
+  const venc = document.getElementById('rev-venc').value;
+  if(!cod) return;
+  const s = D.stock[cod];
+  if(!s) return;
+  if(!_revalidaFileTmp && !(S.revalidas||{})[cod]) {
+    toast('Seleccioná un archivo PDF para adjuntar','⚠️',3000);
+    return;
+  }
+  if(!venc) {
+    toast('Ingresá la nueva fecha de vencimiento','⚠️',3000);
+    return;
+  }
+  // Actualizar vencimiento en el lote más reciente (o crear lote básico)
+  if(!s.lotes) s.lotes = [];
+  if(s.lotes.length > 0) {
+    s.lotes[0].vencimiento = venc;
+  } else {
+    s.lotes.push({ lote:'', vencimiento: venc, cantidad: s.stock||0, fecha: new Date().toISOString().slice(0,10) });
+  }
+  // Guardar metadata en S.revalidas (sin base64)
+  if(!S.revalidas) S.revalidas = {};
+  const adjBase = _revalidaFileTmp || (S.revalidas[cod]||{});
+  S.revalidas[cod] = {
+    nombre: adjBase.nombre || S.revalidas[cod]?.nombre || '',
+    tipo:   adjBase.tipo   || S.revalidas[cod]?.tipo   || '',
+    tamaño: adjBase.tamaño || S.revalidas[cod]?.tamaño || 0,
+    vencimientoRevalida: venc,
+    fecha: new Date().toISOString().slice(0,10)
+  };
+  saveState();
+  actualizarBadgeAlertas();
+  closeM('m-revalida');
+  renderStock();
+  toast(`✓ Reválida ${cod} — vence ${venc.split('-').reverse().join('/')}`, '📎', 4000);
+  // Subir PDF a la nube si hay archivo nuevo
+  if(_revalidaFileTmp) {
+    const fullAdj = {..._revalidaFileTmp};
+    _revalidaData[cod] = fullAdj.data;
+    _guardarRevalidaLS(cod, fullAdj);
+    _revalidaFileTmp = null;
+    const sizeKB = Math.round((fullAdj.tamaño||0)/1024);
+    toast(`⟳ Subiendo carta a la nube (${sizeKB} KB)...`, '☁', 5000);
+    sbSaveRevalida(cod, fullAdj).then(ok => {
+      if(ok) toast(`✓ Carta de reválida ${cod} guardada en la nube`, '☁', 4000);
+      else   toast(`⚠ No se pudo subir a la nube. Disponible solo en este dispositivo.`, '⚠️', 8000);
+    });
+  }
+}
+
+function verRevalida(cod) {
+  cod = cod || document.getElementById('rev-cod')?.value;
+  const rev = (S.revalidas||{})[cod];
+  if(!rev || !rev.nombre) { toast('Sin carta de reválida adjunta','⚠️',2000); return; }
+  // 1) Caché en memoria
+  if(_revalidaData[cod]) {
+    abrirVisorFactura(_revalidaData[cod], rev.nombre, rev.tipo);
+    return;
+  }
+  // 2) localStorage del dispositivo
+  const adjLS = _cargarRevalidaLS(cod);
+  if(adjLS?.data) {
+    _revalidaData[cod] = adjLS.data;
+    abrirVisorFactura(adjLS.data, rev.nombre, rev.tipo);
+    return;
+  }
+  // 3) Supabase (cross-device)
+  toast('⟳ Cargando carta desde la nube...', '☁', 5000);
+  sbCargarRevalida(cod).then(adjunto => {
+    if(adjunto?.data) {
+      _revalidaData[cod] = adjunto.data;
+      _guardarRevalidaLS(cod, adjunto);
+      abrirVisorFactura(adjunto.data, rev.nombre, rev.tipo);
+    } else {
+      toast('Carta no disponible. El admin debe subirla de nuevo.', '⚠️', 5000);
+    }
+  });
 }
 
 // ══════════════════════════════════════
