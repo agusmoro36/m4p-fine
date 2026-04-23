@@ -878,6 +878,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-stock" placeholder="Buscar..." oninput="renderStock();renderStockUbicacion()"></div>
         <button class="btn btn-p btn-sm" onclick="abrirTransferir(null)">↔ Transferir</button>
         <button class="btn btn-sm" onclick="abrirAjusteStock(null)" style="border-color:var(--gold);color:var(--gold)">✏ Ajuste</button>
+        <button class="btn btn-sm" id="btn-guardar-stock" onclick="guardarStockEnNube()" style="border-color:#4caf50;color:#4caf50" title="Guarda el stock actual en la nube para que todos los dispositivos lo vean">☁ Guardar stock</button>
       </div>
     </div>
     <div class="tabs" style="margin-bottom:0">
@@ -2647,7 +2648,7 @@ const S = {
   mrpResultado: null,
   mrpHorizonte: ['mar','abr'],
   planEditTs: 0,   // timestamp de la última edición EXPLÍCITA del plan (separado del ts general)
-  stockImportTs: new Date('2026-04-23T12:00:00').getTime(), // baseline = fix 23-04 — fuerza re-push sobre cualquier Supabase anterior
+  stockImportTs: 0, // se setea solo cuando el usuario importa un Excel de stock
   producciones:[],
   histPage:1,
   mrpSort:{col:'',dir:1}, mrpSemaFilter:'',
@@ -3289,14 +3290,12 @@ function saveState() {
 
 function applyState(st) {
   if(!st) return;
-  // ── Stock: protección por timestamp de importación ──────────────────────────
-  // Solo se aplica el stock entrante si su stockImportTs es >= el local.
-  // Esto evita que un save viejo de otro dispositivo pise un import más reciente.
-  // Baseline: S.stockImportTs = 20-04-2026 (hardcodeado en el código).
-  // Cada import Excel actualiza S.stockImportTs = Date.now() (siempre más reciente).
-  if (st.stock) {
-    const incomingTs = st.stockImportTs || 0;
-    const localTs    = S.stockImportTs  || 0;
+  // ── Stock: solo aplicar si vino de un import real del usuario ───────────────
+  // stockImportTs = 0 → dato de baseline hardcodeado → se ignora (el código ya lo tiene)
+  // stockImportTs > 0 → vino de un import Excel explícito → se aplica si es >= local
+  if (st.stock && (st.stockImportTs || 0) > 0) {
+    const incomingTs = st.stockImportTs;
+    const localTs    = S.stockImportTs || 0;
     if (incomingTs >= localTs) {
       if (incomingTs > localTs) S.stockImportTs = incomingTs;
       Object.assign(D.stock, st.stock);
@@ -3310,8 +3309,8 @@ function applyState(st) {
         }
       } catch(e) {}
     }
-    // Si incomingTs < localTs: D.stock queda con el dato local más reciente
   }
+  // Si stockImportTs = 0 o incoming < local: D.stock queda con el baseline hardcodeado
   if (st.preciosInsumos) S.preciosInsumos = st.preciosInsumos;
   if (st.compras) {
     // Preservar OCs creadas esta sesión (_uid) que aún no llegaron a la nube
@@ -3504,15 +3503,6 @@ async function loadFromSupabase() {
 
   sbIndicador('ok');
   sbSuscribir();
-
-  // ── Auto-push si el stock en Supabase es anterior al local ────────────────
-  // applyState() ya dejó el stock local correcto. Si SB está desactualizado,
-  // guardamos para que todos los dispositivos vean el stock más reciente.
-  if(!isViewer && (!data.value?.stockImportTs || data.value.stockImportTs < (S.stockImportTs || 0))) {
-    console.warn('[Stock] stockImportTs de Supabase es anterior al local — pusheando stock actualizado...');
-    toast('⟳ Actualizando stock en la nube…', '⟳', 4000);
-    saveState();
-  }
 }
 
 function _reRenderActivePage() {
@@ -6007,6 +5997,15 @@ function renderStock(){
   renderPag('pag-stock',data.length,25,S.stockPage,p=>{S.stockPage=p;renderStock();});
 }
 function sortStock(col){if(S.stockSort.col===col)S.stockSort.dir*=-1;else{S.stockSort.col=col;S.stockSort.dir=1;}S.stockPage=1;renderStock();}
+
+function guardarStockEnNube(){
+  if(isViewer){ toast('Solo el administrador puede guardar stock','⚠️',3000); return; }
+  S.stockImportTs = Date.now();
+  saveState();
+  toast('☁ Stock guardado en la nube — todos los dispositivos verán este stock al recargar','✓',4000);
+  const btn = document.getElementById('btn-guardar-stock');
+  if(btn){ btn.textContent='✓ Guardado'; btn.disabled=true; setTimeout(()=>{ btn.textContent='☁ Guardar stock'; btn.disabled=false; },5000); }
+}
 
 function exportarStockExcel(){
   const rows = [['Código','Nombre','Stock','UM','Rack','Lote','Vencimiento','Depósito','Sala 1','Sala 2']];
