@@ -2019,13 +2019,13 @@ body.viewer-mode .page-filters select { pointer-events:auto }
 // ══════════════════════════════════════
 const D = {
   productos:[
-    {codigo:'PT-0003',descripcion:'FINE BEAUTY TROPICAL MIX',subcategory:'Nacional',feb:49,mar:900,abr:2100,may:0,jun:0},
-    {codigo:'PT-0002',descripcion:'FINE POWER RED SUPER FRUITS',subcategory:'Nacional',feb:2500,mar:1250,abr:2800,may:0,jun:0},
+    {codigo:'PT-0003',descripcion:'FINE BEAUTY TROPICAL MIX',subcategory:'Nacional',feb:49,mar:900,abr:0,may:0,jun:0},
+    {codigo:'PT-0002',descripcion:'FINE POWER RED SUPER FRUITS',subcategory:'Nacional',feb:2500,mar:1250,abr:0,may:0,jun:0},
     {codigo:'PT-0004',descripcion:'FINE SMOOTH ARANDANOS',subcategory:'Nacional',feb:515,mar:3000,abr:590,may:0,jun:0},
     {codigo:'PT-0001',descripcion:'FINE PEAK',subcategory:'Nacional',feb:0,mar:4000,abr:1220,may:0,jun:0},
-    {codigo:'PT-0006',descripcion:'FINE FIT',subcategory:'Nacional',feb:0,mar:0,abr:304,may:0,jun:0},
-    {codigo:'PT-0024',descripcion:'FINE SCULPT',subcategory:'Nacional',feb:0,mar:0,abr:525,may:0,jun:0},
-    {codigo:'PT-0025',descripcion:'FINE STRONG',subcategory:'Nacional',feb:160,mar:0,abr:300,may:0,jun:0},
+    {codigo:'PT-0006',descripcion:'FINE FIT',subcategory:'Nacional',feb:0,mar:0,abr:0,may:0,jun:0},
+    {codigo:'PT-0024',descripcion:'FINE SCULPT',subcategory:'Nacional',feb:0,mar:0,abr:0,may:0,jun:0},
+    {codigo:'PT-0025',descripcion:'FINE STRONG',subcategory:'Nacional',feb:160,mar:0,abr:0,may:0,jun:0},
     {codigo:'PT-0005',descripcion:'FINE RESET',subcategory:'Nacional',feb:1202,mar:1500,abr:679,may:0,jun:0},
     {codigo:'PT-0008',descripcion:'DIABLA SUPERGREEN LIMON',subcategory:'Terceros',feb:1000,mar:1500,abr:0,may:0,jun:0},
     {codigo:'PT-0009',descripcion:'DIABLA SUPERGREEN MANZANA',subcategory:'Terceros',feb:1000,mar:1500,abr:0,may:0,jun:0},
@@ -3182,18 +3182,17 @@ function _autoFixPlanAbril(force) {
   if(document.body.classList.contains('viewer-mode')) return; // solo admin
   const yaFijado = (S.planEditTs || 0) >= _PLAN_FIX_TS;
   if(yaFijado && !force) return; // ya correctos — no re-ejecutar
-  // Corregir cantidades abril
+  // Solo estos 3 tienen valor en abril, el resto = 0
   const fixes = {'PT-0001':1220,'PT-0004':590,'PT-0005':679};
-  Object.entries(fixes).forEach(([cod,abr]) => {
-    const p = D.productos.find(x=>x.codigo===cod);
-    if(p) p.abr = abr;
+  D.productos.forEach(p => {
+    p.abr = fixes[p.codigo] || 0;
   });
   S.planEditTs = _PLAN_FIX_TS;
   _savePlanQty();
   saveState();
   if(typeof renderPlan==='function' && document.getElementById('page-plan')?.classList.contains('active')) renderPlan();
   toast('✓ Plan abril corregido y guardado en la nube','✓',3000);
-  console.log('✓ Auto-fix plan abril: PEAK=1220, SMOOTH=590, RESET=679, planEditTs='+_PLAN_FIX_TS);
+  console.log('✓ Auto-fix plan abril: PEAK=1220, SMOOTH=590, RESET=679, resto=0, planEditTs='+_PLAN_FIX_TS);
 }
 
 let _sbChannel = null; // canal activo — evitar duplicados
