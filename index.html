@@ -2020,8 +2020,8 @@ const D = {
   productos:[
     {codigo:'PT-0003',descripcion:'FINE BEAUTY TROPICAL MIX',subcategory:'Nacional',feb:49,mar:900,abr:2100,may:0,jun:0},
     {codigo:'PT-0002',descripcion:'FINE POWER RED SUPER FRUITS',subcategory:'Nacional',feb:2500,mar:1250,abr:2800,may:0,jun:0},
-    {codigo:'PT-0004',descripcion:'FINE SMOOTH ARANDANOS',subcategory:'Nacional',feb:515,mar:3000,abr:1475,may:0,jun:0},
-    {codigo:'PT-0001',descripcion:'FINE PEAK',subcategory:'Nacional',feb:0,mar:4000,abr:2440,may:0,jun:0},
+    {codigo:'PT-0004',descripcion:'FINE SMOOTH ARANDANOS',subcategory:'Nacional',feb:515,mar:3000,abr:590,may:0,jun:0},
+    {codigo:'PT-0001',descripcion:'FINE PEAK',subcategory:'Nacional',feb:0,mar:4000,abr:1220,may:0,jun:0},
     {codigo:'PT-0006',descripcion:'FINE FIT',subcategory:'Nacional',feb:0,mar:0,abr:304,may:0,jun:0},
     {codigo:'PT-0024',descripcion:'FINE SCULPT',subcategory:'Nacional',feb:0,mar:0,abr:525,may:0,jun:0},
     {codigo:'PT-0025',descripcion:'FINE STRONG',subcategory:'Nacional',feb:160,mar:0,abr:300,may:0,jun:0},
@@ -2662,7 +2662,7 @@ const S = {
   movimientos:[],
   mrpResultado: null,
   mrpHorizonte: ['mar','abr'],
-  planEditTs: 0,   // timestamp de la última edición EXPLÍCITA del plan (separado del ts general)
+  planEditTs: new Date('2026-04-23T23:00:00').getTime(), // baseline hardcodeado 23-04 — protege plan contra Supabase viejo
   stockImportTs: 0, // se setea solo cuando el usuario importa un Excel de stock
   producciones:[],
   histPage:1,
@@ -3405,7 +3405,8 @@ function applyState(st) {
   if (st.mrpResultado) {
     S.mrpResultado = st.mrpResultado;
   }
-  if (st.productos) {
+  // Solo aplicar productos si su planEditTs es >= al local (protege el hardcodeado y ediciones explícitas)
+  if (st.productos && (st.planEditTs || 0) >= (S.planEditTs || 0)) {
     st.productos.forEach(sp => {
       const found = D.productos.find(p=>p.codigo===sp.codigo);
       if(found) Object.assign(found, {ene:sp.ene||0,feb:sp.feb||0,mar:sp.mar||0,abr:sp.abr||0,may:sp.may||0,jun:sp.jun||0});
