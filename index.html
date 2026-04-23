@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-005';
+  var VER = '20260423-006';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3528,7 +3528,10 @@ function applyState(st) {
     const existIds = new Set(facturasState.map(f=>f._id));
     st.facturasExtra.forEach(f => { if(!existIds.has(f._id)) facturasState.push(f); });
   }
-  if (st.revalidas) S.revalidas = {...(S.revalidas||{}), ...st.revalidas};
+  if (st.revalidas) {
+    S.revalidas = {...(S.revalidas||{}), ...st.revalidas};
+    _aplicarVencimientosRevalidas(); // re-inyectar fechas a los lotes
+  }
   if (st.ts) {
     const ts = document.getElementById('save-ts');
     if(ts) {
@@ -8428,6 +8431,43 @@ let _revalidaFileTmp = null; // archivo cargado en el modal antes de guardar
 function _revKey(cod, loteObj, loteIdx) {
   const num = (loteObj?.lote || '').trim();
   return num ? cod + '__' + num : cod + '__#' + loteIdx;
+}
+
+// Re-aplica vencimientoRevalida → lote.vencimiento al cargar el sistema.
+// Los lotes solo viven en localStorage/memoria; S.revalidas sí va a Supabase.
+// Esta función "re-inyecta" las fechas de reválida a los lotes correspondientes,
+// y crea un lote placeholder si no existe en el dispositivo (ej: dispositivo nuevo).
+function _aplicarVencimientosRevalidas() {
+  const revs = S.revalidas || {};
+  Object.entries(revs).forEach(([key, rev]) => {
+    if(!rev || !rev.vencimientoRevalida) return;
+    const sep = key.indexOf('__');
+    if(sep < 0) return;
+    const cod     = key.slice(0, sep);
+    const loteRef = key.slice(sep + 2); // ej: "LOT-001" | "#0" | "general"
+    const s = D.stock[cod];
+    if(!s) return;
+    if(!s.lotes) s.lotes = [];
+    let target = null;
+    if(loteRef === 'general') {
+      if(!s.lotes.length)
+        s.lotes.push({ lote:'', vencimiento:'', cantidad: s.stock||0, fecha: rev.fecha||'' });
+      target = s.lotes[0];
+    } else if(loteRef.startsWith('#')) {
+      const idx = parseInt(loteRef.slice(1));
+      if(!s.lotes[idx])
+        s.lotes.push({ lote:'', vencimiento:'', cantidad: s.stock||0, fecha: rev.fecha||'' });
+      target = s.lotes[idx] || s.lotes[s.lotes.length-1];
+    } else {
+      // Buscar por número de lote; si no existe crear placeholder
+      target = s.lotes.find(l => (l.lote||'') === loteRef);
+      if(!target) {
+        s.lotes.push({ lote: loteRef, vencimiento:'', cantidad: s.stock||0, fecha: rev.fecha||'' });
+        target = s.lotes[s.lotes.length-1];
+      }
+    }
+    if(target) target.vencimiento = rev.vencimientoRevalida;
+  });
 }
 
 function _guardarRevalidaLS(key, adjunto){
