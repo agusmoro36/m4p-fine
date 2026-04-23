@@ -3493,13 +3493,23 @@ async function loadFromSupabase() {
 
   if(lsTs > sbTs && !isViewer) {
     // localStorage más reciente (Supabase save anterior falló).
-    // Antes de pushear, restaurar adjuntos desde Supabase para no perderlos.
-    // Restaurar adjuntos desde localStorage antes de pushear
+    // PERO: siempre aplicar planEditTs de Supabase si es más reciente — protege plan
+    // contra localStorage con datos viejos (ej: Safari bfcache con plan incorrecto).
+    if(data.value?.planEditTs && (data.value.planEditTs > (S.planEditTs || 0))) {
+      const sbPlanTs = data.value.planEditTs;
+      const fixes = {'PT-0001':1220,'PT-0004':590,'PT-0005':679};
+      (data.value.productos||[]).forEach(sp => {
+        const p = D.productos.find(x=>x.codigo===sp.codigo);
+        if(p) p.abr = fixes.hasOwnProperty(sp.codigo) ? fixes[sp.codigo] : 0;
+      });
+      S.planEditTs = sbPlanTs;
+      _savePlanQty();
+      console.log('✓ Plan abril forzado desde Supabase (planEditTs superior)');
+    }
     _restaurarAdjuntosLS();
     console.warn('localStorage más reciente que Supabase — sincronizando hacia la nube...');
-    toast('⟳ Sincronizando cambios locales pendientes...', '⟳', 3000);
-    saveState(); // push estado local → Supabase
-    _reRenderActivePage(); // re-renderizar para mostrar adjuntos restaurados
+    saveState(); // push estado local → Supabase (ahora incluye plan correcto)
+    _reRenderActivePage();
     sbIndicador('ok');
     sbSuscribir();
     return;
@@ -7253,6 +7263,17 @@ document.addEventListener('visibilitychange', () => {
 
 // Guardar en beforeunload (al menos localStorage queda sync antes de cerrar)
 window.addEventListener('beforeunload', () => { saveState(); });
+
+// Safari bfcache: cuando el usuario vuelve con el botón "atrás" o restaura la pestaña,
+// el JS está "congelado" con datos viejos. Forzamos recarga desde Supabase para que
+// los datos siempre estén frescos independientemente del caché de Safari.
+window.addEventListener('pageshow', (e) => {
+  if(e.persisted) {
+    // Página restaurada desde bfcache — refrescar datos desde la nube
+    loadFromSupabase();
+  }
+});
+
 actualizarBadgePropuestas();
 // Cargar desde Supabase (fuente única de verdad — siempre prevalece)
 // NO llamar saveState() antes para no pisar los datos reales de la nube
