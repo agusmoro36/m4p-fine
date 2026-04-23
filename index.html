@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-004';
+  var VER = '20260423-005';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -884,7 +884,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     </div>
     <div class="tabs" style="margin-bottom:0">
       <div class="tab active" onclick="stockTab('consolidado',this)">📊 Consolidado</div>
-      <div class="tab" onclick="stockTab('ubicacion',this)">🗂 Por ubicación</div>
+      <div class="tab" onclick="stockTab('ubicacion',this)">⚖ Sala de Pesado</div>
     </div>
     <div class="tab-pane active" id="stp-consolidado">
       <div class="tbl-wrap"><table>
@@ -906,12 +906,10 @@ body.viewer-mode .page-filters select { pointer-events:auto }
       <div class="tbl-wrap"><table>
         <thead><tr>
           <th>Código</th><th>Insumo</th>
-          <th class="tr" style="background:rgba(74,127,212,.07);color:#4a7fd4">📦 Depósito</th>
-          <th class="tr" style="background:rgba(201,168,76,.07);color:var(--gold2)">⚖ Sala Pesado 1</th>
-          <th class="tr" style="background:rgba(184,150,12,.07);color:var(--yellow)">⚖ Sala Pesado 2</th>
-          <th class="tr">Total</th>
-          <th>Último lote</th>
+          <th class="tr" style="color:var(--gold2)">⚖ Sala P.1</th>
+          <th class="tr" style="color:var(--yellow)">⚖ Sala P.2</th>
           <th>Vencimiento</th>
+          <th style="font-size:10px;color:var(--text2)">🧪 Usado en</th>
           <th></th>
         </tr></thead>
         <tbody id="tbl-stock-ubic"></tbody>
@@ -5972,48 +5970,90 @@ function stockTab(id, el) {
 
 function renderStockUbicacion() {
   initAllUbicaciones();
-  const arr = getStockArr();
   const q = (document.getElementById('s-stock')?.value||'').toLowerCase();
+  const arr = getStockArr();
 
-  // KPI cards por ubicación
-  const totals = {deposito:0, sala1:0, sala2:0};
-  arr.forEach(s=>{ const u=getUbic(s); totals.deposito+=u.deposito||0; totals.sala1+=u.sala1||0; totals.sala2+=u.sala2||0; });
-  document.getElementById('ubic-kpis').innerHTML = ['deposito','sala1','sala2'].map(k=>{
-    const info=UBIC_INFO[k], tot=totals[k], cnt=arr.filter(s=>(s.ubicaciones||{})[k]>0).length;
-    return `<div style="padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;border-top:3px solid ${info.color}">
-      <div style="font-size:10px;color:var(--text3);font-family:var(--mono);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">${info.icon} ${info.label}</div>
-      <div style="font-size:10px;color:var(--text3);margin-bottom:6px">${info.desc}</div>
-      <div style="font-size:22px;font-weight:700;color:${info.color};font-family:var(--mono)">${fmt(tot,2)}</div>
-      <div style="font-size:10px;color:var(--text3);margin-top:2px">${cnt} insumo${cnt!==1?'s':''} con stock · <a href="#" onclick="abrirTransferir(null);return false" style="color:${info.color}">↔ transferir</a></div>
+  // Lookup: insumo → lista de productos (nombre corto) que lo usan en BOM
+  const _insProd = {};
+  Object.entries(BOM_COMPLETO).forEach(([ptCod, bom]) => {
+    (bom.insumos||[]).forEach(ins => {
+      if(!_insProd[ins.codigo]) _insProd[ins.codigo] = [];
+      if(!_insProd[ins.codigo].find(p => p.codigo === ptCod))
+        _insProd[ins.codigo].push({codigo: ptCod, nombre: bom.nombre});
+    });
+  });
+
+  // Solo insumos con stock en Sala P.1 o Sala P.2
+  let data = arr.filter(s => {
+    const u = getUbic(s);
+    if((u.sala1||0) <= 0 && (u.sala2||0) <= 0) return false;
+    if(q && !s.codigo.toLowerCase().includes(q) && !s.nombre.toLowerCase().includes(q)) return false;
+    return true;
+  }).map(s => ({...s, _venc: proximaVenc(s)}));
+
+  // KPIs
+  let totS1 = 0, totS2 = 0;
+  arr.forEach(s => { const u=getUbic(s); totS1+=u.sala1||0; totS2+=u.sala2||0; });
+  const cntS1 = data.filter(s=>(getUbic(s).sala1||0)>0).length;
+  const cntS2 = data.filter(s=>(getUbic(s).sala2||0)>0).length;
+  const venc30 = data.filter(s=>{ const d=diasHastaVenc(s._venc); return d!==null&&d<=30; });
+  const vencidos = venc30.filter(s=>diasHastaVenc(s._venc)<0);
+  document.getElementById('ubic-kpis').innerHTML = `
+    <div style="padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;border-top:3px solid var(--gold2)">
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">⚖ Sala Pesado 1</div>
+      <div style="font-size:24px;font-weight:700;color:var(--gold2);font-family:var(--mono)">${fmt(totS1,2)} <span style="font-size:12px;font-weight:400">kg</span></div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">${cntS1} insumo${cntS1!==1?'s':''} en sala · <a href="#" onclick="abrirTransferir(null);return false" style="color:var(--gold2)">↔ transferir</a></div>
+    </div>
+    <div style="padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;border-top:3px solid var(--yellow)">
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">⚖ Sala Pesado 2</div>
+      <div style="font-size:24px;font-weight:700;color:var(--yellow);font-family:var(--mono)">${fmt(totS2,2)} <span style="font-size:12px;font-weight:400">kg</span></div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">${cntS2} insumo${cntS2!==1?'s':''} en sala · <a href="#" onclick="abrirTransferir(null);return false" style="color:var(--yellow)">↔ transferir</a></div>
+    </div>
+    <div style="padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;border-top:3px solid ${vencidos.length?'var(--red)':venc30.length?'var(--orange)':'#22c55e'}">
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">⏰ Vencimientos</div>
+      <div style="font-size:24px;font-weight:700;color:${vencidos.length?'var(--red)':venc30.length?'var(--orange)':'#22c55e'};font-family:var(--mono)">${vencidos.length ? vencidos.length+' vencido'+(vencidos.length>1?'s':'') : venc30.length ? venc30.length+' en ≤30d' : '✓ ok'}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">${data.length} insumos en sala en total</div>
     </div>`;
-  }).join('');
 
   // Tabla
-  let data = arr.filter(s=> !q || s.codigo.toLowerCase().includes(q) || s.nombre.toLowerCase().includes(q));
   const PER=25, page=S.stockUbicPage||1;
   const paged = paginate(data, page, PER);
-  document.getElementById('tbl-stock-ubic').innerHTML = paged.map(s=>{
-    const u=getUbic(s), dep=u.deposito||0, s1=u.sala1||0, s2=u.sala2||0;
-    const fmtQ=(v,bg,color)=>v>0
-      ?`<td class="td-mono tr" style="background:${bg};font-weight:600;color:${color}">${fmt(v,3)} <span style="font-size:9px;font-weight:400;color:var(--text3)">${s.um||'kg'}</span></td>`
-      :`<td class="td-mono tr" style="color:var(--text3)">—</td>`;
-    // lote y vencimiento del lote más reciente
-    const ultiLote = s.lotes?.length ? (s.lotes[0].lote||'—') : '—';
-    const _venc    = proximaVenc(s);
-    const dias     = diasHastaVenc(_venc);
-    const rowStyle = dias!==null&&dias<0?'background:rgba(239,68,68,.05)':dias!==null&&dias<=30?'background:rgba(249,115,22,.04)':'';
+
+  if(!data.length) {
+    document.getElementById('tbl-stock-ubic').innerHTML =
+      `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">
+        <div style="font-size:32px;margin-bottom:8px">⚖</div>
+        <div style="font-size:13px">No hay insumos en sala de pesado.<br>Usá ↔ Transferir para mover desde el depósito.</div>
+      </td></tr>`;
+    renderPag('pag-stock-ubic', 0, PER, 1, ()=>{});
+    return;
+  }
+
+  document.getElementById('tbl-stock-ubic').innerHTML = paged.map(s => {
+    const u = getUbic(s);
+    const s1 = u.sala1||0, s2 = u.sala2||0;
+    const dias = diasHastaVenc(s._venc);
+    const rowStyle = dias!==null&&dias<0
+      ? 'background:rgba(192,57,43,.1);border-left:3px solid var(--red)'
+      : dias!==null&&dias<=30 ? 'background:rgba(249,115,22,.06)' : '';
+    const fmtSala = (v, color) => v > 0
+      ? `<b style="color:${color};font-family:var(--mono)">${fmt(v,3)}</b> <span style="font-size:9px;color:var(--text3)">${s.um||'kg'}</span>`
+      : `<span style="color:var(--text3)">—</span>`;
+    const prods = _insProd[s.codigo] || [];
+    const prodsHTML = prods.length
+      ? prods.slice(0,3).map(p=>`<span style="display:inline-block;font-size:9px;background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.25);border-radius:10px;padding:1px 6px;color:var(--gold2);margin:1px;white-space:nowrap">${p.nombre}</span>`).join('')
+        + (prods.length>3?`<span style="font-size:9px;color:var(--text3)"> +${prods.length-3}</span>`:'')
+      : `<span style="color:var(--text3);font-size:10px">—</span>`;
     return `<tr style="${rowStyle}">
       <td class="td-code">${s.codigo}</td>
       <td class="td-name">${s.nombre}</td>
-      ${fmtQ(dep,'rgba(74,127,212,.05)','#4a7fd4')}
-      ${fmtQ(s1,'rgba(201,168,76,.05)','var(--gold2)')}
-      ${fmtQ(s2,'rgba(184,150,12,.05)','var(--yellow)')}
-      <td class="td-mono tr"><b>${fmt(s.stock,3)}</b> <span style="font-size:9px;color:var(--text3)">${s.um||'kg'}</span></td>
-      <td style="font-size:10px;color:var(--text3);font-family:var(--mono)">${ultiLote}</td>
-      <td>${vencPill(_venc)}</td>
+      <td class="tr" style="background:rgba(201,168,76,.04)">${fmtSala(s1,'var(--gold2)')}</td>
+      <td class="tr" style="background:rgba(184,150,12,.04)">${fmtSala(s2,'var(--yellow)')}</td>
+      <td>${vencPill(s._venc)}</td>
+      <td style="max-width:200px">${prodsHTML}</td>
       <td style="display:flex;gap:4px">
-        <button class="btn btn-sm" onclick="abrirTransferir('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:#4a7fd4;color:#4a7fd4" title="Transferir">↔</button>
-        <button class="btn btn-sm" onclick="abrirAjusteStock('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:var(--gold);color:var(--gold)" title="Ajustar">✏</button>
+        <button class="btn btn-sm" onclick="abrirTransferir('${s.codigo}')" style="font-size:10px;padding:3px 8px;border-color:#4a7fd4;color:#4a7fd4" title="Reponer / transferir">↔ Reponer</button>
+        <button class="btn btn-sm" onclick="abrirAjusteStock('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:var(--gold);color:var(--gold)" title="Ajustar stock">✏</button>
       </td>
     </tr>`;
   }).join('');
