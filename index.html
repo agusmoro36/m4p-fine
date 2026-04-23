@@ -2647,6 +2647,7 @@ const S = {
   mrpResultado: null,
   mrpHorizonte: ['mar','abr'],
   planEditTs: 0,   // timestamp de la última edición EXPLÍCITA del plan (separado del ts general)
+  stockImportTs: new Date('2026-04-20').getTime(), // timestamp del último import de stock (baseline = 20-04)
   producciones:[],
   histPage:1,
   mrpSort:{col:'',dir:1}, mrpSemaFilter:'',
@@ -3224,6 +3225,7 @@ function saveState() {
     proveedores: S.proveedores.map(({insumos:_, ...rest}) => rest),
     productos: D.productos,
     planEditTs: S.planEditTs || 0,
+    stockImportTs: S.stockImportTs || 0,
     mrpResultado: S.mrpResultado,
     facturasToggles: typeof facturasState !== 'undefined'
       ? facturasState.reduce((acc,f)=>{acc[f._id]={pagada:f.pagada,entregada:f.entregada};return acc;},{})
@@ -3287,23 +3289,29 @@ function saveState() {
 
 function applyState(st) {
   if(!st) return;
-  // D.stock: solo aplicar si la versión del seed coincide con la actual.
-  // Si el estado guardado es de una versión anterior (stock viejo), se ignora
-  // y se mantiene el baseline hardcodeado en el código (más reciente y correcto).
-  if (st.stock && st.stockSeedVersion === STOCK_SEED_VERSION) {
-    Object.assign(D.stock, st.stock);
-    // Restaurar lotes desde localStorage si el estado de Supabase no los trae
-    // (los lotes se stripean del payload de Supabase por tamaño, quedan en localStorage)
-    try {
-      const ls = JSON.parse(localStorage.getItem(LS_KEY)||'{}');
-      if(ls.stock && ls.stockSeedVersion === STOCK_SEED_VERSION) {
-        Object.entries(ls.stock).forEach(([k,v]) => {
-          if(v.lotes && D.stock[k] && !D.stock[k].lotes) D.stock[k].lotes = v.lotes;
-        });
-      }
-    } catch(e) {}
+  // ── Stock: protección por timestamp de importación ──────────────────────────
+  // Solo se aplica el stock entrante si su stockImportTs es >= el local.
+  // Esto evita que un save viejo de otro dispositivo pise un import más reciente.
+  // Baseline: S.stockImportTs = 20-04-2026 (hardcodeado en el código).
+  // Cada import Excel actualiza S.stockImportTs = Date.now() (siempre más reciente).
+  if (st.stock) {
+    const incomingTs = st.stockImportTs || 0;
+    const localTs    = S.stockImportTs  || 0;
+    if (incomingTs >= localTs) {
+      if (incomingTs > localTs) S.stockImportTs = incomingTs;
+      Object.assign(D.stock, st.stock);
+      // Restaurar lotes desde LS (pueden venir sin lotes desde Supabase por tamaño)
+      try {
+        const ls = JSON.parse(localStorage.getItem(LS_KEY)||'{}');
+        if (ls.stock && (ls.stockImportTs || 0) >= incomingTs) {
+          Object.entries(ls.stock).forEach(([k,v]) => {
+            if(v.lotes && D.stock[k] && !D.stock[k].lotes) D.stock[k].lotes = v.lotes;
+          });
+        }
+      } catch(e) {}
+    }
+    // Si incomingTs < localTs: D.stock queda con el dato local más reciente
   }
-  // Si la versión no coincide: D.stock queda con el baseline hardcodeado del código
   if (st.preciosInsumos) S.preciosInsumos = st.preciosInsumos;
   if (st.compras) {
     // Preservar OCs creadas esta sesión (_uid) que aún no llegaron a la nube
@@ -3497,12 +3505,11 @@ async function loadFromSupabase() {
   sbIndicador('ok');
   sbSuscribir();
 
-  // ── Auto-push si el stock en Supabase es de una versión anterior ──────────
-  // Si la versión del seed no coincide, applyState() ignoró el stock de SB
-  // y dejó el baseline hardcodeado. Lo guardamos a SB para que todos los
-  // dispositivos vean el stock actualizado al próximo reload.
-  if(!isViewer && data.value?.stockSeedVersion !== STOCK_SEED_VERSION) {
-    console.warn('[Stock] Versión desactualizada en Supabase — pusheando stock actualizado...');
+  // ── Auto-push si el stock en Supabase es anterior al local ────────────────
+  // applyState() ya dejó el stock local correcto. Si SB está desactualizado,
+  // guardamos para que todos los dispositivos vean el stock más reciente.
+  if(!isViewer && (!data.value?.stockImportTs || data.value.stockImportTs < (S.stockImportTs || 0))) {
+    console.warn('[Stock] stockImportTs de Supabase es anterior al local — pusheando stock actualizado...');
     toast('⟳ Actualizando stock en la nube…', '⟳', 4000);
     saveState();
   }
@@ -6548,7 +6555,7 @@ function processImport(file,type){
               : `<span class="pill pill-warn">⚠ 0 filas importadas — revisar el formato del archivo</span>`;
           }
           if(count === 0) toast('No se importó nada','⚠️',5000);
-          else toast(`✓ ${count} insumos de salas de pesado actualizados`,'🏭');
+          else { S.stockImportTs = Date.now(); toast(`✓ ${count} insumos de salas de pesado actualizados`,'🏭'); }
 
         } else {
           // ── MODO STOCK DEPÓSITO ──────────────────────────────────────────
@@ -6609,7 +6616,7 @@ function processImport(file,type){
               : `<span class="pill pill-warn">⚠ 0 filas importadas — el Excel no tiene códigos MP-XXXX o PK-XXXX en la columna A</span>`;
           }
           if(count === 0) toast('No se importó nada','⚠️',5000);
-          else toast(`✓ ${count} insumos de stock actualizados`,'📊');
+          else { S.stockImportTs = Date.now(); toast(`✓ ${count} insumos de stock actualizados`,'📊'); }
         }
 
         saveState();
