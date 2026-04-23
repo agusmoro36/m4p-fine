@@ -6004,7 +6004,7 @@ function renderStock(){
 function sortStock(col){if(S.stockSort.col===col)S.stockSort.dir*=-1;else{S.stockSort.col=col;S.stockSort.dir=1;}S.stockPage=1;renderStock();}
 
 function guardarStockEnNube(){
-  if(isViewer){ toast('Solo el administrador puede guardar stock','⚠️',3000); return; }
+  if(document.body.classList.contains('viewer-mode')){ toast('Solo el administrador puede guardar stock','⚠️',3000); return; }
   S.stockImportTs = Date.now();
   saveState();
   toast('☁ Stock guardado en la nube — todos los dispositivos verán este stock al recargar','✓',4000);
