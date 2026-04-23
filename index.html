@@ -7262,7 +7262,10 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // Guardar en beforeunload (al menos localStorage queda sync antes de cerrar)
-window.addEventListener('beforeunload', () => { saveState(); });
+// pagehide en lugar de beforeunload: evita guardar estado obsoleto cuando
+// Safari/iOS manda la página a bfcache (standalone mode). Solo guarda cuando
+// la página se destruye realmente (e.persisted === false).
+window.addEventListener('pagehide', (e) => { if(!e.persisted) saveState(); });
 
 // Safari bfcache: cuando el usuario vuelve con el botón "atrás" o restaura la pestaña,
 // el JS está "congelado" con datos viejos. Forzamos recarga desde Supabase para que
