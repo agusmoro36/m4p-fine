@@ -2892,6 +2892,9 @@ function paginate(data,page,per){return data.slice((page-1)*per,page*per);}
 // PERSISTENCIA (localStorage)
 // ══════════════════════════════════════
 const LS_KEY = 'mrp_fine_v8';
+// Versión del seed de stock hardcodeado. Si la versión en Supabase/LS es distinta,
+// se ignora el stock guardado y se usa el baseline del código (más reciente).
+const STOCK_SEED_VERSION = '20260420';
 
 // ══════════════════════════════════════
 // SUPABASE — SINCRONIZACIÓN EN LA NUBE
@@ -3225,6 +3228,7 @@ function saveState() {
       : {},
     facturasExtra: S.facturasExtra||[],
     stock: D.stock,
+    stockSeedVersion: STOCK_SEED_VERSION,
     ts: Date.now()
   };
   _lastLocalTs = payload.ts; // registrar timestamp local ANTES de cualquier await
@@ -3281,21 +3285,23 @@ function saveState() {
 
 function applyState(st) {
   if(!st) return;
-  // D.stock: se restaura desde la nube. Los valores del HTML son el punto de partida
-  // inicial; Supabase prevalece sobre ellos para reflejar movimientos reales.
-  if (st.stock) {
+  // D.stock: solo aplicar si la versión del seed coincide con la actual.
+  // Si el estado guardado es de una versión anterior (stock viejo), se ignora
+  // y se mantiene el baseline hardcodeado en el código (más reciente y correcto).
+  if (st.stock && st.stockSeedVersion === STOCK_SEED_VERSION) {
     Object.assign(D.stock, st.stock);
     // Restaurar lotes desde localStorage si el estado de Supabase no los trae
     // (los lotes se stripean del payload de Supabase por tamaño, quedan en localStorage)
     try {
       const ls = JSON.parse(localStorage.getItem(LS_KEY)||'{}');
-      if(ls.stock) {
+      if(ls.stock && ls.stockSeedVersion === STOCK_SEED_VERSION) {
         Object.entries(ls.stock).forEach(([k,v]) => {
           if(v.lotes && D.stock[k] && !D.stock[k].lotes) D.stock[k].lotes = v.lotes;
         });
       }
     } catch(e) {}
   }
+  // Si la versión no coincide: D.stock queda con el baseline hardcodeado del código
   if (st.preciosInsumos) S.preciosInsumos = st.preciosInsumos;
   if (st.compras) {
     // Preservar OCs creadas esta sesión (_uid) que aún no llegaron a la nube
@@ -3485,6 +3491,16 @@ async function loadFromSupabase() {
 
   sbIndicador('ok');
   sbSuscribir();
+
+  // ── Auto-push si el stock en Supabase es de una versión anterior ──────────
+  // Si la versión del seed no coincide, applyState() ignoró el stock de SB
+  // y dejó el baseline hardcodeado. Lo guardamos a SB para que todos los
+  // dispositivos vean el stock actualizado al próximo reload.
+  if(!isViewer && data.value?.stockSeedVersion !== STOCK_SEED_VERSION) {
+    console.warn('[Stock] Versión desactualizada en Supabase — pusheando stock actualizado...');
+    toast('⟳ Actualizando stock en la nube…', '⟳', 4000);
+    saveState();
+  }
 }
 
 function _reRenderActivePage() {
