@@ -1013,7 +1013,17 @@ body.viewer-mode .page-filters select { pointer-events:auto }
           </div>
         </div>
         <div class="tbl-wrap"><table>
-          <thead><tr><th>Código</th><th>Insumo</th><th class="tr">Cant/Lote</th><th class="tr">Necesario</th><th class="tr">Stock Actual</th><th class="tr">Diferencia</th><th>Estado</th><th>Acción</th></tr></thead>
+          <thead><tr>
+            <th>Código</th>
+            <th>Insumo</th>
+            <th class="tr">Cant/Lote</th>
+            <th class="tr" style="color:var(--gold2)" title="Cantidad exacta proporcional a las unidades ingresadas">Necesario exacto</th>
+            <th class="tr" style="color:var(--text2)" title="Cantidad para producir el batch completo">Batch completo</th>
+            <th class="tr">Stock actual</th>
+            <th class="tr">Diferencia</th>
+            <th>Estado</th>
+            <th>Acción</th>
+          </tr></thead>
           <tbody id="tbl-calc"></tbody>
         </table></div>
       </div>
@@ -6072,36 +6082,42 @@ function calcMRP(){
   if(!prod||!qty){document.getElementById('tbl-calc').innerHTML='';return;}
   const bom=BOM_COMPLETO[prod];
   if(!bom) return;
-  const loteMin=bom.lote_min||1;
-  const nLotes=Math.ceil(qty/loteMin);
+  const loteMin = bom.lote_min || 1;
+
+  // Factor exacto (proporcional a las unidades ingresadas, sin redondear)
+  const factorExacto = qty / loteMin;
+  // Lotes para batch completo (redondeado hacia arriba)
+  const nLotesBatch = Math.ceil(factorExacto);
+
   let ok=0,falta=0,totalFaltaUSD=0;
 
-  // Calcular todos los insumos primero
   const insumos = bom.insumos.map(ins=>{
-    const nec=ins.cantidad*nLotes;
-    const sv=parseFloat(D.stock[ins.codigo]?.stock)||0;
-    const diff=sv-nec;
-    const comprar=diff<0?Math.abs(diff):0;
+    const necExacto = ins.cantidad * factorExacto;   // cantidad exacta proporcional
+    const necBatch  = ins.cantidad * nLotesBatch;    // cantidad para batch completo
+    const sv = parseFloat(D.stock[ins.codigo]?.stock)||0;
+    const diff = sv - necExacto;                     // diferencia vs exacto
+    const comprar = diff<0 ? Math.abs(diff) : 0;
     if(diff>=0) ok++; else falta++;
-    const precioRef=S.compras.find(c=>c.codigo===ins.codigo)?.precio||0;
+    const precioRef = S.compras.find(c=>c.codigo===ins.codigo)?.precio||0;
     if(comprar>0&&precioRef>0) totalFaltaUSD+=comprar*precioRef;
-    return { ins, nec, sv, diff, comprar, precioRef };
+    return { ins, necExacto, necBatch, sv, diff, comprar, precioRef };
   });
 
-  // Aplicar filtro si está activo
   const visibles = _calcFiltroFalta ? insumos.filter(r=>r.diff<0) : insumos;
 
-  const rows = visibles.map(({ins,nec,sv,diff,comprar})=>{
-    const accion=diff<0
-      ?`<button class="btn btn-o btn-sm" onclick="abrirOC('${ins.codigo}','${ins.nombre}',${comprar.toFixed(2)})">+ OC</button>`
-      :'<span style="color:var(--acc);font-size:11px">✓</span>';
+  const rows = visibles.map(({ins,necExacto,necBatch,sv,diff,comprar})=>{
+    const accion = diff<0
+      ? `<button class="btn btn-o btn-sm" onclick="abrirOC('${ins.codigo}','${ins.nombre}',${comprar.toFixed(3)})">+ OC</button>`
+      : '<span style="color:var(--acc);font-size:11px">✓</span>';
+    const diffColor = diff<0 ? 'var(--red)' : 'var(--acc)';
     return`<tr>
       <td class="td-code">${ins.codigo}</td>
       <td class="td-name">${ins.nombre}</td>
-      <td class="td-mono tr">${ins.cantidad} ${ins.um}</td>
-      <td class="td-mono tr">${fmt(nec,3)} ${ins.um}</td>
+      <td class="td-mono tr" style="color:var(--text2)">${fmt(ins.cantidad,3)} ${ins.um}</td>
+      <td class="td-mono tr" style="color:var(--gold2);font-weight:600">${fmt(necExacto,3)} ${ins.um}</td>
+      <td class="td-mono tr" style="color:var(--text2)">${fmt(necBatch,3)} ${ins.um}</td>
       <td class="td-mono tr">${fmt(sv,3)}</td>
-      <td class="td-mono tr" style="color:${diff<0?'var(--red)':'var(--acc)'};font-weight:600">${diff>=0?'+':''}${fmt(diff,3)}</td>
+      <td class="td-mono tr" style="color:${diffColor};font-weight:600">${diff>=0?'+':''}${fmt(diff,3)}</td>
       <td>${diff>=0?'<span class="pill pill-ok">OK</span>':'<span class="pill pill-crit">FALTA</span>'}</td>
       <td>${accion}</td>
     </tr>`;
@@ -6109,20 +6125,29 @@ function calcMRP(){
 
   const tbl = document.getElementById('tbl-calc');
   tbl.innerHTML = rows.join('') ||
-    `<tr><td colspan="8" class="tc" style="color:var(--text3);padding:20px">
+    `<tr><td colspan="9" class="tc" style="color:var(--text3);padding:20px">
       ${_calcFiltroFalta ? '✓ Ningún insumo falta para esta producción' : 'Sin resultados'}
     </td></tr>`;
 
-  // Actualizar label del botón con el conteo
   const btn = document.getElementById('btn-calc-falta');
   if(btn) btn.innerHTML = `⚠ Solo faltantes${falta>0?' ('+falta+')':''}`;
+
+  // ¿Puede producir el exacto con stock actual?
+  const puedeExacto = falta === 0;
+  const unidadesBatch = nLotesBatch * loteMin;
 
   document.getElementById('calc-summary').innerHTML=`
     <div class="proj-title">Resumen</div>
     <div style="display:flex;flex-direction:column;gap:9px;font-size:12px">
-      <div class="card-row"><span class="card-label">Producto</span><span class="card-val">${bom.nombre}</span></div>
-      <div class="card-row"><span class="card-label">Unidades</span><span class="card-val">${fmtU(qty)} un.</span></div>
-      <div class="card-row"><span class="card-label">Lotes</span><span class="card-val">${nLotes} lote${nLotes!==1?'s':''} × ${fmtU(loteMin)} un.</span></div>
+      <div class="card-row"><span class="card-label">Producto</span><span class="card-val" style="font-size:11px">${bom.nombre}</span></div>
+      <div class="card-row"><span class="card-label">Unidades pedidas</span><span class="card-val" style="color:var(--gold2);font-weight:700">${fmtU(qty)} un.</span></div>
+      <div class="card-row"><span class="card-label">Lote mínimo</span><span class="card-val">${fmtU(loteMin)} un.</span></div>
+      <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px"></div>
+      <div class="card-row"><span class="card-label" style="color:var(--gold2)">▶ Exacto (${fmtU(qty)} un.)</span>
+        <span class="card-val" style="color:${puedeExacto?'var(--acc)':'var(--red)'}">${puedeExacto?'✓ OK con stock actual':'✗ falta stock'}</span></div>
+      <div class="card-row"><span class="card-label">Batch completo</span>
+        <span class="card-val">${nLotesBatch} lote${nLotesBatch!==1?'s':''} = ${fmtU(unidadesBatch)} un.</span></div>
+      <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px"></div>
       <div class="card-row"><span class="card-label">Insumos OK</span><span class="card-val" style="color:var(--acc)">✓ ${ok}</span></div>
       <div class="card-row"><span class="card-label">Faltan</span><span class="card-val" style="color:${falta>0?'var(--red)':'var(--acc)'}">
         ${falta>0?'✗ '+falta:'✓ ninguno'}</span></div>
