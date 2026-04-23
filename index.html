@@ -2647,7 +2647,7 @@ const S = {
   mrpResultado: null,
   mrpHorizonte: ['mar','abr'],
   planEditTs: 0,   // timestamp de la última edición EXPLÍCITA del plan (separado del ts general)
-  stockImportTs: new Date('2026-04-20').getTime(), // timestamp del último import de stock (baseline = 20-04)
+  stockImportTs: new Date('2026-04-23T12:00:00').getTime(), // baseline = fix 23-04 — fuerza re-push sobre cualquier Supabase anterior
   producciones:[],
   histPage:1,
   mrpSort:{col:'',dir:1}, mrpSemaFilter:'',
