@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-006';
+  var VER = '20260423-007';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3259,19 +3259,22 @@ function _loadPlanQty(incomingTs) {
 const _PLAN_FIX_TS = new Date('2026-04-24T00:00:00').getTime(); // umbral fix
 function _autoFixPlanAbril(force) {
   if(document.body.classList.contains('viewer-mode')) return; // solo admin
-  const yaFijado = (S.planEditTs || 0) >= _PLAN_FIX_TS;
-  if(yaFijado && !force) return; // ya correctos — no re-ejecutar
-  // Solo estos 3 tienen valor en abril, el resto = 0
   const fixes = {'PT-0001':1220,'PT-0004':590,'PT-0005':679};
-  D.productos.forEach(p => {
-    p.abr = fixes[p.codigo] || 0;
+  // Verificar si los valores actuales son los correctos (no solo el timestamp)
+  const valoresOk = D.productos.every(p => {
+    const esperado = fixes[p.codigo] || 0;
+    return p.abr === esperado;
   });
+  const tsOk = (S.planEditTs || 0) >= _PLAN_FIX_TS;
+  if(valoresOk && tsOk && !force) return; // todo correcto
+  // Aplicar valores correctos
+  D.productos.forEach(p => { p.abr = fixes[p.codigo] || 0; });
   S.planEditTs = _PLAN_FIX_TS;
   _savePlanQty();
   saveState();
   if(typeof renderPlan==='function' && document.getElementById('page-plan')?.classList.contains('active')) renderPlan();
   toast('✓ Plan abril corregido y guardado en la nube','✓',3000);
-  console.log('✓ Auto-fix plan abril: PEAK=1220, SMOOTH=590, RESET=679, resto=0, planEditTs='+_PLAN_FIX_TS);
+  console.log('✓ Auto-fix plan abril: PEAK=1220, SMOOTH=590, RESET=679, resto=0');
 }
 
 let _sbChannel = null; // canal activo — evitar duplicados
