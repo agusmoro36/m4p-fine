@@ -2646,6 +2646,7 @@ const S = {
   movimientos:[],
   mrpResultado: null,
   mrpHorizonte: ['mar','abr'],
+  planEditTs: 0,   // timestamp de la última edición EXPLÍCITA del plan (separado del ts general)
   producciones:[],
   histPage:1,
   mrpSort:{col:'',dir:1}, mrpSemaFilter:'',
@@ -3222,6 +3223,7 @@ function saveState() {
     // Guardar proveedores SIN insumos (los insumos vienen de PROVEEDORES_EXCEL al cargar)
     proveedores: S.proveedores.map(({insumos:_, ...rest}) => rest),
     productos: D.productos,
+    planEditTs: S.planEditTs || 0,
     mrpResultado: S.mrpResultado,
     facturasToggles: typeof facturasState !== 'undefined'
       ? facturasState.reduce((acc,f)=>{acc[f._id]={pagada:f.pagada,entregada:f.entregada};return acc;},{})
@@ -3401,11 +3403,14 @@ function applyState(st) {
       ts.textContent = 'cargado ' + d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}) + ' ' + d.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
     }
   }
+  // Sincronizar planEditTs: tomar el mayor entre local y entrante
+  if(st.planEditTs && st.planEditTs > (S.planEditTs || 0)) S.planEditTs = st.planEditTs;
   actualizarBadgePropuestas();
   // Restaurar estados de OC desde localStorage dedicado — SIEMPRE al final de applyState
   _loadOCStates();
-  // Restaurar cantidades del plan si nuestro snapshot local es igual o más reciente
-  _loadPlanQty(st.ts || 0);
+  // Restaurar cantidades del plan comparando con planEditTs (no st.ts)
+  // Así los saves de OC/stock no pisaron la comparación del plan
+  _loadPlanQty(st.planEditTs || 0);
 }
 
 function loadState() {
@@ -4093,6 +4098,7 @@ function deletePlan(cod){
   const p=D.productos.find(x=>x.codigo===cod);
   if(p&&confirm(`¿Eliminar ${cod} del plan?`)){
     p.ene=0;p.feb=0;p.mar=0;p.abr=0;p.may=0;p.jun=0;
+    S.planEditTs = Date.now();
     _savePlanQty();
     saveState();
     renderPlan();
@@ -4146,6 +4152,7 @@ function guardarPlanEdicion(irMRP){
     const mes = inp.dataset.mes;
     if(D.productos[idx]) D.productos[idx][mes] = parseFloat(inp.value) || 0;
   });
+  S.planEditTs = Date.now(); // marcar timestamp de edición del plan (independiente de ts general)
   _savePlanQty(); // snapshot dedicado — sobrevive a cualquier applyState()
   saveState();
   renderPlan();
@@ -6804,6 +6811,7 @@ function addPlan(){
   if(p){p[mes]=(p[mes]||0)+qty;}
   closeM('m-plan');
   renderPlan();
+  S.planEditTs = Date.now();
   _savePlanQty();
   saveState();
   toast('Orden de producción agregada','✓');
