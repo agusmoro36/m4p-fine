@@ -620,6 +620,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         <input type="file" id="fi-plan-direct" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event,'plan')">
         <button class="btn btn-b btn-sm" onclick="document.getElementById('fi-plan-direct').click()">↑ Importar Excel</button>
         <button class="btn btn-sm" onclick="abrirEditarPlan()" style="border-color:var(--gold);color:var(--gold)">✏ Editar cantidades</button>
+        <button class="btn btn-sm" id="btn-fix-plan" onclick="_autoFixPlanAbril(true)" style="border-color:#4caf50;color:#4caf50;display:none" title="Corregir cantidades abril en la nube">⟳ Corregir plan</button>
         <button class="btn btn-p" onclick="openM('m-plan')">+ Nueva Orden</button>
       </div>
     </div>
@@ -3172,6 +3173,29 @@ function _loadPlanQty(incomingTs) {
   } catch(e) {}
 }
 
+// ── Auto-fix plan abril (one-time) ────────────────────────────────────────────
+// Se ejecuta automáticamente si detecta que planEditTs es anterior al fix.
+// Corrige valores en memoria y sube a Supabase para que todos los dispositivos
+// vean los valores correctos, incluso si corren JS antiguo.
+const _PLAN_FIX_TS = new Date('2026-04-24T00:00:00').getTime(); // umbral fix
+function _autoFixPlanAbril(force) {
+  if(document.body.classList.contains('viewer-mode')) return; // solo admin
+  const yaFijado = (S.planEditTs || 0) >= _PLAN_FIX_TS;
+  if(yaFijado && !force) return; // ya correctos — no re-ejecutar
+  // Corregir cantidades abril
+  const fixes = {'PT-0001':1220,'PT-0004':590,'PT-0005':679};
+  Object.entries(fixes).forEach(([cod,abr]) => {
+    const p = D.productos.find(x=>x.codigo===cod);
+    if(p) p.abr = abr;
+  });
+  S.planEditTs = _PLAN_FIX_TS;
+  _savePlanQty();
+  saveState();
+  if(typeof renderPlan==='function' && document.getElementById('page-plan')?.classList.contains('active')) renderPlan();
+  toast('✓ Plan abril corregido y guardado en la nube','✓',3000);
+  console.log('✓ Auto-fix plan abril: PEAK=1220, SMOOTH=590, RESET=679, planEditTs='+_PLAN_FIX_TS);
+}
+
 let _sbChannel = null; // canal activo — evitar duplicados
 function sbSuscribir() {
   if(!SB_CLIENT) return;
@@ -3521,6 +3545,8 @@ async function loadFromSupabase() {
 
   if(isViewer) toast('☁ Datos actualizados', '☁', 1500);
   else if(sbTs > lsTs) toast('☁ Datos actualizados desde la nube', '☁', 2000);
+  // Auto-fix silencioso: corrige plan abril si Supabase todavía tiene valores viejos
+  _autoFixPlanAbril();
   _reRenderActivePage();
 
   sbIndicador('ok');
@@ -4057,6 +4083,13 @@ function initMRPFilters(){
 // PLAN
 // ══════════════════════════════════════
 function renderPlan(){
+  // Mostrar botón "Corregir plan" solo si admin y hay valores incorrectos o planEditTs bajo
+  const btnFix = document.getElementById('btn-fix-plan');
+  if(btnFix){
+    const isViewer = document.body.classList.contains('viewer-mode');
+    const needsFix = (S.planEditTs||0) < _PLAN_FIX_TS;
+    btnFix.style.display = (!isViewer && needsFix) ? '' : 'none';
+  }
   const ft=document.getElementById('f-plan-tipo')?.value||'';
   const prods=D.productos.filter(p=>!ft||p.subcategory===ft);
   const allMeses=[{l:'Ene',k:'ene'},{l:'Feb',k:'feb'},{l:'Mar',k:'mar'},{l:'Abr',k:'abr'},{l:'May',k:'may'},{l:'Jun',k:'jun'}];
