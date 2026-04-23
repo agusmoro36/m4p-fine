@@ -2763,28 +2763,30 @@ const fmtU=n=>n==null||isNaN(n)||n===0?'—':Number(n).toLocaleString('es-AR',{m
 
 function vencPill(venc) {
   if(!venc) return '<span style="color:var(--text3);font-size:10px">—</span>';
+  const dateStr = venc.split(' ')[0]; // strip hora si viene "2026-04-01 00:00:00"
   const today = new Date(); today.setHours(0,0,0,0);
-  const v = new Date(venc + 'T00:00:00'); // evitar offset TZ
+  const v = new Date(dateStr + 'T00:00:00');
   const days = Math.ceil((v - today) / (1000*60*60*24));
-  const label = venc.split('-').reverse().join('/'); // dd/mm/yyyy
-  if(days < 0)  return `<span class="pill pill-crit" title="${venc}">Vencido (${Math.abs(days)}d)</span>`;
-  if(days <= 30) return `<span class="pill pill-low" title="${venc}">${days}d — ${label}</span>`;
-  if(days <= 60) return `<span class="pill pill-warn" title="${venc}">${days}d — ${label}</span>`;
-  return `<span class="pill pill-ok" title="${venc}">${label}</span>`;
+  const label = dateStr.split('-').reverse().join('/'); // dd/mm/yyyy
+  if(days < 0)  return `<span class="pill pill-crit" title="${dateStr}">Vencido · ${label} <span style="opacity:.75">(${Math.abs(days)}d)</span></span>`;
+  if(days <= 30) return `<span class="pill pill-low"  title="${dateStr}">${days}d — ${label}</span>`;
+  if(days <= 60) return `<span class="pill pill-warn" title="${dateStr}">${days}d — ${label}</span>`;
+  return `<span class="pill pill-ok" title="${dateStr}">${label}</span>`;
 }
 
 function proximaVenc(s) {
   if(!s.lotes || !s.lotes.length) return null;
-  const hoy = new Date().toISOString().slice(0,10);
   const conVenc = s.lotes.filter(l => l.vencimiento);
   if(!conVenc.length) return null;
-  return conVenc.sort((a,b) => a.vencimiento.localeCompare(b.vencimiento))[0].vencimiento;
+  // strip hora para comparar solo fecha
+  return conVenc.sort((a,b) => a.vencimiento.split(' ')[0].localeCompare(b.vencimiento.split(' ')[0]))[0].vencimiento.split(' ')[0];
 }
 
 function diasHastaVenc(venc) {
   if(!venc) return null;
+  const dateStr = venc.split(' ')[0]; // strip hora
   const today = new Date(); today.setHours(0,0,0,0);
-  const v = new Date(venc + 'T00:00:00');
+  const v = new Date(dateStr + 'T00:00:00');
   return Math.ceil((v - today) / (1000*60*60*24));
 }
 
@@ -6023,7 +6025,9 @@ function renderStock(){
     const pct=Math.min(100,(s.stock/maxS)*100);
     const cls=s.stock<=0?'var(--red)':pct<10?'var(--orange)':pct<40?'var(--yellow)':'var(--acc)';
     const dias = diasHastaVenc(s._venc);
-    const rowStyle = dias !== null && dias < 0 ? 'background:rgba(239,68,68,.06)' : dias !== null && dias <= 30 ? 'background:rgba(249,115,22,.04)' : '';
+    const rowStyle = dias !== null && dias < 0
+      ? 'background:rgba(192,57,43,.13);border-left:3px solid var(--red)'
+      : dias !== null && dias <= 30 ? 'background:rgba(249,115,22,.05)' : '';
     const u=getUbic(s), dep=u.deposito||0, s1=u.sala1||0, s2=u.sala2||0;
     const fmtUbic=(v,color)=>v>0?`<span style="font-family:var(--mono);font-size:11px;color:${color};font-weight:600">${fmt(v,2)}</span>`:`<span style="color:var(--text3);font-size:10px">—</span>`;
     // Rack positions: lotes únicos con ubicacion
