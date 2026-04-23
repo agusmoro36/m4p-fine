@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-003';
+  var VER = '20260423-004';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -891,13 +891,10 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         <thead><tr>
           <th onclick="sortStock('codigo')">Código ↕</th>
           <th onclick="sortStock('nombre')">Insumo ↕</th>
-          <th class="tr" onclick="sortStock('stock')">Total ↕</th>
-          <th style="font-size:10px;color:var(--text2)">📍 Rack</th>
           <th style="font-size:10px;color:var(--text2)">🏷 Lote</th>
+          <th class="tr" onclick="sortStock('stock')">Cantidad ↕</th>
+          <th style="font-size:10px;color:var(--text2)">📍 Ubicación</th>
           <th style="font-size:10px;color:var(--text2)">🏭 Proveedor</th>
-          <th class="tr" style="color:#4a7fd4;font-size:10px">📦 Depósito</th>
-          <th class="tr" style="color:var(--gold2);font-size:10px">⚖ Sala P.1</th>
-          <th class="tr" style="color:var(--yellow);font-size:10px">⚖ Sala P.2</th>
           <th>Nivel</th><th>Vencimiento</th><th></th>
         </tr></thead>
         <tbody id="tbl-stock"></tbody>
@@ -2015,7 +2012,11 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <button class="modal-close" onclick="closeM('m-revalida')">✕</button>
     <div class="modal-title">📎 Carta de Reválida</div>
     <input type="hidden" id="rev-cod">
+    <input type="hidden" id="rev-lote-key">
+    <input type="hidden" id="rev-lote-idx">
     <div class="fg">
+      <!-- Info del lote -->
+      <div id="rev-lote-info" style="display:none;padding:8px 12px;background:rgba(74,127,212,.07);border:1px solid rgba(74,127,212,.25);border-radius:6px;font-size:12px"></div>
       <div class="fl">
         <label>Insumo</label>
         <input id="rev-nombre" class="finp" style="width:100%;background:var(--bg2);color:var(--text3)" readonly>
@@ -6101,48 +6102,69 @@ function renderStock(){
   const maxS=Math.max(...data.map(s=>s.stock))||1;
   const page=paginate(data,S.stockPage,25);
   initAllUbicaciones();
-  document.getElementById('tbl-stock').innerHTML=page.map(s=>{
+  const rows=[];
+  page.forEach(s=>{
+    const lotes=s.lotes||[];
     const pct=Math.min(100,(s.stock/maxS)*100);
     const cls=s.stock<=0?'var(--red)':pct<10?'var(--orange)':pct<40?'var(--yellow)':'var(--acc)';
-    const dias = diasHastaVenc(s._venc);
-    const rowStyle = dias !== null && dias < 0
-      ? 'background:rgba(192,57,43,.13);border-left:3px solid var(--red)'
-      : dias !== null && dias <= 30 ? 'background:rgba(249,115,22,.05)' : '';
-    const u=getUbic(s), dep=u.deposito||0, s1=u.sala1||0, s2=u.sala2||0;
-    const fmtUbic=(v,color)=>v>0?`<span style="font-family:var(--mono);font-size:11px;color:${color};font-weight:600">${fmt(v,2)}</span>`:`<span style="color:var(--text3);font-size:10px">—</span>`;
-    // Rack positions: lotes únicos con ubicacion
-    const racks = [...new Set((s.lotes||[]).map(l=>l.ubicacion).filter(Boolean))];
-    const rackCell = racks.length
-      ? racks.map(r=>`<span style="display:inline-block;font-family:var(--mono);font-size:9px;background:rgba(201,168,76,.1);border:1px solid var(--gold-dim);border-radius:4px;padding:1px 5px;color:var(--gold2);margin:1px">${r}</span>`).join('')
-      : `<span style="color:var(--text3);font-size:10px">—</span>`;
-    return`<tr style="${rowStyle}">
-      <td class="td-code">${s.codigo}</td>
-      <td class="td-name">${s.nombre}</td>
+    const dias=diasHastaVenc(s._venc);
+    const baseStyle=dias!==null&&dias<0
+      ?'background:rgba(192,57,43,.13);border-left:3px solid var(--red)'
+      :dias!==null&&dias<=30?'background:rgba(249,115,22,.05)':'';
+    const nivelBar=`<div class="sbar"><div class="sbar-bg"><div class="sbar-fill" style="width:${pct.toFixed(1)}%;background:${cls}"></div></div><span class="pill ${s.stock<=0?'pill-crit':pct<10?'pill-low':pct<40?'pill-warn':'pill-ok'}" style="font-size:8px">${s.stock<=0?'0':pct<10?'crítico':pct<40?'bajo':'ok'}</span></div>`;
+    const loteBadge=lotes.length>1?`<span style="margin-left:6px;font-size:9px;background:rgba(201,168,76,.15);border:1px solid rgba(201,168,76,.3);border-radius:10px;padding:1px 6px;color:var(--gold2);vertical-align:middle">${lotes.length} lotes</span>`:'';
+    // ── Fila TOTAL del insumo ──────────────────────────────────────────
+    rows.push(`<tr style="${baseStyle};border-top:2px solid var(--border)">
+      <td class="td-code" style="font-weight:700">${s.codigo}</td>
+      <td class="td-name" style="font-weight:700">${s.nombre}${loteBadge}</td>
+      <td style="color:var(--text3);font-size:10px;text-align:center">—</td>
       <td class="td-mono tr"><b>${fmt(s.stock,2)}</b> <span style="font-size:9px;color:var(--text3)">${s.um||'kg'}</span></td>
-      <td style="max-width:120px">${rackCell}</td>
-      <td style="max-width:110px">${(s.lotes||[]).length
-        ? (s.lotes||[]).map(l=>l.lote).filter(Boolean).slice(0,3).map(l=>`<div style="font-family:var(--mono);font-size:9px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${l}">${l}</div>`).join('')
-        : `<span style="color:var(--text3);font-size:10px">—</span>`
-      }</td>
-      <td style="max-width:110px;font-size:10px;color:var(--text2)">${
-        [...new Set((s.lotes||[]).map(l=>l.proveedor).filter(Boolean))].slice(0,2)
-          .map(p=>`<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${p}">${p}</div>`).join('')
-        || `<span style="color:var(--text3)">—</span>`
-      }</td>
-      <td class="tr" style="background:rgba(74,127,212,.04)">${fmtUbic(dep,'#4a7fd4')}</td>
-      <td class="tr" style="background:rgba(201,168,76,.04)">${fmtUbic(s1,'var(--gold2)')}</td>
-      <td class="tr" style="background:rgba(184,150,12,.04)">${fmtUbic(s2,'var(--yellow)')}</td>
-      <td><div class="sbar"><div class="sbar-bg"><div class="sbar-fill" style="width:${pct.toFixed(1)}%;background:${cls}"></div></div><span class="pill ${s.stock<=0?'pill-crit':pct<10?'pill-low':pct<40?'pill-warn':'pill-ok'}" style="font-size:8px">${s.stock<=0?'0':pct<10?'crítico':pct<40?'bajo':'ok'}</span></div></td>
-      <td>${vencPill(s._venc)}</td>
+      <td style="color:var(--text3);font-size:10px">—</td>
+      <td style="color:var(--text3);font-size:10px">—</td>
+      <td>${nivelBar}</td>
+      <td>${lotes.length===0?vencPill(s._venc):'<span style="color:var(--text3);font-size:9px">&#x2193; ver lotes</span>'}</td>
       <td style="display:flex;gap:4px;flex-wrap:wrap">
         <button class="btn btn-sm" onclick="abrirAjusteStock('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:var(--gold);color:var(--gold)" title="Ajustar stock">✏</button>
         <button class="btn btn-sm" onclick="abrirTransferir('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:#4a7fd4;color:#4a7fd4" title="Transferir">↔</button>
-        <button class="btn btn-sm" onclick="verMovimientosInsumo('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:var(--text3);color:var(--text3)" title="Ver historial de movimientos">⏱</button>
-        <button class="btn btn-sm" onclick="abrirRegistrarLote('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:#22c55e;color:#22c55e" title="Registrar lote / vencimiento">📅</button>
-        <button class="btn btn-sm" onclick="abrirRevalida('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:${(S.revalidas||{})[s.codigo]?'var(--gold)':'var(--text3)'};color:${(S.revalidas||{})[s.codigo]?'var(--gold)':'var(--text3)'};${(S.revalidas||{})[s.codigo]?'background:rgba(201,168,76,.1)':''}" title="${(S.revalidas||{})[s.codigo]?'Reválida adjunta — ver/editar':'Adjuntar carta de reválida'}">📎${(S.revalidas||{})[s.codigo]?'<span style="font-size:7px;margin-left:2px;color:#22c55e">●</span>':''}</button>
+        <button class="btn btn-sm" onclick="verMovimientosInsumo('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:var(--text3);color:var(--text3)" title="Ver historial">⏱</button>
+        <button class="btn btn-sm" onclick="abrirRegistrarLote('${s.codigo}')" style="font-size:10px;padding:3px 6px;border-color:#22c55e;color:#22c55e" title="Registrar nuevo lote">📅</button>
+        ${lotes.length===0?`<button class="btn btn-sm" onclick="abrirRevalida('${s.codigo}',-1)" style="font-size:10px;padding:3px 6px;border-color:var(--text3);color:var(--text3)" title="Adjuntar reválida">📎</button>`:''}
       </td>
-    </tr>`;
-  }).join('');
+    </tr>`);
+    // ── Fila por LOTE ─────────────────────────────────────────────────
+    lotes.forEach((l,idx)=>{
+      const rk=_revKey(s.codigo,l,idx);
+      const hasRev=!!(S.revalidas||{})[rk];
+      const ld=diasHastaVenc(l.vencimiento);
+      const ls=ld!==null&&ld<0
+        ?'background:rgba(192,57,43,.07);border-left:2px solid rgba(192,57,43,.35)'
+        :ld!==null&&ld<=30?'background:rgba(249,115,22,.04)':'background:rgba(0,0,0,.018)';
+      const cantHTML=l.cantidad!=null
+        ?`${fmt(l.cantidad,2)} <span style="font-size:9px;color:var(--text3)">${s.um||'kg'}</span>`
+        :'<span style="color:var(--text3)">—</span>';
+      const ubicHTML=l.ubicacion
+        ?`<span style="font-family:var(--mono);font-size:9px;background:rgba(201,168,76,.1);border:1px solid var(--gold-dim);border-radius:4px;padding:1px 5px;color:var(--gold2)">${l.ubicacion}</span>`
+        :'<span style="color:var(--text3);font-size:10px">—</span>';
+      const loteNumHTML=l.lote
+        ?`<span style="font-family:var(--mono);font-size:10px">${l.lote}</span>`
+        :'<span style="color:var(--text3);font-size:10px">sin N°</span>';
+      const revStyle=hasRev?'border-color:var(--gold);color:var(--gold);background:rgba(201,168,76,.1)':'border-color:var(--text3);color:var(--text3)';
+      rows.push(`<tr style="${ls}">
+        <td style="padding-left:16px;font-size:11px;color:var(--text3)">&#x2514;</td>
+        <td style="font-size:10px;color:var(--text3)">#${idx+1}</td>
+        <td>${loteNumHTML}</td>
+        <td class="td-mono tr" style="font-size:12px">${cantHTML}</td>
+        <td>${ubicHTML}</td>
+        <td style="font-size:11px;color:var(--text2);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${l.proveedor||''}">${l.proveedor||'<span style="color:var(--text3)">—</span>'}</td>
+        <td></td>
+        <td>${vencPill(l.vencimiento)}</td>
+        <td>
+          <button class="btn btn-sm" onclick="abrirRevalida('${s.codigo}',${idx})" style="font-size:10px;padding:3px 6px;${revStyle}" title="${hasRev?'Ver/editar reválida de este lote':'Adjuntar reválida a este lote'}">📎${hasRev?'<span style="font-size:7px;margin-left:2px;color:#22c55e">&#x25cf;</span>':''}</button>
+        </td>
+      </tr>`);
+    });
+  });
+  document.getElementById('tbl-stock').innerHTML=rows.join('');
   renderPag('pag-stock',data.length,25,S.stockPage,p=>{S.stockPage=p;renderStock();});
 }
 function sortStock(col){if(S.stockSort.col===col)S.stockSort.dir*=-1;else{S.stockSort.col=col;S.stockSort.dir=1;}S.stockPage=1;renderStock();}
@@ -8359,15 +8381,21 @@ function guardarLote() {
 // REVÁLIDAS
 // ══════════════════════════════════════
 const REV_LS_PREFIX = 'mrp_rev_';
-let _revalidaData = {};    // caché en memoria: {codigo: 'data:application/pdf;base64,...'}
+let _revalidaData = {};    // caché en memoria: {loteKey: 'data:application/pdf;base64,...'}
 let _revalidaFileTmp = null; // archivo cargado en el modal antes de guardar
 
-function _guardarRevalidaLS(codigo, adjunto){
-  try { localStorage.setItem(REV_LS_PREFIX + codigo, JSON.stringify(adjunto)); return true; }
+// Genera clave única para una reválida: "MP-0011__LOT-001" o "MP-0011__#0"
+function _revKey(cod, loteObj, loteIdx) {
+  const num = (loteObj?.lote || '').trim();
+  return num ? cod + '__' + num : cod + '__#' + loteIdx;
+}
+
+function _guardarRevalidaLS(key, adjunto){
+  try { localStorage.setItem(REV_LS_PREFIX + key, JSON.stringify(adjunto)); return true; }
   catch(e){ return false; }
 }
-function _cargarRevalidaLS(codigo){
-  try { const r = localStorage.getItem(REV_LS_PREFIX + codigo); return r ? JSON.parse(r) : null; }
+function _cargarRevalidaLS(key){
+  try { const r = localStorage.getItem(REV_LS_PREFIX + key); return r ? JSON.parse(r) : null; }
   catch(e){ return null; }
 }
 
@@ -8387,51 +8415,65 @@ function _onRevalidaFileChange(input) {
   reader.readAsDataURL(file);
 }
 
-function abrirRevalida(cod) {
+// loteIdx: índice en s.lotes[], o -1 si el insumo no tiene lotes
+function abrirRevalida(cod, loteIdx) {
   if(document.body.classList.contains('viewer-mode')){ toast('Solo el administrador puede adjuntar reválidas','⚠️',2500); return; }
   const s = D.stock[cod];
   if(!s) return;
+  loteIdx = (loteIdx !== undefined && loteIdx !== null) ? parseInt(loteIdx) : -1;
   _revalidaFileTmp = null;
+  const loteObj = loteIdx >= 0 ? (s.lotes||[])[loteIdx] : null;
+  const key = loteIdx >= 0 ? _revKey(cod, loteObj, loteIdx) : cod + '__general';
   document.getElementById('rev-cod').value = cod;
+  document.getElementById('rev-lote-key').value = key;
+  document.getElementById('rev-lote-idx').value = loteIdx;
   document.getElementById('rev-nombre').value = cod + ' — ' + (s.nombre||cod);
   document.getElementById('rev-file-input').value = '';
   document.getElementById('rev-file-sel').textContent = 'Sin archivo seleccionado';
   document.getElementById('rev-preview').style.display = 'none';
-  // Vencimiento actual del insumo
-  const vencActual = proximaVenc(s);
-  const vencEl = document.getElementById('rev-venc-actual');
-  vencEl.innerHTML = vencActual
+  // Info del lote específico
+  const loteInfoEl = document.getElementById('rev-lote-info');
+  if(loteIdx >= 0 && loteObj) {
+    loteInfoEl.style.display = '';
+    loteInfoEl.innerHTML = `<span style="color:var(--text2);font-weight:600">Lote #${loteIdx+1}</span>${loteObj.lote?' · <span style="font-family:var(--mono)">' + loteObj.lote + '</span>':''}${loteObj.cantidad?' · '+fmt(loteObj.cantidad,2)+' '+(s.um||'kg'):''}`;
+  } else {
+    loteInfoEl.style.display = 'none';
+  }
+  // Vencimiento actual del lote (o del insumo si no hay lote)
+  const vencActual = loteObj?.vencimiento || proximaVenc(s) || '';
+  document.getElementById('rev-venc-actual').innerHTML = vencActual
     ? 'Actual: ' + vencPill(vencActual)
     : '<span style="color:var(--text3)">Sin vencimiento registrado</span>';
-  // Datos de reválida existente
-  const rev = (S.revalidas||{})[cod];
+  // Reválida existente para este lote
+  const rev = (S.revalidas||{})[key];
   const existEl = document.getElementById('rev-existente');
   if(rev) {
     existEl.style.display = '';
     document.getElementById('rev-adj-nombre').textContent = rev.nombre || '—';
-    const meta = [
-      rev.vencimientoRevalida ? 'Nuevo vencimiento: ' + rev.vencimientoRevalida.split('-').reverse().join('/') : '',
-      rev.fecha ? 'Cargada el ' + rev.fecha.split('-').reverse().join('/') : '',
+    document.getElementById('rev-adj-meta').textContent = [
+      rev.vencimientoRevalida ? 'Nuevo venc: ' + rev.vencimientoRevalida.split('-').reverse().join('/') : '',
+      rev.fecha ? 'Cargada: ' + rev.fecha.split('-').reverse().join('/') : '',
       rev.tamaño ? Math.round(rev.tamaño/1024) + ' KB' : ''
     ].filter(Boolean).join(' · ');
-    document.getElementById('rev-adj-meta').textContent = meta;
-    document.getElementById('rev-venc').value = rev.vencimientoRevalida || vencActual || '';
+    document.getElementById('rev-venc').value = rev.vencimientoRevalida || vencActual.split(' ')[0] || '';
     document.getElementById('rev-file-label').textContent = 'Reemplazar carta de reválida';
   } else {
     existEl.style.display = 'none';
-    document.getElementById('rev-venc').value = vencActual || '';
+    document.getElementById('rev-venc').value = vencActual ? vencActual.split(' ')[0] : '';
     document.getElementById('rev-file-label').textContent = 'Adjuntar carta de reválida';
   }
   openM('m-revalida');
 }
 
 function guardarRevalida() {
-  const cod  = document.getElementById('rev-cod').value;
-  const venc = document.getElementById('rev-venc').value;
-  if(!cod) return;
+  const cod      = document.getElementById('rev-cod').value;
+  const key      = document.getElementById('rev-lote-key').value;
+  const loteIdx  = parseInt(document.getElementById('rev-lote-idx').value);
+  const venc     = document.getElementById('rev-venc').value;
+  if(!cod || !key) return;
   const s = D.stock[cod];
   if(!s) return;
-  if(!_revalidaFileTmp && !(S.revalidas||{})[cod]) {
+  if(!_revalidaFileTmp && !(S.revalidas||{})[key]) {
     toast('Seleccioná un archivo PDF para adjuntar','⚠️',3000);
     return;
   }
@@ -8439,20 +8481,21 @@ function guardarRevalida() {
     toast('Ingresá la nueva fecha de vencimiento','⚠️',3000);
     return;
   }
-  // Actualizar vencimiento en el lote más reciente (o crear lote básico)
+  // Actualizar vencimiento en el lote específico
   if(!s.lotes) s.lotes = [];
-  if(s.lotes.length > 0) {
-    s.lotes[0].vencimiento = venc;
-  } else {
-    s.lotes.push({ lote:'', vencimiento: venc, cantidad: s.stock||0, fecha: new Date().toISOString().slice(0,10) });
+  if(loteIdx >= 0 && s.lotes[loteIdx]) {
+    s.lotes[loteIdx].vencimiento = venc;
+  } else if(loteIdx < 0) {
+    if(s.lotes.length === 0) s.lotes.push({ lote:'', vencimiento: venc, cantidad: s.stock||0, fecha: new Date().toISOString().slice(0,10) });
+    else s.lotes[0].vencimiento = venc;
   }
   // Guardar metadata en S.revalidas (sin base64)
   if(!S.revalidas) S.revalidas = {};
-  const adjBase = _revalidaFileTmp || (S.revalidas[cod]||{});
-  S.revalidas[cod] = {
-    nombre: adjBase.nombre || S.revalidas[cod]?.nombre || '',
-    tipo:   adjBase.tipo   || S.revalidas[cod]?.tipo   || '',
-    tamaño: adjBase.tamaño || S.revalidas[cod]?.tamaño || 0,
+  const adjBase = _revalidaFileTmp || (S.revalidas[key]||{});
+  S.revalidas[key] = {
+    nombre: adjBase.nombre || (S.revalidas[key]||{}).nombre || '',
+    tipo:   adjBase.tipo   || (S.revalidas[key]||{}).tipo   || '',
+    tamaño: adjBase.tamaño || (S.revalidas[key]||{}).tamaño || 0,
     vencimientoRevalida: venc,
     fecha: new Date().toISOString().slice(0,10)
   };
@@ -8460,44 +8503,34 @@ function guardarRevalida() {
   actualizarBadgeAlertas();
   closeM('m-revalida');
   renderStock();
-  toast(`✓ Reválida ${cod} — vence ${venc.split('-').reverse().join('/')}`, '📎', 4000);
-  // Subir PDF a la nube si hay archivo nuevo
+  toast('✓ Reválida ' + cod + (loteIdx>=0?' lote #'+(loteIdx+1):'') + ' — vence ' + venc.split('-').reverse().join('/'), '📎', 4000);
   if(_revalidaFileTmp) {
     const fullAdj = {..._revalidaFileTmp};
-    _revalidaData[cod] = fullAdj.data;
-    _guardarRevalidaLS(cod, fullAdj);
+    _revalidaData[key] = fullAdj.data;
+    _guardarRevalidaLS(key, fullAdj);
     _revalidaFileTmp = null;
     const sizeKB = Math.round((fullAdj.tamaño||0)/1024);
-    toast(`⟳ Subiendo carta a la nube (${sizeKB} KB)...`, '☁', 5000);
-    sbSaveRevalida(cod, fullAdj).then(ok => {
-      if(ok) toast(`✓ Carta de reválida ${cod} guardada en la nube`, '☁', 4000);
-      else   toast(`⚠ No se pudo subir a la nube. Disponible solo en este dispositivo.`, '⚠️', 8000);
+    toast('⟳ Subiendo carta a la nube (' + sizeKB + ' KB)...', '☁', 5000);
+    sbSaveRevalida(key, fullAdj).then(ok => {
+      if(ok) toast('✓ Carta guardada en la nube', '☁', 4000);
+      else   toast('⚠ No se pudo subir a la nube. Disponible solo en este dispositivo.', '⚠️', 8000);
     });
   }
 }
 
-function verRevalida(cod) {
-  cod = cod || document.getElementById('rev-cod')?.value;
-  const rev = (S.revalidas||{})[cod];
+function verRevalida() {
+  const key = document.getElementById('rev-lote-key')?.value;
+  if(!key) return;
+  const rev = (S.revalidas||{})[key];
   if(!rev || !rev.nombre) { toast('Sin carta de reválida adjunta','⚠️',2000); return; }
-  // 1) Caché en memoria
-  if(_revalidaData[cod]) {
-    abrirVisorFactura(_revalidaData[cod], rev.nombre, rev.tipo);
-    return;
-  }
-  // 2) localStorage del dispositivo
-  const adjLS = _cargarRevalidaLS(cod);
-  if(adjLS?.data) {
-    _revalidaData[cod] = adjLS.data;
-    abrirVisorFactura(adjLS.data, rev.nombre, rev.tipo);
-    return;
-  }
-  // 3) Supabase (cross-device)
+  if(_revalidaData[key]) { abrirVisorFactura(_revalidaData[key], rev.nombre, rev.tipo); return; }
+  const adjLS = _cargarRevalidaLS(key);
+  if(adjLS?.data) { _revalidaData[key] = adjLS.data; abrirVisorFactura(adjLS.data, rev.nombre, rev.tipo); return; }
   toast('⟳ Cargando carta desde la nube...', '☁', 5000);
-  sbCargarRevalida(cod).then(adjunto => {
+  sbCargarRevalida(key).then(adjunto => {
     if(adjunto?.data) {
-      _revalidaData[cod] = adjunto.data;
-      _guardarRevalidaLS(cod, adjunto);
+      _revalidaData[key] = adjunto.data;
+      _guardarRevalidaLS(key, adjunto);
       abrirVisorFactura(adjunto.data, rev.nombre, rev.tipo);
     } else {
       toast('Carta no disponible. El admin debe subirla de nuevo.', '⚠️', 5000);
