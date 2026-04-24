@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-023';
+  var VER = '20260423-024';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3752,10 +3752,6 @@ async function loadFromSupabase() {
   }
 
   // ── One-time v022: aplicar stock real de Supabase ignorando gate stockImportTs=0 ──
-  // El stock YA estaba correcto en Supabase (confirmarRecepcion lo guardó en memoria y
-  // llamó saveState), pero applyState() lo ignoraba porque stockImportTs era 0.
-  // Esta migración toma data.value.stock y lo aplica directamente, luego setea
-  // stockImportTs = Date.now() para que en recargas futuras funcione normalmente.
   if(!isViewer && !localStorage.getItem('mrp_stock_ts_fix_v022') && data.value?.stock) {
     if((data.value.stockImportTs || 0) === 0) {
       Object.entries(data.value.stock).forEach(([k, v]) => {
@@ -3771,6 +3767,38 @@ async function loadFromSupabase() {
       toast('✓ Stock sincronizado desde la nube','☁',3000);
     }
     localStorage.setItem('mrp_stock_ts_fix_v022', '1');
+  }
+
+  // ── One-time v023: restaurar recepciones perdidas leyendo S.movimientos ──────
+  // El plan-fix v020 llamó saveState() con D.stock en baseline, pisando el stock
+  // correcto que confirmarRecepcion había guardado. S.movimientos SÍ está en
+  // Supabase (siempre se mergea). Esta migración lee los movimientos de
+  // "Recepción Depósito" y toma el stockDespues más alto por insumo — ese es
+  // el valor correcto luego de todos los ingresos. Si el stock actual es menor,
+  // lo corrige y guarda.
+  if(!isViewer && !localStorage.getItem('mrp_stock_receipt_fix_v023')) {
+    const maxDespues = {};
+    (S.movimientos || []).forEach(m => {
+      if(m.origen !== 'Recepción Depósito' || m._revertido) return;
+      const cod = m.codigo;
+      if(maxDespues[cod] === undefined || m.stockDespues > maxDespues[cod])
+        maxDespues[cod] = m.stockDespues;
+    });
+    let fixed = 0;
+    Object.entries(maxDespues).forEach(([cod, esperado]) => {
+      if(!D.stock[cod]) return;
+      const actual = parseFloat(D.stock[cod].stock) || 0;
+      if(actual < esperado - 0.001) {
+        D.stock[cod].stock = Math.round(esperado * 1000) / 1000;
+        fixed++;
+      }
+    });
+    if(fixed > 0) {
+      S.stockImportTs = Date.now();
+      saveState();
+      toast(`✓ Stock de ${fixed} insumo(s) restaurado desde historial`,'✓',4000);
+    }
+    localStorage.setItem('mrp_stock_receipt_fix_v023', '1');
   }
 
   _reRenderActivePage();
