@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-009';
+  var VER = '20260423-010';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3182,6 +3182,7 @@ function _captureOCStates() {
   S.compras.forEach(c => {
     const key = c._sid || c._uid || (c.codigo + '_' + (c.proveedor||'') + '_' + c.cantidad);
     map[key] = { pagada: c.pagada, entregada: c.entregada,
+                 recibidaDeposito: c.recibidaDeposito || false,
                  comentarios: c.comentarios ? JSON.parse(JSON.stringify(c.comentarios)) : [],
                  obs: c.obs || '', cant_recibida: c.cant_recibida,
                  recepciones: c.recepciones ? JSON.parse(JSON.stringify(c.recepciones)) : undefined };
@@ -3195,9 +3196,10 @@ function _restoreOCStates(map) {
     const key = c._sid || c._uid || (c.codigo + '_' + (c.proveedor||'') + '_' + c.cantidad);
     if(!map[key]) return;
     const s = map[key];
-    c.pagada     = s.pagada;
-    c.entregada  = s.entregada;
-    c.obs        = s.obs;
+    c.pagada          = s.pagada;
+    c.entregada       = s.entregada;
+    if(s.recibidaDeposito) c.recibidaDeposito = true;
+    c.obs             = s.obs;
     if(s.comentarios?.length) c.comentarios = s.comentarios;
     if(s.cant_recibida != null) c.cant_recibida = s.cant_recibida;
     if(s.recepciones)           c.recepciones   = s.recepciones;
@@ -4867,18 +4869,28 @@ function renderProyeccion(){
 // ══════════════════════════════════════
 // RECEPCIÓN DEPÓSITO
 // ══════════════════════════════════════
+
+// Una OC se considera "recibida en depósito" SOLO cuando fue procesada desde este módulo.
+// Marcar "entregada" en el módulo de OCs NO la saca de Recepción (es solo estado admin).
+function _esRecibidaDeposito(c) {
+  if(c.recibidaDeposito) return true;           // flag nuevo — seteado por Recepción
+  if(c.entregada && (c.recepciones||[]).length > 0) return true; // migración pre-fix
+  return false;
+}
+
 function renderRecepcion() {
   const q = (document.getElementById('s-recepcion')?.value || '').toLowerCase();
   const pendientes = S.compras.filter(c =>
-    !c.entregada &&
+    !_esRecibidaDeposito(c) &&
+    c.estado !== 'Cancelada' &&
     (!q || (c.codigo||'').toLowerCase().includes(q) || (c.descripcion||'').toLowerCase().includes(q) || (c.proveedor||'').toLowerCase().includes(q))
   );
 
   // KPIs
   const kpi = document.getElementById('rec-kpis');
   if(kpi) {
-    const total = S.compras.filter(c => !c.entregada).length;
-    const urgentes = S.compras.filter(c => !c.entregada && ['En tránsito','Enviada'].includes(c.estado)).length;
+    const total = S.compras.filter(c => !_esRecibidaDeposito(c) && c.estado !== 'Cancelada').length;
+    const urgentes = S.compras.filter(c => !_esRecibidaDeposito(c) && ['En tránsito','Enviada'].includes(c.estado)).length;
     kpi.innerHTML = [
       ['Pendientes', total, 'var(--acc)'],
       ['En tránsito / Enviadas', urgentes, 'var(--blue)'],
@@ -4980,7 +4992,7 @@ function renderRecepcion() {
   // Badge sidebar
   const nb = document.getElementById('nb-recepcion');
   if(nb) {
-    const n = S.compras.filter(c => !c.entregada).length;
+    const n = S.compras.filter(c => !_esRecibidaDeposito(c) && c.estado !== 'Cancelada').length;
     nb.style.display = n > 0 ? 'inline-flex' : 'none';
     nb.textContent = n;
   }
@@ -5040,13 +5052,15 @@ function confirmarRecepcion(idx) {
 
   if(cantOC > 0 && totalRec >= cantOC - 0.001) {
     // OC completa → cerrar automáticamente
-    c.entregada = true;
+    c.entregada        = true;
+    c.recibidaDeposito = true; // solo se saca de Recepción cuando se recibe acá
     toast('✅ OC completada: '+fmt(totalRec,3)+' / '+fmt(cantOC,3)+' recibidos', '✅', 5000);
   } else if(cantOC <= 0) {
     // OC sin cantidad definida → preguntar si cerrar
     const cerrar = confirm(`Se registraron ${fmt(cant,3)} kg de ${c.descripcion||c.codigo}.\n¿Marcar esta OC como entregada?`);
     if(cerrar) {
-      c.entregada = true;
+      c.entregada        = true;
+      c.recibidaDeposito = true;
       toast('✅ OC cerrada manualmente', '✅', 4000);
     } else {
       toast('📦 +'+fmt(cant,3)+' recibidos. OC sigue abierta.', '📦', 4000);
@@ -5057,7 +5071,8 @@ function confirmarRecepcion(idx) {
   }
 
   // CRÍTICO: guardar SIEMPRE de inmediato
-  _saveOCStates(); // guardado dedicado — sobrevive a cualquier applyState()
+  _saveOCStates();    // incluye recibidaDeposito, recepciones, cant_recibida
+  _saveComprasSnap(); // snapshot completo
   saveState();
 
   const card = document.getElementById('rec-card-'+idx);
@@ -5080,11 +5095,11 @@ function cerrarOCManual(idx) {
     ? `¿Cerrar OC? Quedan ${fmt(pendiente,3)} sin recibir.\nEso pendiente NO se sumará al stock.`
     : '¿Cerrar esta OC?';
   if(!confirm(msg)) return;
-  c.entregada = true;
-  c.cerrada_manual = true;
-  c.cant_recibida = totalRec;
+  c.entregada        = true;
+  c.recibidaDeposito = true; // cerrar desde Recepción = sí se procesó en depósito
+  c.cerrada_manual   = true;
+  c.cant_recibida    = totalRec;
   if(pendiente > 0) {
-    // Registrar como baja de la OC sin stock
     if(!c.comentarios) c.comentarios = [];
     c.comentarios.push({
       texto: `OC cerrada manualmente. ${fmt(pendiente,3)} unidades pendientes no ingresaron.`,
@@ -5094,7 +5109,8 @@ function cerrarOCManual(idx) {
   } else {
     toast('🔒 OC cerrada','🔒',3000);
   }
-  // Guardar SIEMPRE de inmediato (ver mismo comentario en confirmarRecepcion)
+  _saveOCStates();    // incluye recibidaDeposito
+  _saveComprasSnap(); // snapshot
   saveState();
 
   const card = document.getElementById('rec-card-'+idx);
@@ -7496,7 +7512,7 @@ function closeSidebar() {
 
 // Badge recepción inicial
 (function() {
-  const n = S.compras.filter(c => !c.entregada).length;
+  const n = S.compras.filter(c => !_esRecibidaDeposito(c) && c.estado !== 'Cancelada').length;
   const nb = document.getElementById('nb-recepcion');
   if(nb && n > 0) { nb.style.display = 'inline-flex'; nb.textContent = n; }
 })();
