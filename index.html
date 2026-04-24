@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-014';
+  var VER = '20260423-015';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -966,6 +966,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         <th class="tr">Stock después</th>
         <th>Origen</th>
         <th>Referencia</th>
+        <th class="tc" style="width:36px" title="Revertir movimiento"></th>
       </tr></thead>
       <tbody id="tbl-historial"></tbody>
     </table></div>
@@ -6616,7 +6617,14 @@ function renderHistorial() {
       : `<span style="font-size:11px;color:var(--text2)">${ref}</span>`;
     const fechaHoy = new Date().toISOString().slice(0,10);
     const esHoy = m.fecha?.slice(0,10) === fechaHoy;
-    return `<tr style="${esHoy?'background:rgba(201,168,76,.04)':''}">
+    const mGIdx = S.movimientos.indexOf(m);
+    const revertBtn = m._revertido
+      ? `<span title="Ya revertido" style="font-size:13px;color:var(--text3);display:inline-block;text-align:center;width:100%">↩</span>`
+      : `<button onclick="revertirMovimiento(${mGIdx})" title="Revertir este movimiento"
+           style="background:transparent;border:1px solid var(--border);border-radius:var(--r);padding:3px 8px;cursor:pointer;font-size:13px;color:var(--text3);transition:all .18s;line-height:1"
+           onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)';this.style.background='rgba(220,53,69,.07)'"
+           onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text3)';this.style.background='transparent'">↩</button>`;
+    return `<tr style="${esHoy?'background:rgba(201,168,76,.04)':''}${m._revertido?';opacity:.5;text-decoration:line-through':''}">
       <td style="font-size:11px;color:${esHoy?'var(--gold2)':'var(--text2)'};white-space:nowrap;font-weight:${esHoy?'600':'400'}">${fmtFecha(m.fecha)}</td>
       <td class="td-code"><a href="#" onclick="verMovimientosInsumo('${m.codigo}');return false" style="color:var(--gold2);text-decoration:none">${m.codigo}</a></td>
       <td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${m.nombre}">${m.nombre}</td>
@@ -6626,6 +6634,7 @@ function renderHistorial() {
       <td class="td-mono tr" style="font-weight:600">${fmt(m.stockDespues, 3)}</td>
       <td style="font-size:11px">${m.origen||'—'}</td>
       <td>${refHtml}</td>
+      <td class="tc">${revertBtn}</td>
     </tr>`;
   }).join('');
 
@@ -6634,6 +6643,96 @@ function renderHistorial() {
   // badge
   const nb = document.getElementById('nb-historial');
   if(nb) { nb.style.display = 'inline-flex'; nb.textContent = S.movimientos.length; }
+}
+
+function revertirMovimiento(mIdx) {
+  const m = S.movimientos[mIdx];
+  if(!m) return;
+  if(m._revertido) { toast('Este movimiento ya fue revertido','⚠️',3000); return; }
+
+  const delta = m.stockDespues - m.stockAntes;
+  const cod   = m.codigo;
+  const fechaFmt = new Date(m.fecha).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+
+  const msg = `¿Revertir este movimiento?\n\n`
+    + `Insumo: ${m.nombre} (${cod})\n`
+    + `Cambio: ${delta>=0?'+':''}${fmt(delta,3)}\n`
+    + `Stock volverá de ${fmt(m.stockDespues,3)} → ${fmt(m.stockAntes,3)}\n`
+    + `Fecha original: ${fechaFmt}`;
+  if(!confirm(msg)) return;
+
+  // ── 1. Ajustar stock principal ──────────────────────────────────
+  if(!D.stock[cod]) { toast('Insumo no encontrado en stock','⚠️',3000); return; }
+  const stockActual = parseFloat(D.stock[cod].stock) || 0;
+  D.stock[cod].stock = Math.round((stockActual - delta) * 1000) / 1000;
+
+  // Ajustar ubicación depósito proporcionalmente (best-effort)
+  const u = getUbic(D.stock[cod]);
+  if(delta > 0) u.deposito = Math.max(0, Math.round(((u.deposito||0) - delta) * 1000) / 1000);
+  else          u.deposito = Math.round(((u.deposito||0) - delta) * 1000) / 1000;
+
+  // ── 2. Quitar lote correspondiente (best-effort por cantidad + fecha) ──
+  if(D.stock[cod].lotes?.length > 0) {
+    const fechaMov = m.fecha?.slice(0,10) || '';
+    let loteFound = -1;
+    D.stock[cod].lotes.forEach((l,i) => {
+      if(Math.abs((l.cantidad||0) - Math.abs(delta)) < 0.001 && l.fecha === fechaMov) loteFound = i;
+    });
+    if(loteFound >= 0) D.stock[cod].lotes.splice(loteFound, 1);
+  }
+
+  // ── 3. Si era Recepción Depósito → reabrir la OC ───────────────
+  if(m.origen === 'Recepción Depósito') {
+    // Buscar OC que corresponda a este insumo y tenga recepciones
+    const oc = S.compras.find(c =>
+      c.codigo === cod && (c.recibidaDeposito || (c.recepciones||[]).length > 0)
+    );
+    if(oc) {
+      const recs = oc.recepciones || [];
+      // Quitar la última recepción que coincida con |delta|
+      let recFound = -1;
+      recs.forEach((r,i) => { if(Math.abs((r.cant||0) - Math.abs(delta)) < 0.001) recFound = i; });
+      if(recFound >= 0) recs.splice(recFound, 1);
+      oc.recepciones = recs;
+
+      const totalRec = recs.reduce((s,r) => s+(r.cant||0), 0);
+      oc.cant_recibida = totalRec;
+
+      if(totalRec <= 0.001) {
+        // Sin nada recibido → reabrir completamente en Recepción
+        oc.recibidaDeposito = false;
+        oc.entregada        = false;
+        oc.cerrada_manual   = false;
+      } else if(totalRec < (parseFloat(oc.cantidad) || 0) - 0.001) {
+        // Recepción parcial → reabrir para recibir el resto
+        oc.recibidaDeposito = false;
+        oc.entregada        = false;
+      }
+    }
+  }
+
+  // ── 4. Registrar movimiento de reverso en el historial ──────────
+  registrarMovimiento(
+    cod, m.nombre, 'ajuste', -delta,
+    stockActual, D.stock[cod].stock,
+    'Reverso manual',
+    `Reverso de "${m.origen||'—'}" del ${fechaFmt}`
+  );
+
+  // ── 5. Marcar original como revertido (queda en historial, tachado) ──
+  m._revertido = true;
+
+  // ── 6. Guardar ─────────────────────────────────────────────────
+  _saveOCStates();
+  _saveComprasSnap();
+  saveState();
+
+  // ── 7. Refrescar vistas ─────────────────────────────────────────
+  renderHistorial();
+  renderStock();
+  if(typeof renderRecepcion === 'function') renderRecepcion();
+
+  toast(`↩ Revertido · ${m.nombre} · Stock: ${fmt(D.stock[cod].stock,3)}`, '↩', 5000);
 }
 
 function exportHistorialXLSX() {
