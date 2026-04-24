@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-020';
+  var VER = '20260423-021';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3739,8 +3739,20 @@ async function loadFromSupabase() {
 
   if(isViewer) toast('☁ Datos actualizados', '☁', 1500);
   else if(sbTs > lsTs) toast('☁ Datos actualizados desde la nube', '☁', 2000);
-  // _autoFixPlanAbril() removido del ciclo automático — pisaba ediciones del usuario
-  // Disponible solo como botón manual oculto en el header del plan
+
+  // ── One-time v020: restaurar plan abril con valores correctos ─────────────
+  // Corre UNA sola vez (guardado en LS). Fija valores en snap + Supabase
+  // con ts actual, que siempre es > cualquier planEditTs anterior.
+  if(!isViewer && !localStorage.getItem('mrp_plan_fix_v020')) {
+    const fixesV020 = {'PT-0001':1220,'PT-0004':590,'PT-0005':679};
+    D.productos.forEach(p => { p.abr = fixesV020[p.codigo] || 0; });
+    S.planEditTs = Date.now();
+    _savePlanQty();
+    saveState();
+    localStorage.setItem('mrp_plan_fix_v020', '1');
+    toast('✓ Plan abril restaurado','✓',3000);
+  }
+
   _reRenderActivePage();
 
   sbIndicador('ok');
