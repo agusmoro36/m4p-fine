@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-016';
+  var VER = '20260423-017';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -2659,7 +2659,7 @@ const _SEED_COMPRAS = [
   {_sid:'PK-0037-ENVAFLU-4000',codigo:'PK-0037',descripcion:'LATA PEAK',productos:'PT-0001',cantidad:4000,precio:3698,total_usd:14792000,moneda:'ARS',proveedor:'ENVAFLU',estado:'Pedido',pagada:false,entregada:false},
   {_sid:'PK-0038-ENVAFLU-3000',codigo:'PK-0038',descripcion:'LATA POWER',productos:'PT-0002',cantidad:3000,precio:3698,total_usd:11094000,moneda:'ARS',proveedor:'ENVAFLU',estado:'Pedido',pagada:false,entregada:false},
   {_sid:'PK-0040-ENVAFLU-1000',codigo:'PK-0040',descripcion:'LATA SMOOTH',productos:'PT-0004',cantidad:1000,precio:3698,total_usd:3698000,moneda:'ARS',proveedor:'ENVAFLU',estado:'Pedido',pagada:false,entregada:false},
-  {_sid:'MP-0020-MCCASSAB-1300',codigo:'MP-0020',descripcion:'COLAGENO',productos:'FINE',cantidad:1300,precio:9.25,total_usd:12025,moneda:'USD',proveedor:'MC CASSAB',estado:'Pedido',pagada:false,entregada:false},
+  {_sid:'MP-0020-MCCASSAB-1300',nro:'OC-0022-2026',codigo:'MP-0020',descripcion:'COLAGENO',productos:'FINE',cantidad:1300,precio:9.25,total_usd:12025,moneda:'USD',proveedor:'MC CASSAB',estado:'Pedido',pagada:false,entregada:false},
   {_sid:'MP-0060-BASEL-10',codigo:'MP-0060',descripcion:'EXTRACTO MAQUI',productos:'',cantidad:10,precio:60,total_usd:600,moneda:'USD',proveedor:'BASEL',estado:'Pedido',pagada:false,entregada:false},
   {_sid:'MP-0060-LINNEO-10',nro:'OC-33/OC-0016-2026',codigo:'MP-0060',descripcion:'EXT. MAQUI',productos:'',cantidad:10,um:'kg',precio:64,total_usd:640,moneda:'USD',proveedor:'LINNEO',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-04-14',condicion_pago:'50% transferencia, 50% a 30 días',lead_time:3},
   {_sid:'MP-0078-MAGEL-15',nro:'OC-34/OC-0018-2026',codigo:'MP-0078',descripcion:'GLUCOMANANO',productos:'',cantidad:15,um:'kg',precio:56,total_usd:840,moneda:'USD',proveedor:'MAGEL',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-04-15',condicion_pago:'45 días',lead_time:3},
@@ -3253,7 +3253,10 @@ function _loadComprasSnap(incomingTs) {
          (c.proveedor||'').toUpperCase() === (sc.proveedor||'').toUpperCase() &&
          parseFloat(c.cantidad) === parseFloat(sc.cantidad))
       );
-      if(existing) { if(!existing._sid) existing._sid = sc._sid; }
+      if(existing) {
+        if(!existing._sid) existing._sid = sc._sid;
+        if(!existing.nro && sc.nro) existing.nro = sc.nro; // propagar nro desde seed si falta
+      }
       else S.compras.push({...sc});
     });
   } catch(e) {}
