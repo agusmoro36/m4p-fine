@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-008';
+  var VER = '20260423-009';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3217,6 +3217,44 @@ function _loadOCStates() {
   } catch(e) {}
 }
 
+// ── Compras snapshot: protege ediciones de OCs contra sobreescritura de Supabase ──
+// Mismo patrón que _savePlanQty. Se guarda en un key dedicado con su propio ts.
+// _loadComprasSnap(incomingTs): si el snapshot es más nuevo que el estado entrante,
+// restaura S.compras desde el snapshot (el usuario editó después del último sync).
+const COMPRAS_SNAP_LS = 'mrp_fine_compras_snap';
+
+function _saveComprasSnap() {
+  try {
+    localStorage.setItem(COMPRAS_SNAP_LS, JSON.stringify({
+      ts: Date.now(),
+      compras: S.compras
+    }));
+  } catch(e) {}
+}
+
+function _loadComprasSnap(incomingTs) {
+  try {
+    const raw = localStorage.getItem(COMPRAS_SNAP_LS);
+    if(!raw) return;
+    const snap = JSON.parse(raw);
+    if(!snap?.compras || !snap.ts) return;
+    if(snap.ts <= (incomingTs || 0)) return; // estado entrante es igual o más nuevo — no pisar
+    // Snapshot más nuevo → restaurar edición del usuario
+    S.compras = snap.compras;
+    // Re-mergear seeds por si hubo cambios de versión
+    _SEED_COMPRAS.forEach(sc => {
+      const existing = S.compras.find(c =>
+        c._sid === sc._sid ||
+        (!c._sid && !c._uid && c.codigo === sc.codigo &&
+         (c.proveedor||'').toUpperCase() === (sc.proveedor||'').toUpperCase() &&
+         parseFloat(c.cantidad) === parseFloat(sc.cantidad))
+      );
+      if(existing) { if(!existing._sid) existing._sid = sc._sid; }
+      else S.compras.push({...sc});
+    });
+  } catch(e) {}
+}
+
 // ── Plan cantidades: mismo patrón que OC states ─────────────────────────────
 const PLAN_QTY_LS = 'mrp_fine_plan_qty';
 
@@ -3545,6 +3583,9 @@ function applyState(st) {
   // Sincronizar planEditTs: tomar el mayor entre local y entrante
   if(st.planEditTs && st.planEditTs > (S.planEditTs || 0)) S.planEditTs = st.planEditTs;
   actualizarBadgePropuestas();
+  // Restaurar ediciones de OCs si el snapshot local es más reciente que el estado entrante
+  // Esto protege contra race conditions de _autoFixPlanAbril y guardados de Supabase stale
+  _loadComprasSnap(st.ts || 0);
   // Restaurar estados de OC desde localStorage dedicado — SIEMPRE al final de applyState
   _loadOCStates();
   // Restaurar cantidades del plan comparando con planEditTs (no st.ts)
@@ -5835,7 +5876,8 @@ function addCompra(){
     const preserve = {pagada:c.pagada, entregada:c.entregada, lote:c.lote,
       vencimiento:c.vencimiento, cant_recibida:c.cant_recibida};
     S.compras[idx] = {...c, ...d, ...preserve};
-    _saveOCStates(); // ← CRÍTICO: actualizar OC States con el nuevo obs/pagada/entregada
+    _saveOCStates();    // actualizar OC States (obs/pagada/entregada)
+    _saveComprasSnap(); // snapshot completo — protege contra race conditions de Supabase
     closeM('m-compra');
     renderCompras();
     saveState();
@@ -5844,6 +5886,7 @@ function addCompra(){
     // NUEVA — asignar _uid único para que nunca sea confundida con una seed
     const uid = 'U' + Date.now().toString(36).toUpperCase();
     S.compras.push({...d, _uid: uid, pagada:false, entregada:false});
+    _saveComprasSnap(); // snapshot después de agregar
     closeM('m-compra');
     renderCompras();
     saveState();
@@ -5856,6 +5899,7 @@ function eliminarOCModal(){
   if(isNaN(idx)) return;
   if(!confirm('¿Eliminar esta OC?')) return;
   S.compras.splice(idx, 1);
+  _saveComprasSnap(); // snapshot después de eliminar
   closeM('m-compra');
   renderCompras();
   saveState();
