@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-015';
+  var VER = '20260423-016';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3198,10 +3198,10 @@ function _restoreOCStates(map) {
     const key = c._sid || c._uid || (c.codigo + '_' + (c.proveedor||'') + '_' + c.cantidad);
     if(!map[key]) return;
     const s = map[key];
-    c.pagada          = s.pagada;
-    c.entregada       = s.entregada;
-    if(s.recibidaDeposito) c.recibidaDeposito = true;
-    c.obs             = s.obs;
+    c.pagada           = s.pagada;
+    c.entregada        = s.entregada;
+    c.recibidaDeposito = !!s.recibidaDeposito; // siempre setear — permite revertir a false
+    c.obs              = s.obs;
     if(s.comentarios?.length) c.comentarios = s.comentarios;
     if(s.cant_recibida != null) c.cant_recibida = s.cant_recibida;
     if(s.recepciones)           c.recepciones   = s.recepciones;
@@ -6683,10 +6683,10 @@ function revertirMovimiento(mIdx) {
 
   // ── 3. Si era Recepción Depósito → reabrir la OC ───────────────
   if(m.origen === 'Recepción Depósito') {
-    // Buscar OC que corresponda a este insumo y tenga recepciones
+    // Buscar OC: primero con recepciones o flags activos, luego cualquier OC del insumo
     const oc = S.compras.find(c =>
-      c.codigo === cod && (c.recibidaDeposito || (c.recepciones||[]).length > 0)
-    );
+      c.codigo === cod && (c.recibidaDeposito || c.entregada || (c.recepciones||[]).length > 0)
+    ) || S.compras.find(c => c.codigo === cod);
     if(oc) {
       const recs = oc.recepciones || [];
       // Quitar la última recepción que coincida con |delta|
