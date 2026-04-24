@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-024';
+  var VER = '20260423-025';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3482,6 +3482,31 @@ function saveState() {
   }
 }
 
+// Calcula el próximo número de OC disponible (mayor existente + 1).
+// Ej: si hay OC-0025-2026 → devuelve OC-0026-2026
+function _nextOCNro() {
+  const year = new Date().getFullYear();
+  let max = 0;
+  S.compras.forEach(c => {
+    const m = (c.nro || '').match(/OC-(\d+)-\d{4}/);
+    if(m) max = Math.max(max, parseInt(m[1]) || 0);
+  });
+  return 'OC-' + String(max + 1).padStart(4, '0') + '-' + year;
+}
+
+// Asigna nro permanente a OCs que aún no lo tienen, basado en posición actual.
+// Corre UNA VEZ en applyState — fija los números históricos para trazabilidad.
+function _asignarNrosFaltantes() {
+  let changed = false;
+  S.compras.forEach((c, idx) => {
+    if(!c.nro) {
+      c.nro = 'OC-' + String(idx + 1).padStart(4, '0') + '-2026';
+      changed = true;
+    }
+  });
+  if(changed) { _saveComprasSnap(); saveState(); }
+}
+
 // Propaga _sid y nro desde _SEED_COMPRAS a los OCs existentes en S.compras.
 // Corre SIEMPRE al final de applyState — no depende de timestamps.
 function _aplicarSeedFields() {
@@ -3645,6 +3670,8 @@ function applyState(st) {
   _loadOCStates();
   // Propagar campos del seed (_sid, nro) a OCs existentes — SIEMPRE, independiente de timestamps
   _aplicarSeedFields();
+  // Asignar nro permanente a OCs que aún no lo tienen — fija trazabilidad
+  _asignarNrosFaltantes();
   // Restaurar cantidades del plan comparando con planEditTs (no st.ts)
   // Así los saves de OC/stock no pisaron la comparación del plan
   _loadPlanQty(st.planEditTs || 0);
@@ -6001,7 +6028,7 @@ function addCompra(){
   if(_propEditIdx >= 0) {
     // APROBAR PROPUESTA → mover de comprasPropuestas a compras
     S.comprasPropuestas.splice(_propEditIdx, 1);
-    S.compras.push({...d, pagada:false, entregada:false, comentarios:[]});
+    S.compras.push({...d, nro: d.nro || _nextOCNro(), pagada:false, entregada:false, comentarios:[]});
     _propEditIdx = -1;
     closeM('m-compra');
     renderPropuestas();
@@ -6024,9 +6051,10 @@ function addCompra(){
     saveState();
     toast('OC actualizada','✓');
   } else {
-    // NUEVA — asignar _uid único para que nunca sea confundida con una seed
+    // NUEVA — asignar _uid único y nro permanente para trazabilidad
     const uid = 'U' + Date.now().toString(36).toUpperCase();
-    S.compras.push({...d, _uid: uid, pagada:false, entregada:false});
+    const nroNuevo = d.nro || _nextOCNro();
+    S.compras.push({...d, _uid: uid, nro: nroNuevo, pagada:false, entregada:false});
     _saveComprasSnap(); // snapshot después de agregar
     closeM('m-compra');
     renderCompras();
