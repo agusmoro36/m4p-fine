@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-013';
+  var VER = '20260423-014';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -4945,6 +4945,9 @@ function renderRecepcion() {
 
   if(cards) cards.innerHTML = pendientes.map(c => {
     const idx = S.compras.indexOf(c);
+    // Número de OC — mismo cálculo que renderCompras
+    const nroClean = (c.nro||'').replace(/^OC-\d+\//i,'');
+    const ocNum = nroClean || ('OC-'+String(idx+1).padStart(4,'0')+'-2026');
     // Calcular totales
     const recs = c.recepciones || [];
     const totalRec = recs.reduce((s,r) => s + (r.cant||0), 0);
@@ -4986,10 +4989,11 @@ function renderRecepcion() {
           <div class="rec-meta">${c.proveedor||'—'} · <span style="color:${estadoColor(c.estado)}">${c.estado}</span>${esParc?' · <span style="color:var(--orange);font-weight:600">Recepción parcial</span>':''}</div>
         </div>
         <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-          ${c.nro ? `<div style="display:inline-flex;align-items:center;gap:5px;background:rgba(212,175,55,.12);border:1px solid rgba(212,175,55,.35);border-radius:6px;padding:4px 9px">
+          <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(212,175,55,.12);border:1px solid rgba(212,175,55,.35);border-radius:6px;padding:4px 9px">
             <span style="font-size:9px;color:var(--text3);font-family:var(--mono);letter-spacing:.5px">OC</span>
-            <span style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--gold);letter-spacing:.3px">${c.nro}</span>
-          </div>` : ''}
+            <span style="font-size:13px;font-weight:700;font-family:var(--mono);color:var(--gold);letter-spacing:.3px">${ocNum}</span>
+          </div>
+          ${c.fecha ? `<div style="font-size:9px;color:var(--text3);font-family:var(--mono)">${c.fecha.split('-').reverse().join('/')}</div>` : ''}
           ${c.productos ? `<div style="font-size:9px;color:var(--text3);font-family:var(--mono);max-width:110px;word-break:break-word;text-align:right">${c.productos}</div>` : ''}
         </div>
       </div>
