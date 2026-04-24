@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-022';
+  var VER = '20260423-023';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3741,8 +3741,6 @@ async function loadFromSupabase() {
   else if(sbTs > lsTs) toast('☁ Datos actualizados desde la nube', '☁', 2000);
 
   // ── One-time v020: restaurar plan abril con valores correctos ─────────────
-  // Corre UNA sola vez (guardado en LS). Fija valores en snap + Supabase
-  // con ts actual, que siempre es > cualquier planEditTs anterior.
   if(!isViewer && !localStorage.getItem('mrp_plan_fix_v020')) {
     const fixesV020 = {'PT-0001':1220,'PT-0004':590,'PT-0005':679};
     D.productos.forEach(p => { p.abr = fixesV020[p.codigo] || 0; });
@@ -3751,6 +3749,28 @@ async function loadFromSupabase() {
     saveState();
     localStorage.setItem('mrp_plan_fix_v020', '1');
     toast('✓ Plan abril restaurado','✓',3000);
+  }
+
+  // ── One-time v022: aplicar stock real de Supabase ignorando gate stockImportTs=0 ──
+  // El stock YA estaba correcto en Supabase (confirmarRecepcion lo guardó en memoria y
+  // llamó saveState), pero applyState() lo ignoraba porque stockImportTs era 0.
+  // Esta migración toma data.value.stock y lo aplica directamente, luego setea
+  // stockImportTs = Date.now() para que en recargas futuras funcione normalmente.
+  if(!isViewer && !localStorage.getItem('mrp_stock_ts_fix_v022') && data.value?.stock) {
+    if((data.value.stockImportTs || 0) === 0) {
+      Object.entries(data.value.stock).forEach(([k, v]) => {
+        if(!D.stock[k]) D.stock[k] = {...v};
+        else {
+          const lotesExist = D.stock[k].lotes;
+          D.stock[k] = {...D.stock[k], ...v};
+          if(!v.lotes && lotesExist) D.stock[k].lotes = lotesExist;
+        }
+      });
+      S.stockImportTs = Date.now();
+      saveState();
+      toast('✓ Stock sincronizado desde la nube','☁',3000);
+    }
+    localStorage.setItem('mrp_stock_ts_fix_v022', '1');
   }
 
   _reRenderActivePage();
