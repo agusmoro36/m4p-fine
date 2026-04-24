@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-021';
+  var VER = '20260423-022';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3501,9 +3501,9 @@ function _aplicarSeedFields() {
 
 function applyState(st) {
   if(!st) return;
-  // ── Stock: solo aplicar si vino de un import real del usuario ───────────────
-  // stockImportTs = 0 → dato de baseline hardcodeado → se ignora (el código ya lo tiene)
-  // stockImportTs > 0 → vino de un import Excel explícito → se aplica si es >= local
+  // ── Stock: aplicar si vino de Supabase con stockImportTs > 0 ────────────────
+  // stockImportTs = 0 → solo baseline hardcodeado (primera vez, sin datos reales)
+  // stockImportTs > 0 → hay datos reales (Excel o recepciones) → aplicar si >= local
   if (st.stock && (st.stockImportTs || 0) > 0) {
     const incomingTs = st.stockImportTs;
     const localTs    = S.stockImportTs || 0;
@@ -5081,6 +5081,8 @@ function _ingresarStockRecepcion(c, cant, lote, venc) {
     toast('⚠️ OC sin código de insumo: el stock no pudo actualizarse. Ajustalo manualmente en Stock.', '⚠️', 8000);
     return;
   }
+  // Marcar stockImportTs para que applyState() aplique este stock desde Supabase en recargas
+  S.stockImportTs = Math.max(S.stockImportTs || 0, Date.now());
   if(!D.stock[cod]) D.stock[cod] = {nombre: c.descripcion || cod, stock: 0};
   const antes = parseFloat(D.stock[cod].stock) || 0;
   D.stock[cod].stock = Math.round((antes + cant) * 1000) / 1000;
@@ -6698,6 +6700,7 @@ function revertirMovimiento(mIdx) {
 
   // ── 1. Ajustar stock principal ──────────────────────────────────
   if(!D.stock[cod]) { toast('Insumo no encontrado en stock','⚠️',3000); return; }
+  S.stockImportTs = Math.max(S.stockImportTs || 0, Date.now()); // persistir cambio en recargas
   const stockActual = parseFloat(D.stock[cod].stock) || 0;
   D.stock[cod].stock = Math.round((stockActual - delta) * 1000) / 1000;
 
