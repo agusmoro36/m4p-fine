@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260424-027';
+  var VER = '20260424-028';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3336,6 +3336,16 @@ function _loadPlanQty(incomingTs) {
   } catch(e) {}
 }
 
+// ── Valores fijos de abril: siempre prevalecen sobre Supabase / localStorage ──
+// Se llama al final de applyState para que ningún estado viejo los pise.
+const _ABR_FIJO = {'PT-0001':1220,'PT-0004':590,'PT-0005':679};
+function _enforceAbrFijo() {
+  D.productos.forEach(p => {
+    if(_ABR_FIJO.hasOwnProperty(p.codigo)) p.abr = _ABR_FIJO[p.codigo];
+    else if(p.abr === undefined) p.abr = 0; // sin valor → 0 (no tocar si ya tiene)
+  });
+}
+
 // ── Auto-fix plan abril (one-time) ────────────────────────────────────────────
 // Se ejecuta automáticamente si detecta que planEditTs es anterior al fix.
 // Corrige valores en memoria y sube a Supabase para que todos los dispositivos
@@ -3707,6 +3717,10 @@ function applyState(st) {
   // Restaurar cantidades del plan comparando con planEditTs (no st.ts)
   // Así los saves de OC/stock no pisaron la comparación del plan
   _loadPlanQty(st.planEditTs || 0);
+  // ── Valores de ABRIL fijados definitivamente (mes ya producido) ──────────────
+  // Se aplican SIEMPRE al final, después de Supabase y localStorage, para que
+  // ningún estado viejo pueda pisarlos. No tocan mayo/jun para permitir edición.
+  _enforceAbrFijo();
 }
 
 function loadState() {
@@ -3911,6 +3925,19 @@ async function loadFromSupabase() {
       toast(`✓ Recepciones recuperadas para ${fixed} insumo(s)`,'📦',4000);
     }
     localStorage.setItem('mrp_stock_recepcion_fix_v027','1');
+  }
+
+  // ── One-time v028: subir plan abril correcto a Supabase con planEditTs fresco ─
+  // _enforceAbrFijo() ya fijó los valores en memoria; esta migración los persiste
+  // en Supabase con un ts reciente para que todos los dispositivos reciban los
+  // valores correctos y no haya más regresiones desde estado viejo en la nube.
+  if(!isViewer && !localStorage.getItem('mrp_plan_fix_v028')) {
+    _enforceAbrFijo();
+    S.planEditTs = Date.now();
+    _savePlanQty();
+    saveState();
+    toast('✓ Plan de abril fijado en la nube','📅',3000);
+    localStorage.setItem('mrp_plan_fix_v028','1');
   }
 
   _reRenderActivePage();
