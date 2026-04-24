@@ -3881,29 +3881,27 @@ async function loadFromSupabase() {
     localStorage.setItem('mrp_stock_ubic_fix_v026', '1');
   }
 
-  // ── One-time v027: recuperar recepciones de depósito no imputadas al stock ────
-  // La migración v023 usó maxStockDespues como total esperado; si el stock real
-  // (sala) era mayor que stockDespues al momento de la recepción, la delta de la
-  // recepción nunca se sumó a deposito. También cubre ítems (ej. MP-0233) que
-  // recibieron mercadería pero no estaban en D.stock al momento de la migración.
+  // ── One-time v027: recuperar recepciones puntuales no imputadas al depósito ──
+  // Solo se aplica a los 3 ítems confirmados donde el ingreso no quedó registrado.
+  // MP-0233: no existía en D.stock; MP-0036/MP-0051: stock en sala pero depósito=0.
+  // Usamos una lista fija para no tocar ítems que ya tienen stock correcto.
   if(!isViewer && !localStorage.getItem('mrp_stock_recepcion_fix_v027')) {
-    const totalReceived = {};
-    (S.movimientos || []).forEach(m => {
-      if(m.origen !== 'Recepción Depósito' || m._revertido) return;
-      const cod = m.codigo;
-      const delta = Math.round(((m.stockDespues||0)-(m.stockAntes||0))*1000)/1000;
-      if(delta > 0.001) totalReceived[cod] = Math.round(((totalReceived[cod]||0)+delta)*1000)/1000;
-    });
+    const recepciones = [
+      {cod:'MP-0233', delta:12.0},  // SABOR FRUTOS ROJOS + HIBISCO
+      {cod:'MP-0036', delta:5.0},   // EXT. ACEROLA 17%
+      {cod:'MP-0051', delta:5.0},   // EXT. FRUTILLA
+    ];
     let fixed = 0;
-    Object.entries(totalReceived).forEach(([cod, received]) => {
-      if(!D.stock[cod]) return;
-      const u = getUbic(D.stock[cod]);
-      const currentDeposito = Math.round((u.deposito||0)*1000)/1000;
-      if(currentDeposito < received - 0.001) {
-        const diff = Math.round((received - currentDeposito)*1000)/1000;
-        u.deposito = Math.round((currentDeposito + diff)*1000)/1000;
-        D.stock[cod].stock = Math.round(((parseFloat(D.stock[cod].stock)||0)+diff)*1000)/1000;
-        D.stock[cod].ubicaciones = u;
+    recepciones.forEach(({cod, delta}) => {
+      const s = D.stock[cod];
+      if(!s) return;
+      const u = getUbic(s);
+      const dep = Math.round((u.deposito||0)*1000)/1000;
+      if(dep < delta - 0.001) {
+        const diff = Math.round((delta - dep)*1000)/1000;
+        u.deposito = Math.round((dep + diff)*1000)/1000;
+        s.stock = Math.round(((parseFloat(s.stock)||0) + diff)*1000)/1000;
+        s.ubicaciones = u;
         fixed++;
       }
     });
