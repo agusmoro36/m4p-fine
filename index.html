@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-017';
+  var VER = '20260423-018';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3482,6 +3482,23 @@ function saveState() {
   }
 }
 
+// Propaga _sid y nro desde _SEED_COMPRAS a los OCs existentes en S.compras.
+// Corre SIEMPRE al final de applyState — no depende de timestamps.
+function _aplicarSeedFields() {
+  _SEED_COMPRAS.forEach(sc => {
+    const existing = S.compras.find(c =>
+      c._sid === sc._sid ||
+      (!c._sid && !c._uid && c.codigo === sc.codigo &&
+       (c.proveedor||'').toUpperCase() === (sc.proveedor||'').toUpperCase() &&
+       parseFloat(c.cantidad) === parseFloat(sc.cantidad))
+    );
+    if(existing) {
+      if(!existing._sid && sc._sid) existing._sid = sc._sid;
+      if(!existing.nro  && sc.nro)  existing.nro  = sc.nro; // propagar número real de OC
+    }
+  });
+}
+
 function applyState(st) {
   if(!st) return;
   // ── Stock: solo aplicar si vino de un import real del usuario ───────────────
@@ -3625,6 +3642,8 @@ function applyState(st) {
   _loadRevalidasSnap(st.ts || 0);
   // Restaurar estados de OC desde localStorage dedicado — SIEMPRE al final de applyState
   _loadOCStates();
+  // Propagar campos del seed (_sid, nro) a OCs existentes — SIEMPRE, independiente de timestamps
+  _aplicarSeedFields();
   // Restaurar cantidades del plan comparando con planEditTs (no st.ts)
   // Así los saves de OC/stock no pisaron la comparación del plan
   _loadPlanQty(st.planEditTs || 0);
