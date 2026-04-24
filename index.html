@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-019';
+  var VER = '20260423-020';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3329,7 +3329,7 @@ function _loadPlanQty(incomingTs) {
 // Se ejecuta automáticamente si detecta que planEditTs es anterior al fix.
 // Corrige valores en memoria y sube a Supabase para que todos los dispositivos
 // vean los valores correctos, incluso si corren JS antiguo.
-const _PLAN_FIX_TS = new Date('2026-04-24T00:00:00').getTime(); // umbral fix
+const _PLAN_FIX_TS = new Date('2099-01-01T00:00:00').getTime(); // umbral desactivado — auto-fix removido del ciclo
 function _autoFixPlanAbril(force) {
   if(document.body.classList.contains('viewer-mode')) return; // solo admin
   const fixes = {'PT-0001':1220,'PT-0004':590,'PT-0005':679};
@@ -3739,8 +3739,8 @@ async function loadFromSupabase() {
 
   if(isViewer) toast('☁ Datos actualizados', '☁', 1500);
   else if(sbTs > lsTs) toast('☁ Datos actualizados desde la nube', '☁', 2000);
-  // Auto-fix silencioso: corrige plan abril si Supabase todavía tiene valores viejos
-  _autoFixPlanAbril();
+  // _autoFixPlanAbril() removido del ciclo automático — pisaba ediciones del usuario
+  // Disponible solo como botón manual oculto en el header del plan
   _reRenderActivePage();
 
   sbIndicador('ok');
