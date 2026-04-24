@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260424-026';
+  var VER = '20260424-027';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -2642,7 +2642,8 @@ const D = {
       'MP-0157':{nombre:'COLORANTE AZORRUBINA',stock:3.613,um:'kg',ubicaciones:{deposito:0,sala1:0,sala2:3.613},lotes:[{"lote": "117001169567", "cantidad": 3.613, "vencimiento": "2026-03-01", "ubicacion": "Sala P.2", "proveedor": "ADICOL", "fecha": "2026-04-20"}]},
       'MP-0186':{nombre:'Sabor Manzana ES-231-875-6',stock:18.217,um:'kg',ubicaciones:{deposito:0,sala1:18.217,sala2:0},lotes:[{"lote": "BU00312694", "cantidad": 18.217, "vencimiento": "2026-01-01", "ubicacion": "Sala P.1", "proveedor": "HARMONY", "fecha": "2026-04-20"}]},
       'MP-0199':{nombre:'GLUCOSAMINA',stock:7.913,um:'kg',ubicaciones:{deposito:0,sala1:0,sala2:7.913},lotes:[{"lote": "320240203", "cantidad": 7.913, "vencimiento": "2026-02-01", "ubicacion": "Sala P.2", "proveedor": "FARMATRADE", "fecha": "2026-04-20"}]},
-      'MP-0211':{nombre:'VITAMINA B7 BIOTINA',stock:0.123,um:'kg',ubicaciones:{deposito:0,sala1:0,sala2:0.123},lotes:[{"lote": "523030005", "cantidad": 0.123, "vencimiento": "2026-03-01", "ubicacion": "Sala P.2", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}]}
+      'MP-0211':{nombre:'VITAMINA B7 BIOTINA',stock:0.123,um:'kg',ubicaciones:{deposito:0,sala1:0,sala2:0.123},lotes:[{"lote": "523030005", "cantidad": 0.123, "vencimiento": "2026-03-01", "ubicacion": "Sala P.2", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}]},
+      'MP-0233':{nombre:'SABOR FRUTOS ROJOS + HIBISCO',stock:12.0,um:'kg',ubicaciones:{deposito:12.0,sala1:0,sala2:0},lotes:[]}
   }};
 
 // State
@@ -3878,6 +3879,40 @@ async function loadFromSupabase() {
       saveState();
     }
     localStorage.setItem('mrp_stock_ubic_fix_v026', '1');
+  }
+
+  // ── One-time v027: recuperar recepciones de depósito no imputadas al stock ────
+  // La migración v023 usó maxStockDespues como total esperado; si el stock real
+  // (sala) era mayor que stockDespues al momento de la recepción, la delta de la
+  // recepción nunca se sumó a deposito. También cubre ítems (ej. MP-0233) que
+  // recibieron mercadería pero no estaban en D.stock al momento de la migración.
+  if(!isViewer && !localStorage.getItem('mrp_stock_recepcion_fix_v027')) {
+    const totalReceived = {};
+    (S.movimientos || []).forEach(m => {
+      if(m.origen !== 'Recepción Depósito' || m._revertido) return;
+      const cod = m.codigo;
+      const delta = Math.round(((m.stockDespues||0)-(m.stockAntes||0))*1000)/1000;
+      if(delta > 0.001) totalReceived[cod] = Math.round(((totalReceived[cod]||0)+delta)*1000)/1000;
+    });
+    let fixed = 0;
+    Object.entries(totalReceived).forEach(([cod, received]) => {
+      if(!D.stock[cod]) return;
+      const u = getUbic(D.stock[cod]);
+      const currentDeposito = Math.round((u.deposito||0)*1000)/1000;
+      if(currentDeposito < received - 0.001) {
+        const diff = Math.round((received - currentDeposito)*1000)/1000;
+        u.deposito = Math.round((currentDeposito + diff)*1000)/1000;
+        D.stock[cod].stock = Math.round(((parseFloat(D.stock[cod].stock)||0)+diff)*1000)/1000;
+        D.stock[cod].ubicaciones = u;
+        fixed++;
+      }
+    });
+    if(fixed > 0) {
+      S.stockImportTs = Math.max(S.stockImportTs||0, Date.now());
+      saveState();
+      toast(`✓ Recepciones recuperadas para ${fixed} insumo(s)`,'📦',4000);
+    }
+    localStorage.setItem('mrp_stock_recepcion_fix_v027','1');
   }
 
   _reRenderActivePage();
