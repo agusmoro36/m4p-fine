@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-018';
+  var VER = '20260423-019';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3545,12 +3545,13 @@ function applyState(st) {
   _SEED_COMPRAS.forEach(sc => {
     const existing = S.compras.find(c =>
       c._sid === sc._sid ||
-      (!c._sid && !c._uid && c.codigo === sc.codigo &&
+      (c.codigo === sc.codigo &&
        (c.proveedor||'').toUpperCase() === (sc.proveedor||'').toUpperCase() &&
        parseFloat(c.cantidad) === parseFloat(sc.cantidad))
     );
     if(existing) {
-      if(!existing._sid) existing._sid = sc._sid;
+      if(!existing._sid && sc._sid) existing._sid = sc._sid;
+      if(!existing.nro  && sc.nro)  existing.nro  = sc.nro; // propagar número real de OC
     } else {
       S.compras.push({...sc}); // copia, no referencia directa al seed
     }
