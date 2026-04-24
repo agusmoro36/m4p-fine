@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260423-011';
+  var VER = '20260423-012';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3258,6 +3258,34 @@ function _loadComprasSnap(incomingTs) {
   } catch(e) {}
 }
 
+// ── Reválidas snapshot: protege fechas de vencimiento contra sobreescritura de Supabase ──
+// Mismo patrón que _saveComprasSnap. Se guarda en un key dedicado con su propio ts.
+// _loadRevalidasSnap(incomingTs): si el snapshot es más nuevo que el estado entrante,
+// restaura S.revalidas desde el snapshot (el usuario actualizó una reválida después del sync).
+const REVALIDAS_SNAP_LS = 'mrp_fine_revalidas_snap';
+
+function _saveRevalidasSnap() {
+  try {
+    localStorage.setItem(REVALIDAS_SNAP_LS, JSON.stringify({
+      ts: Date.now(),
+      revalidas: S.revalidas || {}
+    }));
+  } catch(e) {}
+}
+
+function _loadRevalidasSnap(incomingTs) {
+  try {
+    const raw = localStorage.getItem(REVALIDAS_SNAP_LS);
+    if(!raw) return;
+    const snap = JSON.parse(raw);
+    if(!snap?.revalidas || !snap.ts) return;
+    if(snap.ts <= (incomingTs || 0)) return; // estado entrante es igual o más nuevo — no pisar
+    // Snapshot más nuevo → restaurar edición del usuario (merge: snap prevalece por key)
+    S.revalidas = {...(S.revalidas || {}), ...snap.revalidas};
+    _aplicarVencimientosRevalidas();
+  } catch(e) {}
+}
+
 // ── Plan cantidades: mismo patrón que OC states ─────────────────────────────
 const PLAN_QTY_LS = 'mrp_fine_plan_qty';
 
@@ -3589,6 +3617,8 @@ function applyState(st) {
   // Restaurar ediciones de OCs si el snapshot local es más reciente que el estado entrante
   // Esto protege contra race conditions de _autoFixPlanAbril y guardados de Supabase stale
   _loadComprasSnap(st.ts || 0);
+  // Restaurar fechas de reválida si el snapshot local es más reciente que el estado entrante
+  _loadRevalidasSnap(st.ts || 0);
   // Restaurar estados de OC desde localStorage dedicado — SIEMPRE al final de applyState
   _loadOCStates();
   // Restaurar cantidades del plan comparando con planEditTs (no st.ts)
@@ -8644,6 +8674,7 @@ function guardarRevalida() {
     vencimientoRevalida: venc,
     fecha: new Date().toISOString().slice(0,10)
   };
+  _saveRevalidasSnap(); // snapshot dedicado — protege vencimientoRevalida contra race conditions
   saveState();
   actualizarBadgeAlertas();
   closeM('m-revalida');
