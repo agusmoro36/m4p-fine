@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260424-032';
+  var VER = '20260424-033';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3959,17 +3959,17 @@ async function loadFromSupabase() {
   }
 
   // ── One-time v032: 4 precios adicionales confirmados manualmente ─────────────
-  if(!isViewer && !localStorage.getItem('mrp_precios_manual_v032')) {
+  if(!isViewer && !localStorage.getItem('mrp_precios_manual_v033')) {
     if(!S.preciosInsumos) S.preciosInsumos = {};
     const _PM = {
-      'PK-0064':{precio:0.92, moneda:'USD', fuente:'Manual', proveedor:'', fecha:'2026-04-27', updatedAt:'2026-04-27'},
-      'PK-0160':{precio:235,  moneda:'ARS', fuente:'Manual', proveedor:'', fecha:'2026-04-27', updatedAt:'2026-04-27'},
-      'MP-0164':{precio:811,  moneda:'USD', fuente:'Manual', proveedor:'PLT Health Solution', fecha:'2026-04-27', updatedAt:'2026-04-27'},
-      'PK-0140':{precio:305,  moneda:'ARS', fuente:'Manual', proveedor:'', fecha:'2026-04-27', updatedAt:'2026-04-27'},
+      'PK-0064':{precio:0.92, moneda:'USD', fuente:'Manual', proveedor:'', fecha:'2025-12-20', updatedAt:'2025-12-20'},
+      'PK-0160':{precio:235,  moneda:'ARS', fuente:'Manual', proveedor:'', fecha:'2025-12-20', updatedAt:'2025-12-20'},
+      'MP-0164':{precio:811,  moneda:'USD', fuente:'Manual', proveedor:'PLT Health Solution', fecha:'2025-12-20', updatedAt:'2025-12-20'},
+      'PK-0140':{precio:305,  moneda:'ARS', fuente:'Manual', proveedor:'', fecha:'2025-12-20', updatedAt:'2025-12-20'},
     };
     Object.entries(_PM).forEach(([cod,v]) => { S.preciosInsumos[cod] = v; });
     saveState();
-    localStorage.setItem('mrp_precios_manual_v032','1');
+    localStorage.setItem('mrp_precios_manual_v033','1');
   }
 
   _reRenderActivePage();
