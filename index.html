@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260424-029';
+  var VER = '20260424-030';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3337,12 +3337,12 @@ function _loadPlanQty(incomingTs) {
 }
 
 // ── Valores fijos de abril: siempre prevalecen sobre Supabase / localStorage ──
-// Se llama al final de applyState para que ningún estado viejo los pise.
+// Los productos NO listados reciben abr=0 siempre (ediciones viejas de Supabase
+// que pusieron 2100/2800/304/525/300 en otros productos se descartan).
 const _ABR_FIJO = {'PT-0001':1220,'PT-0004':590,'PT-0005':679};
 function _enforceAbrFijo() {
   D.productos.forEach(p => {
-    if(_ABR_FIJO.hasOwnProperty(p.codigo)) p.abr = _ABR_FIJO[p.codigo];
-    else if(p.abr === undefined) p.abr = 0; // sin valor → 0 (no tocar si ya tiene)
+    p.abr = _ABR_FIJO.hasOwnProperty(p.codigo) ? _ABR_FIJO[p.codigo] : 0;
   });
 }
 
@@ -3929,6 +3929,17 @@ async function loadFromSupabase() {
     saveState();
     toast('✓ Plan de abril fijado en la nube','📅',3000);
     localStorage.setItem('mrp_plan_fix_v028','1');
+  }
+
+  // ── One-time v029: poner abr=0 a todos los productos no fijados ─────────────
+  // v028 ya fijó 1220/590/679 pero dejó intactos 2100/2800/304/525/300 en otros.
+  // Esta migración aplica la nueva lógica de _enforceAbrFijo que zeroa el resto.
+  if(!isViewer && !localStorage.getItem('mrp_plan_fix_v029')) {
+    _enforceAbrFijo();
+    S.planEditTs = Date.now();
+    _savePlanQty();
+    saveState();
+    localStorage.setItem('mrp_plan_fix_v029','1');
   }
 
   _reRenderActivePage();
