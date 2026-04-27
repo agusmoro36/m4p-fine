@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260424-028';
+  var VER = '20260424-029';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3728,7 +3728,7 @@ function loadState() {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw);
-    applyState(parsed);
+    applyState(parsed); // ya llama _enforceAbrFijo() al final
     // Inicializar _lastLocalTs para que el subscription guard arranque con el ts local
     if(parsed.ts) _lastLocalTs = parsed.ts;
     _restaurarAdjuntosLS(); // restaurar adjuntos desde localStorage del dispositivo
@@ -3750,20 +3750,11 @@ async function loadFromSupabase() {
   const isViewer = document.body.classList.contains('viewer-mode');
 
   if(lsTs > sbTs && !isViewer) {
-    // localStorage más reciente (Supabase save anterior falló).
-    // PERO: siempre aplicar planEditTs de Supabase si es más reciente — protege plan
-    // contra localStorage con datos viejos (ej: Safari bfcache con plan incorrecto).
-    if(data.value?.planEditTs && (data.value.planEditTs > (S.planEditTs || 0))) {
-      const sbPlanTs = data.value.planEditTs;
-      const fixes = {'PT-0001':1220,'PT-0004':590,'PT-0005':679};
-      (data.value.productos||[]).forEach(sp => {
-        const p = D.productos.find(x=>x.codigo===sp.codigo);
-        if(p) p.abr = fixes.hasOwnProperty(sp.codigo) ? fixes[sp.codigo] : 0;
-      });
-      S.planEditTs = sbPlanTs;
-      _savePlanQty();
-      console.log('✓ Plan abril forzado desde Supabase (planEditTs superior)');
-    }
+    // localStorage más reciente (Supabase save anterior falló) — usamos el estado local.
+    // _enforceAbrFijo ya corrió en loadState/applyState, pero lo llamamos de nuevo
+    // por si el LS tenía valores viejos, y luego subimos a Supabase.
+    _enforceAbrFijo();
+    _savePlanQty();
     _restaurarAdjuntosLS();
     console.warn('localStorage más reciente que Supabase — sincronizando hacia la nube...');
     saveState(); // push estado local → Supabase (ahora incluye plan correcto)
