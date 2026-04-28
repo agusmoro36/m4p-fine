@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260427-034';
+  var VER = '20260427-035';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -2863,22 +2863,22 @@ function semaforoMRP(x){
   const realStock = parseFloat(D.stock[x.codigo]?.stock);
   const hasReal   = !isNaN(realStock);
 
-  // 1. MRP resultado: sólo aporta señal CRÍTICA si hay déficit real en abril
+  // 1. MRP resultado: señal CRÍTICA si hay déficit en CUALQUIER mes corrido
   //    (no usamos la tasa de consumo mensual del MRP para DFC — puede ser un lote puntual
   //     que no representa el consumo diario sostenido)
   if(S.mrpResultado?.resultado) {
     const mesesRun = S.mrpResultado.meses || [];
-    if(mesesRun.includes('abr')) {
+    if(mesesRun.length > 0) {
       const ins = S.mrpResultado.resultado.find(r => r.codigo === x.codigo);
-      if(ins && ins.meses['abr']) {
-        const m = ins.meses['abr'];
-        // ¿El MRP fue corrido con el stock real actual? (diferencia < 5%)
-        const mrpFresco = !hasReal || Math.abs(m.stockInicio - realStock) <= Math.max(1, realStock * 0.05);
-        if(mrpFresco && m.deficit > 0) {
-          // Déficit real confirmado por MRP fresco → CRÍTICO seguro
+      if(ins) {
+        // Verificar "frescura" usando el primer mes (stockInicio ≈ stock real actual)
+        const m0 = ins.meses[mesesRun[0]];
+        const mrpFresco = !m0 || !hasReal || Math.abs(m0.stockInicio - realStock) <= Math.max(1, realStock * 0.05);
+        // Déficit en cualquier mes corrido
+        const tieneDeficit = mesesRun.some(m => ins.meses[m] && ins.meses[m].deficit > 0);
+        if(mrpFresco && tieneDeficit) {
           return{k:'crit',color:'#ef4444',label:'Crítico',bg:'rgba(239,68,68,.04)'};
         }
-        // Sin déficit → calcular DFC con tasa estática (más representativa del consumo continuo)
       }
     }
   }
