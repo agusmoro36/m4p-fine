@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260424-033';
+  var VER = '20260427-034';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -726,22 +726,19 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     </div>
     <!-- KPIs semáforo -->
     <div id="mrp-semaforo-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:6px"></div>
-    <div style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-bottom:14px;padding:6px 10px;background:var(--bg2);border-radius:6px;border:1px solid var(--border)">
-      📦 Stock real al 2/4 · DFC real calculado desde stock actual · Corré el MRP para ver proyección de Abril con déficits exactos
+    <div id="proyeccion-info-banner" style="font-size:10px;color:var(--text3);font-family:var(--mono);margin-bottom:14px;padding:6px 10px;background:var(--bg2);border-radius:6px;border:1px solid var(--border)">
+      📦 Stock real actualizado · DFC calculado desde stock real · Corré el MRP para ver proyección con déficits exactos
     </div>
-    <!-- Tabla DFC -->
+    <!-- Tabla DFC — thead dinámico generado por renderProyeccion() -->
     <div class="tbl-wrap"><table>
-      <thead><tr>
+      <thead id="proyeccion-thead"><tr>
         <th class="tc" style="min-width:90px">Estado</th>
         <th onclick="sortMRP('codigo')">Código ↕</th>
         <th>Descripción</th>
         <th>Subcategoría</th>
-        <th class="tr" onclick="sortMRP('stock_mar')" style="color:var(--acc)">Stock real 2/4 ↕</th>
+        <th class="tr" style="color:var(--acc)">Stock real</th>
         <th class="tc">DFC real</th>
-        <th class="tr">OC pendiente</th>
-        <th class="tr">Consumo Abr</th>
-        <th class="tr">Stock fin Abr</th>
-        <th class="tc">Déficit Abr</th>
+        <th class="tr">OC pend.</th>
       </tr></thead>
       <tbody id="tbl-mrp"></tbody>
     </table></div>
@@ -4316,6 +4313,7 @@ function correrMRP() {
   const el = document.getElementById('mrp-last-run');
   if(el) el.textContent = 'Último run: ' + new Date(S.mrpResultado.timestamp).toLocaleString('es-AR');
   const nDef = resultado.filter(r => r.tieneDeficit).length;
+  renderProyeccion();
   toast(`MRP calculado · ${resultado.length} insumos · ${ocNuevas} OC${ocNuevas!==1?'s':''} propuesta${ocNuevas!==1?'s':''} generada${ocNuevas!==1?'s':''}`, '✓', 4000);
 }
 
@@ -5059,18 +5057,48 @@ function renderProyeccion(){
     </div>`;
   }).join('');
 
-  // ── Tabla DFC (dinámica con stock real y MRP resultado)
-  const page = paginate(mrpData, S.mrpPage, S.per);
-  const tblMrp = document.getElementById('tbl-mrp');
-
-  // Mapa rápido de MRP resultado por código
+  // ── Meses dinámicos desde último MRP corrido
+  const mrpMeses = S.mrpResultado?.meses || [];
   const mrpMap = {};
-  if(S.mrpResultado?.resultado) {
-    const mesesRun = S.mrpResultado.meses || [];
-    if(mesesRun.includes('abr')) {
-      S.mrpResultado.resultado.forEach(ins => { mrpMap[ins.codigo] = ins; });
-    }
+  if(S.mrpResultado?.resultado && mrpMeses.length) {
+    S.mrpResultado.resultado.forEach(ins => { mrpMap[ins.codigo] = ins; });
   }
+
+  // ── Banner info con timestamps reales
+  const banner = document.getElementById('proyeccion-info-banner');
+  if(banner) {
+    const stockTs = S.stockImportTs ? new Date(S.stockImportTs).toLocaleString('es-AR') : null;
+    const mrpTs = S.mrpResultado?.timestamp ? new Date(S.mrpResultado.timestamp).toLocaleString('es-AR') : null;
+    const parts = [];
+    if(stockTs) parts.push(`📦 Stock actualizado: ${stockTs}`);
+    else parts.push('📦 Stock hardcodeado');
+    if(mrpTs) parts.push(`🔄 MRP corrido: ${mrpTs}` + (mrpMeses.length ? ` (${mrpMeses.map(m=>m.toUpperCase()).join(', ')})` : ''));
+    else parts.push('⚠️ Corré el MRP para ver proyección con déficits exactos');
+    banner.textContent = parts.join(' · ');
+  }
+
+  // ── Thead dinámico: columnas base + 3 columnas por mes MRP
+  const LABEL_MES = {ene:'Ene',feb:'Feb',mar:'Mar',abr:'Abr',may:'May',jun:'Jun',jul:'Jul',ago:'Ago',sep:'Sep',oct:'Oct',nov:'Nov',dic:'Dic'};
+  const thead = document.getElementById('proyeccion-thead');
+  if(thead) {
+    const mesHeaders = mrpMeses.map(m => {
+      const lbl = LABEL_MES[m] || m.toUpperCase();
+      return `<th class="tr" style="color:var(--text3);font-size:10px;border-left:1px solid var(--border)">Consumo<br>${lbl}</th>
+              <th class="tr" style="color:var(--text3);font-size:10px">Stock fin<br>${lbl}</th>
+              <th class="tc" style="color:var(--text3);font-size:10px">Déficit<br>${lbl}</th>`;
+    }).join('');
+    thead.innerHTML = `<tr>
+      <th class="tc" style="min-width:90px">Estado</th>
+      <th onclick="sortMRP('codigo')">Código ↕</th>
+      <th>Descripción</th>
+      <th>Subcategoría</th>
+      <th class="tr" style="color:var(--acc)">Stock real</th>
+      <th class="tc">DFC real</th>
+      <th class="tr">OC pend.</th>
+      ${mesHeaders}
+    </tr>`;
+  }
+
   // OCs pendientes por código
   const ocPendMap = {};
   S.compras.filter(c => !c.entregada && c.estado !== 'Cancelada').forEach(c => {
@@ -5080,6 +5108,10 @@ function renderProyeccion(){
       ocPendMap[cod] = (ocPendMap[cod] || 0) + (parseFloat(it.cantidad) || 0);
     });
   });
+
+  const totalCols = 7 + mrpMeses.length * 3;
+  const page = paginate(mrpData, S.mrpPage, S.per);
+  const tblMrp = document.getElementById('tbl-mrp');
 
   if(tblMrp) tblMrp.innerHTML = page.map(x => {
     const sem = semaforoMRP(x);
@@ -5100,31 +5132,40 @@ function renderProyeccion(){
       : realDfc >= 180 ? `<span class="pill pill-ok">+180d</span>`
       : dfcPill(realDfc.toFixed(1));
 
-    // OC pendiente para este insumo
+    // OC pendiente
     const ocPend = ocPendMap[x.codigo] || 0;
     const ocCell = ocPend > 0
       ? `<span style="color:var(--blue);font-weight:600">+${fmt(ocPend)}</span>`
       : `<span style="color:var(--text3)">—</span>`;
 
-    // Datos Abril desde MRP resultado o estáticos
-    let consumoAbr = '—', stockFinAbr = '—', deficitAbr = '—', rowBg = sem.bg;
+    // Columnas dinámicas por mes MRP
     const ins = mrpMap[x.codigo];
-    if(ins && ins.meses['abr']) {
-      const m = ins.meses['abr'];
-      const consumed = Math.max(0, m.stockInicio + m.ocIngreso - m.stockFin);
-      consumoAbr = fmt(consumed);
-      stockFinAbr = `<span style="color:${m.stockFin<0?'var(--red)':'inherit'}">${fmt(m.stockFin)}</span>`;
-      deficitAbr = m.deficit > 0
-        ? `<span style="color:var(--red);font-weight:700">-${fmt(m.deficit)}</span>`
-        : `<span style="color:var(--acc);font-weight:600">✓</span>`;
-      if(m.deficit > 0) rowBg = 'rgba(239,68,68,.05)';
-    } else {
-      // Fallback estático Abr
-      stockFinAbr = `<span style="color:${x.stock_abr<0?'var(--red)':'inherit'};opacity:.6">${fmt(x.stock_abr)}</span>`;
-      deficitAbr = x.stock_abr < 0
-        ? `<span style="color:var(--red);opacity:.7">-${fmt(Math.abs(x.stock_abr))}</span>`
-        : `<span style="color:var(--text3);opacity:.6">—</span>`;
-    }
+    let rowBg = sem.bg;
+    let mesCells = '';
+    mrpMeses.forEach((m, mi) => {
+      const borderStyle = mi === 0 ? 'border-left:1px solid var(--border)' : '';
+      if(ins && ins.meses[m]) {
+        const md = ins.meses[m];
+        const consumed = Math.max(0, md.stockInicio + md.ocIngreso - md.stockFin);
+        const stockFinCell = `<span style="color:${md.stockFin<0?'var(--red)':'inherit'}">${fmt(md.stockFin)}</span>`;
+        const defCell = md.deficit > 0
+          ? `<span style="color:var(--red);font-weight:700">-${fmt(md.deficit)}</span>`
+          : `<span style="color:var(--acc);font-weight:600">✓</span>`;
+        if(md.deficit > 0) rowBg = 'rgba(239,68,68,.05)';
+        mesCells += `<td class="td-mono tr" style="color:var(--text3);${borderStyle}">${fmt(consumed)}</td><td class="td-mono tr">${stockFinCell}</td><td class="tc">${defCell}</td>`;
+      } else {
+        // Fallback estático para el mes si existe en D.mrp
+        const stockKey = `stock_${m}`;
+        const staticStock = x[stockKey];
+        const stockFinCell = staticStock !== undefined
+          ? `<span style="color:${staticStock<0?'var(--red)':'inherit'};opacity:.6">${fmt(staticStock)}</span>`
+          : `<span style="color:var(--text3)">—</span>`;
+        const defCell = staticStock !== undefined && staticStock < 0
+          ? `<span style="color:var(--red);opacity:.7">-${fmt(Math.abs(staticStock))}</span>`
+          : `<span style="color:var(--text3);opacity:.6">—</span>`;
+        mesCells += `<td class="td-mono tr" style="color:var(--text3);${borderStyle}">—</td><td class="td-mono tr">${stockFinCell}</td><td class="tc">${defCell}</td>`;
+      }
+    });
 
     const tip = `Stock real: ${fmt(stockReal)} · DFC real: ${realDfc!==null?realDfc.toFixed(1)+'d':'—'} · OC pend: ${fmt(ocPend)}`;
     return `<tr style="background:${rowBg}">
@@ -5140,11 +5181,9 @@ function renderProyeccion(){
       <td class="td-mono tr" style="color:${stockColor};font-weight:${tieneStockReal?'600':'400'}">${fmt(stockReal)}${tieneStockReal?'':' <span style="font-size:9px;opacity:.5">est.</span>'}</td>
       <td class="tc">${dfcRealPill}</td>
       <td class="td-mono tr">${ocCell}</td>
-      <td class="td-mono tr" style="color:var(--text3)">${consumoAbr}</td>
-      <td class="td-mono tr">${stockFinAbr}</td>
-      <td class="tc">${deficitAbr}</td>
+      ${mesCells}
     </tr>`;
-  }).join('')||'<tr><td colspan="10" class="tc" style="color:var(--text3);padding:24px">Sin resultados</td></tr>';
+  }).join('')||`<tr><td colspan="${totalCols}" class="tc" style="color:var(--text3);padding:24px">Sin resultados</td></tr>`;
   renderPag('pag-mrp', mrpData.length, S.per, S.mrpPage, p=>{S.mrpPage=p;renderProyeccion();});
 
 }
@@ -6596,6 +6635,7 @@ function guardarStockEnNube(){
   if(document.body.classList.contains('viewer-mode')){ toast('Solo el administrador puede guardar stock','⚠️',3000); return; }
   S.stockImportTs = Date.now();
   saveState();
+  renderProyeccion();
   toast('☁ Stock guardado en la nube — todos los dispositivos verán este stock al recargar','✓',4000);
   const btn = document.getElementById('btn-guardar-stock');
   if(btn){ btn.textContent='✓ Guardado'; btn.disabled=true; setTimeout(()=>{ btn.textContent='☁ Guardar stock'; btn.disabled=false; },5000); }
@@ -7262,7 +7302,7 @@ function processImport(file,type){
               : `<span class="pill pill-warn">⚠ 0 filas importadas — revisar el formato del archivo</span>`;
           }
           if(count === 0) toast('No se importó nada','⚠️',5000);
-          else { S.stockImportTs = Date.now(); toast(`✓ ${count} insumos de salas de pesado actualizados`,'🏭'); }
+          else { S.stockImportTs = Date.now(); renderProyeccion(); toast(`✓ ${count} insumos de salas de pesado actualizados`,'🏭'); }
 
         } else {
           // ── MODO STOCK DEPÓSITO ──────────────────────────────────────────
@@ -7323,7 +7363,7 @@ function processImport(file,type){
               : `<span class="pill pill-warn">⚠ 0 filas importadas — el Excel no tiene códigos MP-XXXX o PK-XXXX en la columna A</span>`;
           }
           if(count === 0) toast('No se importó nada','⚠️',5000);
-          else { S.stockImportTs = Date.now(); toast(`✓ ${count} insumos de stock actualizados`,'📊'); }
+          else { S.stockImportTs = Date.now(); renderProyeccion(); toast(`✓ ${count} insumos de stock actualizados`,'📊'); }
         }
 
         saveState();
