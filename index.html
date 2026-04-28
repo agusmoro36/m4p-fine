@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260427-036';
+  var VER = '20260427-037';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -10701,22 +10701,28 @@ function renderMaestroPrecios() {
     const pppData = _calcPPP(hist[ins.codigo]);
     const monSym = (p?.moneda || 'USD') === 'ARS' ? '$' : 'U$D';
 
-    // Celda PPP
+    // Celda PPP — si no hay OCs con cantidad, usa precio vigente como fallback
+    const pppEfectivo = pppData || (p && p.precio > 0 ? { ppp: p.precio, moneda: p.moneda || 'USD', n: 0, qTotal: 0 } : null);
     let pppCell = `<td class="td-mono tr" style="color:var(--text3)">—</td>`;
-    if(pppData) {
-      const sym = pppData.moneda === 'ARS' ? '$' : 'U$D';
-      const tipPPP = `${pppData.n} OC${pppData.n!==1?'s':''} · ${fmt(pppData.qTotal,2)} unidades/kg totales`;
-      // Variación vs precio vigente (solo si misma moneda)
+    if(pppEfectivo) {
+      const sym = pppEfectivo.moneda === 'ARS' ? '$' : 'U$D';
+      const esFallback = pppEfectivo.n === 0;
+      const tipPPP = esFallback
+        ? 'Sin OCs con cantidad — se usa el precio vigente como referencia'
+        : `${pppEfectivo.n} OC${pppEfectivo.n!==1?'s':''} · ${fmt(pppEfectivo.qTotal,2)} unidades/kg totales`;
       let varHtml = '';
-      if(p && p.precio > 0 && p.moneda === pppData.moneda) {
-        const varPct = ((pppData.ppp - p.precio) / p.precio) * 100;
+      // Solo hay variación si el PPP viene de OCs reales (no es el mismo precio)
+      if(!esFallback && p && p.precio > 0 && p.moneda === pppEfectivo.moneda) {
+        const varPct = ((pppEfectivo.ppp - p.precio) / p.precio) * 100;
         const varColor = Math.abs(varPct) < 5 ? 'var(--green)' : Math.abs(varPct) < 20 ? 'var(--gold)' : 'var(--red)';
         const varSign = varPct >= 0 ? '+' : '';
         varHtml = `<span style="font-size:9px;color:${varColor};font-family:var(--mono);margin-left:5px">(${varSign}${varPct.toFixed(1)}%)</span>`;
       }
+      const ocsBadge = esFallback
+        ? `<span style="font-size:9px;color:var(--text3);font-family:var(--mono);margin-left:4px" title="${tipPPP}">ref.</span>`
+        : `<span style="font-size:9px;color:var(--text3);font-family:var(--mono);margin-left:4px">${pppEfectivo.n}OC</span>`;
       pppCell = `<td class="td-mono tr" title="${tipPPP}">
-        <span style="color:var(--gold);font-weight:600">${sym} ${fmt(pppData.ppp,2)}</span>${varHtml}
-        <span style="font-size:9px;color:var(--text3);font-family:var(--mono);margin-left:4px">${pppData.n}OC</span>
+        <span style="color:${esFallback?'var(--text3)':'var(--gold)'};font-weight:${esFallback?'400':'600'}">${sym} ${fmt(pppEfectivo.ppp,2)}</span>${varHtml}${ocsBadge}
       </td>`;
     }
 
@@ -10789,14 +10795,15 @@ function exportarMaestroPrecios() {
   const rows = [...insumos.values()].map(ins => {
     const p = S.preciosInsumos[ins.codigo];
     const pppData = _calcPPP(hist[ins.codigo]);
+    const pppEfectivo = pppData || (p && p.precio > 0 ? { ppp: p.precio, moneda: p.moneda || 'USD', n: 0 } : null);
     return {
       'Código':        ins.codigo,
       'Insumo':        ins.nombre,
       'Precio vigente':p?.precio ?? '',
       'Moneda':        p?.moneda ?? '',
-      'PPP':           pppData ? Math.round(pppData.ppp * 100) / 100 : '',
-      'Moneda PPP':    pppData ? pppData.moneda : '',
-      'OCs usadas PPP':pppData ? pppData.n : '',
+      'PPP':           pppEfectivo ? Math.round(pppEfectivo.ppp * 100) / 100 : '',
+      'Moneda PPP':    pppEfectivo ? pppEfectivo.moneda : '',
+      'OCs usadas PPP':pppEfectivo ? pppEfectivo.n : '',
       'Fuente':        p?.fuente ?? 'Sin precio',
       'Proveedor':     p?.proveedor ?? '',
       'Fecha cotiz':   p?.fecha ?? '',
