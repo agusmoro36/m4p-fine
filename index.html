@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260427-035';
+  var VER = '20260427-036';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -1358,7 +1358,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         <button class="btn btn-sm" onclick="exportarMaestroPrecios()" style="border-color:var(--green);color:var(--green)">↓ Exportar Excel</button>
       </div>
     </div>
-    <div id="mp-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px"></div>
+    <div id="mp-kpis" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px"></div>
     <div class="tbl-wrap">
       <table>
         <thead>
@@ -1366,6 +1366,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
             <th>Código</th>
             <th>Insumo</th>
             <th class="tr">Precio vigente</th>
+            <th class="tr" style="color:var(--gold)" title="Precio Promedio Ponderado calculado desde OCs con cantidades">PPP</th>
             <th>Moneda</th>
             <th>Fuente</th>
             <th>Proveedor ref.</th>
@@ -10625,6 +10626,28 @@ function _getAllBOMInsumos() {
   return map;
 }
 
+/**
+ * Calcula el Precio Promedio Ponderado (PPP) desde el historial de OCs.
+ * Sólo usa entradas con precio > 0 Y cantidad > 0.
+ * Retorna { ppp, moneda, n, qTotal } o null si no hay datos suficientes.
+ */
+function _calcPPP(entries) {
+  const groups = {};
+  (entries || []).forEach(e => {
+    if(!(e.precio > 0) || !(e.cantidad > 0)) return;
+    const m = e.moneda || 'USD';
+    if(!groups[m]) groups[m] = { sum: 0, qty: 0, n: 0 };
+    groups[m].sum  += e.precio * e.cantidad;
+    groups[m].qty  += e.cantidad;
+    groups[m].n++;
+  });
+  const keys = Object.keys(groups);
+  if(!keys.length) return null;
+  // Moneda con mayor volumen comprado
+  const [moneda, g] = keys.map(k => [k, groups[k]]).sort((a, b) => b[1].qty - a[1].qty)[0];
+  return { ppp: g.sum / g.qty, moneda, n: g.n, qTotal: g.qty };
+}
+
 function renderMaestroPrecios() {
   if(!S.preciosInsumos) S.preciosInsumos = {};
   const search = (document.getElementById('mp-search')?.value || '').toLowerCase().trim();
@@ -10651,14 +10674,15 @@ function renderMaestroPrecios() {
   const total = insumos.size;
   const conPrecio = [...insumos.keys()].filter(c => S.preciosInsumos[c]).length;
   const sinPrecio = total - conPrecio;
-  const hoy = new Date().toISOString().slice(0,10);
   const hace7 = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
   const recientes = Object.values(S.preciosInsumos).filter(p => p.updatedAt && p.updatedAt >= hace7).length;
+  const conPPP = [...insumos.keys()].filter(c => _calcPPP(hist[c])).length;
   document.getElementById('mp-kpis').innerHTML = [
     {label:'Total insumos BOM', val: total,      color:'var(--text)',  sub:'en fórmulas activas'},
     {label:'Con precio',        val: conPrecio,  color:'var(--green)', sub:`${Math.round(conPrecio/total*100)||0}% cobertura`},
     {label:'Sin precio',        val: sinPrecio,  color: sinPrecio>0?'var(--red)':'var(--text3)', sub:'pendientes de cargar'},
     {label:'Actualizados (7d)', val: recientes,  color:'var(--gold)',  sub:'en los últimos 7 días'},
+    {label:'Con PPP calculado', val: conPPP,     color:'var(--gold)',  sub:'promedio ponderado de OCs'},
   ].map(k=>`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 18px">
     <div style="font-size:9px;color:var(--text3);font-family:var(--mono);letter-spacing:1.5px;margin-bottom:8px">${k.label.toUpperCase()}</div>
     <div style="font-size:22px;font-weight:700;color:${k.color};font-family:var(--mono);line-height:1.2">${k.val}</div>
@@ -10674,7 +10698,28 @@ function renderMaestroPrecios() {
   tbody.innerHTML = rows.map(ins => {
     const p = S.preciosInsumos[ins.codigo];
     const tieneHistorial = (hist[ins.codigo]||[]).length > 0;
+    const pppData = _calcPPP(hist[ins.codigo]);
     const monSym = (p?.moneda || 'USD') === 'ARS' ? '$' : 'U$D';
+
+    // Celda PPP
+    let pppCell = `<td class="td-mono tr" style="color:var(--text3)">—</td>`;
+    if(pppData) {
+      const sym = pppData.moneda === 'ARS' ? '$' : 'U$D';
+      const tipPPP = `${pppData.n} OC${pppData.n!==1?'s':''} · ${fmt(pppData.qTotal,2)} unidades/kg totales`;
+      // Variación vs precio vigente (solo si misma moneda)
+      let varHtml = '';
+      if(p && p.precio > 0 && p.moneda === pppData.moneda) {
+        const varPct = ((pppData.ppp - p.precio) / p.precio) * 100;
+        const varColor = Math.abs(varPct) < 5 ? 'var(--green)' : Math.abs(varPct) < 20 ? 'var(--gold)' : 'var(--red)';
+        const varSign = varPct >= 0 ? '+' : '';
+        varHtml = `<span style="font-size:9px;color:${varColor};font-family:var(--mono);margin-left:5px">(${varSign}${varPct.toFixed(1)}%)</span>`;
+      }
+      pppCell = `<td class="td-mono tr" title="${tipPPP}">
+        <span style="color:var(--gold);font-weight:600">${sym} ${fmt(pppData.ppp,2)}</span>${varHtml}
+        <span style="font-size:9px;color:var(--text3);font-family:var(--mono);margin-left:4px">${pppData.n}OC</span>
+      </td>`;
+    }
+
     if(p) {
       const fuenteColor = p.fuente === 'Manual' ? 'var(--gold)' : 'var(--blue)';
       const fechaStr = p.updatedAt ? new Date(p.updatedAt+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'2-digit'}) : (p.fecha ? new Date(p.fecha+'T12:00:00').toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'2-digit'}) : '—');
@@ -10682,6 +10727,7 @@ function renderMaestroPrecios() {
         <td style="font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:700">${ins.codigo}</td>
         <td style="font-size:12px;max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${ins.nombre}">${ins.nombre}</td>
         <td class="td-mono tr" style="font-weight:700;color:var(--green);font-size:14px">${monSym} ${fmt(p.precio,2)}</td>
+        ${pppCell}
         <td><span style="font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);border:1px solid var(--border)">${p.moneda||'USD'}</span></td>
         <td><span style="font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);border:1px solid var(--border);color:${fuenteColor}">${p.fuente||'Manual'}</span></td>
         <td style="font-size:12px;color:var(--text2)">${p.proveedor||'—'}</td>
@@ -10692,13 +10738,14 @@ function renderMaestroPrecios() {
         </td>
       </tr>`;
     } else {
-      // Sin precio
+      // Sin precio vigente
       const ocEntry = (hist[ins.codigo]||[])[0];
       const sugerencia = ocEntry ? `<span style="font-size:10px;color:var(--text3)">OC: ${ocEntry.moneda==='ARS'?'$':'U$D'} ${fmt(ocEntry.precio,2)} — ${ocEntry.proveedor}</span>` : '';
       return `<tr style="opacity:0.7">
         <td style="font-family:var(--mono);font-size:11px;color:var(--text3);font-weight:700">${ins.codigo}</td>
         <td style="font-size:12px;max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${ins.nombre}">${ins.nombre}</td>
         <td class="tr"><span style="font-size:10px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--red)">Sin precio</span></td>
+        ${pppCell}
         <td>—</td>
         <td>—</td>
         <td style="font-size:11px">${sugerencia}</td>
@@ -10738,18 +10785,23 @@ function exportarMaestroPrecios() {
   if(typeof XLSX === 'undefined') return;
   if(!S.preciosInsumos) S.preciosInsumos = {};
   const insumos = _getAllBOMInsumos();
+  const hist = buildPriceHistory();
   const rows = [...insumos.values()].map(ins => {
     const p = S.preciosInsumos[ins.codigo];
+    const pppData = _calcPPP(hist[ins.codigo]);
     return {
-      'Código':      ins.codigo,
-      'Insumo':      ins.nombre,
-      'Precio':      p?.precio ?? '',
-      'Moneda':      p?.moneda ?? '',
-      'Fuente':      p?.fuente ?? 'Sin precio',
-      'Proveedor':   p?.proveedor ?? '',
-      'Fecha cotiz': p?.fecha ?? '',
-      'Actualizado': p?.updatedAt ?? '',
-      'Productos':   ins.productos.join(', '),
+      'Código':        ins.codigo,
+      'Insumo':        ins.nombre,
+      'Precio vigente':p?.precio ?? '',
+      'Moneda':        p?.moneda ?? '',
+      'PPP':           pppData ? Math.round(pppData.ppp * 100) / 100 : '',
+      'Moneda PPP':    pppData ? pppData.moneda : '',
+      'OCs usadas PPP':pppData ? pppData.n : '',
+      'Fuente':        p?.fuente ?? 'Sin precio',
+      'Proveedor':     p?.proveedor ?? '',
+      'Fecha cotiz':   p?.fecha ?? '',
+      'Actualizado':   p?.updatedAt ?? '',
+      'Productos':     ins.productos.join(', '),
     };
   }).sort((a,b) => a['Código'].localeCompare(b['Código']));
   const wb = XLSX.utils.book_new();
