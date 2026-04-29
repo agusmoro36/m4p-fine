@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260429-042';
+  var VER = '20260429-043';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3061,19 +3061,18 @@ async function sbSaveAdjuntoFile(oc, adjunto) {
   return false;
 }
 
-// Cargar todos los adjuntos de las OCs que tienen referencia pero sin .data
+// Cargar todos los adjuntos de las OCs.
+// Escanea TODAS las OCs (no solo las que ya tienen referencia) para recuperar adjuntos
+// cuya referencia se perdió en el estado principal pero el archivo sí llegó a Supabase.
 async function sbLoadAllAdjuntos() {
   if(!SB_CLIENT) return {};
-  // Cargar adj_* para TODAS las OCs que tienen nombre de adjunto (con o sin .data en memoria)
-  // Así siempre obtenemos la versión más reciente desde la nube
-  const keys = S.compras
-    .filter(c => c.adjunto && c.adjunto.nombre)
-    .map(c => 'adj_' + _adjKey(c));
-  if(!keys.length) return {};
+  // Construir todos los keys posibles de OCs (con y sin referencia adjunto)
+  const allKeys = [...new Set(S.compras.map(c => 'adj_' + _adjKey(c)))].filter(k => k !== 'adj_');
+  if(!allKeys.length) return {};
   try {
     const { data, error } = await SB_CLIENT
       .from(SB_TABLE).select('key, value')
-      .in('key', keys);
+      .in('key', allKeys);
     if(error || !data) return {};
     const result = {};
     data.forEach(row => { result[row.key.replace(/^adj_/, '')] = row.value; });
@@ -3845,15 +3844,15 @@ async function loadFromSupabase() {
   sbLoadAllAdjuntos().then(adjMap => {
     let actualizados = 0;
     S.compras.forEach(c => {
-      if(!c.adjunto || !c.adjunto.nombre) return; // OC sin factura
       const k = _adjKey(c);
-      if(adjMap[k] && adjMap[k].data) {
-        c.adjunto = adjMap[k];
-        _guardarAdjLS(c, adjMap[k]); // cachear en localStorage para acceso offline
-        actualizados++;
-      }
+      if(!adjMap[k] || !adjMap[k].data) return;
+      // Restaurar aunque no haya referencia (referencia perdida pero archivo existe en adj_*)
+      c.adjunto = adjMap[k];
+      _guardarAdjLS(c, adjMap[k]);
+      actualizados++;
     });
     if(actualizados > 0) {
+      saveState(); // persistir referencias recuperadas
       renderCompras && renderCompras();
       console.log(`✓ ${actualizados} factura(s) cargada(s) desde Supabase`);
     }
@@ -5817,7 +5816,8 @@ function _onFileSelect(e){
     oc.adjunto = adjunto;
     // 1) Guardar en localStorage del dispositivo (inmediato, offline)
     _guardarAdjLS(oc, adjunto);
-    // 2) Guardar referencia (sin base64) en estado principal → Supabase main row
+    // 2) Guardar referencia (sin base64) en estado principal → Supabase main row + snapshot
+    _saveComprasSnap(); // protege la referencia aunque saveState falle
     saveState();
     renderCompras();
     // 3) Guardar PDF completo en fila adj_* de Supabase (cross-device, todos los usuarios)
