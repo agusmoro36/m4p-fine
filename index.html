@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260429-038';
+  var VER = '20260429-039';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3527,6 +3527,39 @@ function _asignarNrosFaltantes() {
   if(changed) { _saveComprasSnap(); saveState(); }
 }
 
+// Corrige OCs cuyo nro fue inflado por el bug de regex (eg. OC-0208 cuando debería ser OC-0027).
+// Detecta OCs con número ≥ 100 que NO pertenecen al seed y las renumera consecutivamente.
+// Corre SIEMPRE en applyState — idempotente, sin dependencia de localStorage.
+function _fixHighOCNros() {
+  const THRESHOLD = 100;
+  const year = new Date().getFullYear();
+  const seedNros = new Set(_SEED_COMPRAS.map(s => s.nro).filter(Boolean));
+
+  // Máximo nro legítimo (< THRESHOLD, formato limpio)
+  let maxLegit = 0;
+  S.compras.forEach(c => {
+    const m = (c.nro || '').match(/^OC-(\d+)-\d{4}$/);
+    if(m) {
+      const n = parseInt(m[1]);
+      if(n < THRESHOLD) maxLegit = Math.max(maxLegit, n);
+    }
+  });
+
+  // OCs con número inflado (≥ THRESHOLD, no seed, formato limpio)
+  const corrupted = S.compras.filter(c => {
+    if(seedNros.has(c.nro)) return false;
+    const m = (c.nro || '').match(/^OC-(\d+)-\d{4}$/);
+    return m && parseInt(m[1]) >= THRESHOLD;
+  }).sort((a, b) => S.compras.indexOf(a) - S.compras.indexOf(b));
+
+  if(!corrupted.length) return;
+  let counter = maxLegit + 1;
+  corrupted.forEach(c => {
+    c.nro = 'OC-' + String(counter).padStart(4, '0') + '-' + year;
+    counter++;
+  });
+}
+
 // Propaga _sid y nro desde _SEED_COMPRAS a los OCs existentes en S.compras.
 // Corre SIEMPRE al final de applyState — no depende de timestamps.
 function _aplicarSeedFields() {
@@ -3713,6 +3746,8 @@ function applyState(st) {
   _aplicarSeedFields();
   // Asignar nro permanente a OCs que aún no lo tienen — fija trazabilidad
   _asignarNrosFaltantes();
+  // ── Corregir nros de OC inflados por bug de regex (números ≥ 100 en OCs no-seed) ──
+  _fixHighOCNros();
   // Restaurar cantidades del plan comparando con planEditTs (no st.ts)
   // Así los saves de OC/stock no pisaron la comparación del plan
   _loadPlanQty(st.planEditTs || 0);
