@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260429-043';
+  var VER = '20260429-044';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3837,7 +3837,11 @@ async function loadFromSupabase() {
   try { localStorage.setItem(LS_KEY, JSON.stringify(_lsVal)); } catch(e) {}
 
   // 1) Restaurar adjuntos desde localStorage del dispositivo (rápido, offline)
-  _restaurarAdjuntosLS();
+  const adjRestaurados = _restaurarAdjuntosLS();
+  // Re-renderizar si se recuperaron adjuntos desde localStorage
+  if(adjRestaurados > 0 && document.querySelector('.page.active')?.id === 'page-compras') {
+    renderCompras && renderCompras();
+  }
 
   // 2) Cargar adjuntos desde Supabase adj_* (cross-device, todos los dispositivos y usuarios)
   //    Siempre intentar: el admin puede haber subido nuevas facturas desde otro dispositivo
@@ -5693,6 +5697,7 @@ function renderCompras(){
 
     // Botón de factura — usa <label for> para máxima compatibilidad (PWA, Safari standalone, Downloads)
     const tieneData = c.adjunto && c.adjunto.data;
+    const tieneRef  = !tieneData && c.adjunto && c.adjunto.nombre;
     const esViewer = document.body.classList.contains('viewer-mode');
     const btnFactura = tieneData
       ? `<button class="btn btn-sm" onclick="verFactura(${idx})" title="${c.adjunto.nombre}"
@@ -5701,13 +5706,18 @@ function renderCompras(){
          </button>
          ${!esViewer ? `<button class="btn btn-sm" onclick="quitarFactura(${idx})" title="Quitar factura"
            style="font-size:10px;padding:3px 6px;color:var(--text3);border-color:var(--border)">✕</button>` : ''}`
-      : (!esViewer
-          ? `<label for="oc-file-input" onclick="prepararAdjunto(${idx})" class="btn btn-sm"
-               title="Adjuntar factura (PDF/JPG/PNG)"
-               style="font-size:10px;padding:3px 9px;cursor:pointer;color:var(--gold2);border-color:rgba(212,175,55,.4);background:rgba(212,175,55,.06);display:inline-flex;align-items:center">
-               📎 Factura
-             </label>`
-          : '');
+      : tieneRef
+        ? `<button class="btn btn-sm" onclick="verFactura(${idx})" title="Cargar factura desde la nube: ${c.adjunto.nombre}"
+             style="font-size:10px;padding:3px 7px;color:var(--text3);border-color:var(--border)">
+             📄 ${c.adjunto.nombre.length>12 ? c.adjunto.nombre.slice(0,10)+'…' : c.adjunto.nombre} ⟳
+           </button>`
+        : (!esViewer
+            ? `<label for="oc-file-input" onclick="prepararAdjunto(${idx})" class="btn btn-sm"
+                 title="Adjuntar factura (PDF/JPG/PNG)"
+                 style="font-size:10px;padding:3px 9px;cursor:pointer;color:var(--gold2);border-color:rgba(212,175,55,.4);background:rgba(212,175,55,.06);display:inline-flex;align-items:center">
+                 📎 Factura
+               </label>`
+            : '');
 
     // Todos los OCs usan formato OC-XXXX-2026
     const nroClean = (c.nro||'').replace(/^OC-\d+\//i,''); // "OC-33/OC-0016-2026" → "OC-0016-2026"
