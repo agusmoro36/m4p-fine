@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260429-040';
+  var VER = '20260429-041';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -2479,7 +2479,7 @@ const D = {
       'MP-0126':{nombre:'SABOR LIMON',stock:118.4,um:'kg',ubicaciones:{deposito:100.0,sala1:0.0,sala2:18.4},lotes:[{"lote": "1000076049", "cantidad": 25.0, "vencimiento": "2026-04-30", "ubicacion": "MP9", "proveedor": "", "fecha": "2026-04-16"}, {"lote": "1000076794", "cantidad": 75.0, "vencimiento": "2026-05-01", "ubicacion": "MP9", "proveedor": "Flair", "fecha": "2026-04-16"}, {"lote": "1000076794", "cantidad": 4.35, "vencimiento": "2026-05-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "FLAIR", "fecha": "2026-04-20"}, {"lote": "1000077787", "cantidad": 14.05, "vencimiento": "2026-06-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "FLAIR", "fecha": "2026-04-20"}]},
       'MP-0127':{nombre:'APPLE CRUMBLE FLAVOR XG076W',stock:26.156,um:'kg',ubicaciones:{deposito:0,sala1:0.0,sala2:26.156},lotes:[{"lote": "240829108", "cantidad": 1.156, "vencimiento": "2026-08-22 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PROVA", "fecha": "2026-04-20"}, {"lote": "250625458", "cantidad": 25.0, "vencimiento": "2027-06-23 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PROVA", "fecha": "2026-04-20"}]},
       'MP-0128':{nombre:'SABOR MANZANA',stock:225.0,um:'kg',ubicaciones:{deposito:225.0,sala1:0,sala2:0},lotes:[{"lote": "250625458", "cantidad": 225.0, "vencimiento": "2027-06-23", "ubicacion": "MP62", "proveedor": "", "fecha": "2026-04-16"}]},
-      'MP-0129':{nombre:'SABOR MARACUYA G',stock:25.0,um:'kg',ubicaciones:{deposito:25.0,sala1:0,sala2:0},lotes:[{"lote": "1000084055", "cantidad": 25.0, "vencimiento": "2027-03-31", "ubicacion": "MP32", "proveedor": "", "fecha": "2026-04-16"}]},
+      'MP-0129':{nombre:'SABOR MARACUYA G',stock:0,um:'kg',ubicaciones:{deposito:0,sala1:0,sala2:0},lotes:[]},
       'MP-0130':{nombre:'SABOR MARACUYÁ',stock:38.42,um:'kg',ubicaciones:{deposito:25.0,sala1:13.42,sala2:0.0},lotes:[{"lote": "1000083573", "cantidad": 13.42, "vencimiento": "2027-02-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "FLAIR", "fecha": "2026-04-20"},{"lote": "1000084055", "cantidad": 25.0, "vencimiento": "2027-03-31", "ubicacion": "MP32", "proveedor": "", "fecha": "2026-04-16"}]},
       'MP-0132':{nombre:'SABOR VAINILLA',stock:22.452,um:'kg',ubicaciones:{deposito:0,sala1:0.0,sala2:22.452},lotes:[{"lote": "1000077940", "cantidad": 22.452, "vencimiento": "2026-07-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "FLAIR", "fecha": "2026-04-20"}]},
       'MP-0133':{nombre:'SACARINA DE SODIO',stock:48.585,um:'kg',ubicaciones:{deposito:25.0,sala1:0.0,sala2:23.585},lotes:[{"lote": "2024032901", "cantidad": 25.0, "vencimiento": "2026-03-20", "ubicacion": "MP20", "proveedor": "", "fecha": "2026-04-16"}, {"lote": "20230802", "cantidad": 23.585, "vencimiento": "2026-08-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "ADAMA", "fecha": "2026-04-20"}]},
@@ -4004,6 +4004,22 @@ async function loadFromSupabase() {
     Object.entries(_PM).forEach(([cod,v]) => { S.preciosInsumos[cod] = v; });
     saveState();
     localStorage.setItem('mrp_precios_manual_v033','1');
+  }
+
+  // ── One-time v041: restar 25 kg lote 1000084055 de MP-0129 (era de MP-0130) ──
+  if(!isViewer && !localStorage.getItem('mrp_stock_mp0129_v041')) {
+    const s129 = D.stock['MP-0129'];
+    if(s129) {
+      s129.stock = Math.max(0, Math.round(((parseFloat(s129.stock)||0) - 25) * 1000) / 1000);
+      const u = s129.ubicaciones || {};
+      u.deposito = Math.max(0, Math.round(((u.deposito||0) - 25) * 1000) / 1000);
+      s129.ubicaciones = u;
+      s129.lotes = (s129.lotes||[]).filter(l => l.lote !== '1000084055');
+      S.stockImportTs = Date.now();
+      saveState();
+      toast('✓ MP-0129: -25 kg lote 1000084055 descontados','📦',4000);
+    }
+    localStorage.setItem('mrp_stock_mp0129_v041','1');
   }
 
   // ── One-time v040: sumar 25 kg de lote 1000084055 (MP32) a MP-0130 ──────────
