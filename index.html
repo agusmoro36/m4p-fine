@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260429-041';
+  var VER = '20260429-042';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3527,6 +3527,28 @@ function _asignarNrosFaltantes() {
   if(changed) { _saveComprasSnap(); saveState(); }
 }
 
+// Mueve el lote 1000084055 (25 kg, MP32) de MP-0129 a MP-0130 si todavía está mal.
+// Corre SIEMPRE en applyState — idempotente: si ya está corregido no hace nada.
+function _fixLoteMP0129aMP0130() {
+  const s129 = D.stock['MP-0129'];
+  const s130 = D.stock['MP-0130'];
+  if(!s129 || !s130) return;
+  const loteIdx = (s129.lotes||[]).findIndex(l => l.lote === '1000084055');
+  if(loteIdx === -1) return; // ya corregido
+  // Quitar de MP-0129
+  const [lote] = s129.lotes.splice(loteIdx, 1);
+  s129.stock = Math.max(0, Math.round(((parseFloat(s129.stock)||0) - lote.cantidad) * 1000) / 1000);
+  if(s129.ubicaciones) s129.ubicaciones.deposito = Math.max(0, Math.round(((s129.ubicaciones.deposito||0) - lote.cantidad) * 1000) / 1000);
+  // Agregar a MP-0130 (si no existe ya)
+  if(!(s130.lotes||[]).some(l => l.lote === '1000084055')) {
+    if(!s130.lotes) s130.lotes = [];
+    s130.lotes.push(lote);
+    s130.stock = Math.round(((parseFloat(s130.stock)||0) + lote.cantidad) * 1000) / 1000;
+    if(!s130.ubicaciones) s130.ubicaciones = {deposito:0, sala1:0, sala2:0};
+    s130.ubicaciones.deposito = Math.round(((s130.ubicaciones.deposito||0) + lote.cantidad) * 1000) / 1000;
+  }
+}
+
 // Corrige OCs cuyo nro fue inflado por el bug de regex (eg. OC-0208 cuando debería ser OC-0027).
 // Detecta OCs con número ≥ 100 que NO pertenecen al seed y las renumera consecutivamente.
 // Corre SIEMPRE en applyState — idempotente, sin dependencia de localStorage.
@@ -3746,6 +3768,8 @@ function applyState(st) {
   _aplicarSeedFields();
   // Asignar nro permanente a OCs que aún no lo tienen — fija trazabilidad
   _asignarNrosFaltantes();
+  // ── Corregir reasignación lote 1000084055 de MP-0129 → MP-0130 ──────────────
+  _fixLoteMP0129aMP0130();
   // ── Corregir nros de OC inflados por bug de regex (números ≥ 100 en OCs no-seed) ──
   _fixHighOCNros();
   // Restaurar cantidades del plan comparando con planEditTs (no st.ts)
