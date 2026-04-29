@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260427-037';
+  var VER = '20260429-038';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3507,7 +3507,8 @@ function _nextOCNro() {
   const year = new Date().getFullYear();
   let max = 0;
   S.compras.forEach(c => {
-    const m = (c.nro || '').match(/OC-(\d+)-\d{4}/);
+    // Anclar al inicio: ignora formatos duales tipo "OC-32/OC-0207-2026"
+    const m = (c.nro || '').match(/^OC-(\d+)-\d{4}/);
     if(m) max = Math.max(max, parseInt(m[1]) || 0);
   });
   return 'OC-' + String(max + 1).padStart(4, '0') + '-' + year;
@@ -3968,6 +3969,15 @@ async function loadFromSupabase() {
     Object.entries(_PM).forEach(([cod,v]) => { S.preciosInsumos[cod] = v; });
     saveState();
     localStorage.setItem('mrp_precios_manual_v033','1');
+  }
+
+  // ── One-time v038: corregir OCs creadas con número incorrecto por bug regex ──
+  if(!isViewer && !localStorage.getItem('mrp_oc_nro_fix_v038')) {
+    const _MAP = {'OC-0208-2026':'OC-0027-2026','OC-0209-2026':'OC-0028-2026','OC-0210-2026':'OC-0029-2026'};
+    let fixed = 0;
+    S.compras.forEach(c => { if(_MAP[c.nro]) { c.nro = _MAP[c.nro]; fixed++; } });
+    if(fixed > 0) { saveState(); toast(`✓ ${fixed} OC${fixed!==1?'s':''} renumeradas correctamente (0027–0029)`,'🔢',4000); }
+    localStorage.setItem('mrp_oc_nro_fix_v038','1');
   }
 
   _reRenderActivePage();
