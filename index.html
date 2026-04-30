@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260429-047b';
+  var VER = '20260429-048';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -11294,7 +11294,20 @@ const _MAESTRO_CODIGOS_SEED = {
   'PK-0190':{nombre:'ESTUCHE ONED CHICO SANDIA',descripcion:'',um:'uni.'},
   'PK-0191':{nombre:'CAJA CHICA DIABLA CACAO',descripcion:'',um:'uni.'},
   'PK-0192':{nombre:'CAJA ECOMMERCE 200x250x150mm',descripcion:'',um:'uni.'},
-  'PK-0207':{nombre:'FUNDA TERMOSELLADO MOORNING BOOST',descripcion:'',um:'uni.'},
+  'PK-0207':{nombre:'ETIQUETA SMOOTH MODO DE USO',descripcion:'',um:'uni.'},
+  'PK-0199':{nombre:'ETIQUETA PEAK FRENTE',descripcion:'',um:'uni.'},
+  'PK-0200':{nombre:'ETIQUETA PEAK TABLA NUTRICIONAL',descripcion:'',um:'uni.'},
+  'PK-0201':{nombre:'ETIQUETA PEAK MODO DE USO',descripcion:'',um:'uni.'},
+  'PK-0202':{nombre:'ETIQUETA BEAUTY FRENTE',descripcion:'',um:'uni.'},
+  'PK-0203':{nombre:'ETIQUETA BEAUTY TABLA NUTRICIONAL',descripcion:'',um:'uni.'},
+  'PK-0204':{nombre:'ETIQUETA BEAUTY MODO DE USO',descripcion:'',um:'uni.'},
+  'PK-0205':{nombre:'ETIQUETA SMOOTH FRENTE',descripcion:'',um:'uni.'},
+  'PK-0206':{nombre:'ETIQUETA SMOOTH TABLA NUTRICIONAL',descripcion:'',um:'uni.'},
+  'PK-0208':{nombre:'FUNDA TERMOSELLADO MOORNING BOOST',descripcion:'',um:'uni.'},
+  'PK-0209':{nombre:'LAMINA BTY INTERNACIONAL',descripcion:'',um:'uni.'},
+  'PK-0210':{nombre:'LAMINA PWR INTERNACIONAL',descripcion:'',um:'uni.'},
+  'PK-0211':{nombre:'LAMINA SMOOTH INTERNACIONAL',descripcion:'',um:'uni.'},
+  'PK-0212':{nombre:'LAMINA PEAK INTERNACIONAL',descripcion:'',um:'uni.'},
   'PT-0001':{nombre:'PEAK',descripcion:'',um:'uni.'},
   'PT-0002':{nombre:'POWER',descripcion:'',um:'uni.'},
   'PT-0003':{nombre:'BEAUTY',descripcion:'',um:'uni.'},
@@ -11331,8 +11344,12 @@ function _aplicarMaestroCodigos() {
       D.stock[cod] = {nombre:seed.nombre, descripcion:seed.descripcion||seed.nombre,
         stock:0, um:seed.um, _fromMaestro:true,
         ubicaciones:{deposito:0,sala1:0,sala2:0}, lotes:[]};
+    } else if(D.stock[cod]._fromMaestro) {
+      // Entrada creada por el seed → siempre actualizar con el nombre correcto
+      D.stock[cod].nombre      = seed.nombre;
+      D.stock[cod].descripcion = seed.descripcion || seed.nombre;
     } else {
-      // Completar nombre si el existente es genérico o vacío
+      // Entrada hardcoded o del usuario → solo completar si vacío
       if((!D.stock[cod].nombre || D.stock[cod].nombre===cod) && seed.nombre)
         D.stock[cod].nombre = seed.nombre;
       if(!D.stock[cod].descripcion && seed.descripcion)
