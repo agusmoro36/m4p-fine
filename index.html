@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260429-045';
+  var VER = '20260429-046';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -449,6 +449,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <div class="nav-item active" onclick="go('dashboard')"><span class="nav-ico">◈</span>Dashboard</div>
     <div class="nav-item" onclick="go('alertas')"><span class="nav-ico">⚑</span>Alertas<span class="nav-badge" id="nb-alertas">62</span></div>
     <div class="nav-group" onclick="toggleNavGroup(this)">Stock</div>
+    <div class="nav-item" onclick="go('maestroinsumos')"><span class="nav-ico">🗂</span>Maestro de Insumos</div>
     <div class="nav-item" onclick="go('stock')"><span class="nav-ico">▤</span>Stock de Insumos</div>
     <div class="nav-item" onclick="go('recepcion')"><span class="nav-ico">📦</span>Recepción Depósito<span class="nav-badge" id="nb-recepcion" style="display:none">0</span></div>
     <div class="nav-item" onclick="go('historial')"><span class="nav-ico">⏱</span>Historial Stock<span class="nav-badge" id="nb-historial" style="display:none">0</span></div>
@@ -1379,11 +1380,119 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     </div>
   </div>
 
+  <!-- ── MAESTRO DE INSUMOS ─────────────────────────────────────── -->
+  <div class="page" id="page-maestroinsumos">
+    <div class="sh">
+      <div class="sh-title">🗂 Maestro de Insumos</div>
+      <div class="sh-actions">
+        <input type="text" class="finput" id="mi-search" placeholder="Buscar por código o nombre…" oninput="renderMaestroInsumos()" style="width:210px">
+        <select class="fsel" id="mi-cat-filter" onchange="renderMaestroInsumos()">
+          <option value="">Todas las categorías</option>
+          <option value="MP">MP — Materias Primas</option>
+          <option value="PK">PK — Packaging</option>
+          <option value="INS">INS — Insumos Generales</option>
+          <option value="PT">PT — Prod. Terminados</option>
+          <option value="otros">Otros</option>
+        </select>
+        <select class="fsel" id="mi-src-filter" onchange="renderMaestroInsumos()">
+          <option value="">Todos</option>
+          <option value="nuevo">Dados de alta</option>
+          <option value="base">Base del sistema</option>
+        </select>
+        <button class="btn btn-sm" onclick="abrirNuevoInsumo()" style="border-color:var(--gold);color:var(--gold)">+ Nuevo Insumo</button>
+        <button class="btn btn-sm" onclick="importarExcelInsumos()" style="border-color:var(--blue);color:var(--blue)">↑ Importar Excel</button>
+        <button class="btn btn-sm" onclick="exportarExcelInsumos()" style="border-color:var(--green);color:var(--green)">↓ Exportar Excel</button>
+      </div>
+    </div>
+    <div id="mi-kpis" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px"></div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sortMI('codigo')" style="cursor:pointer">Código ↕</th>
+            <th onclick="sortMI('nombre')" style="cursor:pointer">Nombre ↕</th>
+            <th>Categoría</th>
+            <th>UM</th>
+            <th class="tr" onclick="sortMI('stock')" style="cursor:pointer">Stock actual ↕</th>
+            <th class="tr">Precio vigente</th>
+            <th>Proveedor ref.</th>
+            <th style="font-size:9px">Alta</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbl-maestroinsumos"></tbody>
+      </table>
+    </div>
+    <div id="mi-pag" style="margin-top:12px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap"></div>
+  </div>
+
   </div><!-- /pages -->
 </div><!-- /content -->
 </div><!-- /app -->
 
 <!-- MODALS -->
+<!-- ── MODAL INSUMO ───────────────────────────────────────────────── -->
+<div class="overlay" id="m-insumo">
+  <div class="modal" style="max-width:560px">
+    <button class="modal-close" onclick="closeM('m-insumo')">✕</button>
+    <div class="modal-title" id="mi-modal-title">+ Nuevo Insumo</div>
+    <input type="hidden" id="mi-edit-cod">
+    <div class="fg">
+      <div class="fl">
+        <label>Categoría</label>
+        <select id="mi-cat" onchange="_miSuggestCodigo()">
+          <option value="MP">MP — Materia Prima</option>
+          <option value="PK">PK — Packaging</option>
+          <option value="INS">INS — Insumo General</option>
+          <option value="PT">PT — Prod. Terminado</option>
+        </select>
+      </div>
+      <div class="fl">
+        <label>Código</label>
+        <input type="text" id="mi-cod" placeholder="Ej: MP-0300" style="font-family:var(--mono);font-weight:700;text-transform:uppercase">
+      </div>
+      <div class="fl" style="grid-column:1/-1">
+        <label>Nombre / Descripción *</label>
+        <input type="text" id="mi-nombre" placeholder="Ej: EXTRACTO DE MACA">
+      </div>
+      <div class="fl">
+        <label>Unidad de medida</label>
+        <select id="mi-um">
+          <option>kg</option><option>g</option><option>L</option><option>mL</option>
+          <option>uni.</option><option>m</option><option>m²</option><option>cm</option>
+        </select>
+      </div>
+      <div class="fl">
+        <label>Stock inicial</label>
+        <input type="number" id="mi-stock-ini" value="0" min="0" step="0.001">
+      </div>
+      <div class="fl">
+        <label>Precio vigente</label>
+        <input type="number" id="mi-precio" placeholder="0.00" min="0" step="0.01">
+      </div>
+      <div class="fl">
+        <label>Moneda</label>
+        <select id="mi-moneda">
+          <option value="USD">USD</option>
+          <option value="ARS">ARS</option>
+        </select>
+      </div>
+      <div class="fl" style="grid-column:1/-1">
+        <label>Proveedor preferido</label>
+        <input type="text" id="mi-proveedor" placeholder="Ej: NUTRALIA" list="mi-provs-list">
+        <datalist id="mi-provs-list"></datalist>
+      </div>
+      <div class="fl" style="grid-column:1/-1">
+        <label>Observaciones</label>
+        <input type="text" id="mi-obs" placeholder="Notas internas, uso, etc.">
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px">
+      <button class="btn" style="flex:1;background:var(--gold);color:#000;border:none;font-weight:700" onclick="guardarInsumo()">💾 Guardar insumo</button>
+      <button class="btn" onclick="closeM('m-insumo')" style="border-color:var(--border);color:var(--text3)">Cancelar</button>
+    </div>
+  </div>
+</div>
 <div class="overlay" id="m-plan">
   <div class="modal">
     <button class="modal-close" onclick="closeM('m-plan')">✕</button>
@@ -2735,7 +2844,7 @@ const S = {
 // ══════════════════════════════════════
 // NAVIGATION
 // ══════════════════════════════════════
-const titles={dashboard:'Dashboard',planificador:'Planificador Inteligente',recepcion:'Recepción de Mercadería',facturas:'Facturas',mrp:'MRP Insumos',plan:'Plan de Producción',produccion:'Producción Real',bom:'Fórmulas / BOM',costos:'Dashboard de Costos',cotizaciones:'Cotizaciones',maestroprecios:'Maestro de Precios',proyeccion:'Proyección de Stock',compras:'Órdenes de Compra',propuestas:'OCs Propuestas',proveedores:'Gestión de Proveedores',stock:'Stock de Insumos',historial:'Historial de Stock',calculadora:'Calculadora MRP',importar:'Importar Excel',alertas:'Alertas'};
+const titles={dashboard:'Dashboard',planificador:'Planificador Inteligente',recepcion:'Recepción de Mercadería',facturas:'Facturas',mrp:'MRP Insumos',plan:'Plan de Producción',produccion:'Producción Real',bom:'Fórmulas / BOM',costos:'Dashboard de Costos',cotizaciones:'Cotizaciones',maestroprecios:'Maestro de Precios',proyeccion:'Proyección de Stock',compras:'Órdenes de Compra',propuestas:'OCs Propuestas',proveedores:'Gestión de Proveedores',stock:'Stock de Insumos',historial:'Historial de Stock',calculadora:'Calculadora MRP',importar:'Importar Excel',alertas:'Alertas',maestroinsumos:'Maestro de Insumos'};
 function _saveNavCollapse(){
   const state={};
   document.querySelectorAll('.nav-group').forEach(g=>{
@@ -2784,7 +2893,7 @@ function go(id){
     }
   });
   document.getElementById('tb-title').innerHTML=`${titles[id]||id} <span>· The Fine Company</span>`;
-  const renders={dashboard:renderDashboard,mrp:renderMRP,plan:renderPlan,produccion:renderProduccion,bom:renderBOMPage,costos:renderCostos,cotizaciones:renderCotizaciones,maestroprecios:renderMaestroPrecios,proyeccion:renderProyeccion,compras:renderCompras,propuestas:renderPropuestas,recepcion:renderRecepcion,proveedores:renderProveedoresEnhanced,stock:renderStock,historial:renderHistorial,alertas:renderAlertas,calculadora:renderCalcPage,planificador:renderPlanificador,facturas:renderFacturas};
+  const renders={dashboard:renderDashboard,mrp:renderMRP,plan:renderPlan,produccion:renderProduccion,bom:renderBOMPage,costos:renderCostos,cotizaciones:renderCotizaciones,maestroprecios:renderMaestroPrecios,proyeccion:renderProyeccion,compras:renderCompras,propuestas:renderPropuestas,recepcion:renderRecepcion,proveedores:renderProveedoresEnhanced,stock:renderStock,historial:renderHistorial,alertas:renderAlertas,calculadora:renderCalcPage,planificador:renderPlanificador,facturas:renderFacturas,maestroinsumos:renderMaestroInsumos};
   closeSidebar();
   if(renders[id]) renders[id]();
 }
@@ -11723,6 +11832,360 @@ function _confirmarImportPrecios() {
   if(modo === 'maestro') renderMaestroPrecios();
   else renderCotizaciones();
   toast(`✓ ${importados} precios importados${omitidos ? ` — ${omitidos} omitidos (ya existían)` : ''}`, '✓', 4000);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// MAESTRO DE INSUMOS
+// ══════════════════════════════════════════════════════════════════════
+if(!S.miSort) S.miSort = {col:'codigo', dir:1};
+if(!S.miPage) S.miPage = 1;
+const MI_PAGE_SIZE = 50;
+
+function _miAllInsumos() {
+  // Unifica D.stock + D.mrp — D.stock es la fuente principal
+  const map = {};
+  Object.entries(D.stock).forEach(([cod, s]) => {
+    map[cod] = {
+      codigo: cod,
+      nombre: s.nombre || s.descripcion || cod,
+      um: s.um || 'kg',
+      stock: parseFloat(s.stock) || 0,
+      _userAdded: !!s._userAdded,
+      _obs: s._obs || ''
+    };
+  });
+  D.mrp.forEach(r => {
+    if(!map[r.codigo]) {
+      map[r.codigo] = {codigo:r.codigo, nombre:r.descripcion||r.codigo, um:'kg', stock:0, _userAdded:false, _obs:''};
+    }
+  });
+  return Object.values(map);
+}
+
+function _miCategoria(cod) {
+  if(/^MP-/i.test(cod)) return 'MP';
+  if(/^PK-/i.test(cod)) return 'PK';
+  if(/^INS-/i.test(cod)) return 'INS';
+  if(/^PT-/i.test(cod)) return 'PT';
+  return 'Otros';
+}
+
+function _miCatColor(cat) {
+  return cat==='MP'?'var(--gold)':cat==='PK'?'var(--blue)':cat==='INS'?'#22d3a0':cat==='PT'?'var(--acc)':'var(--text3)';
+}
+
+function _miPrecio(cod) {
+  const pm = (S.preciosInsumos||{})[cod] || (typeof MAESTRO_SEED!=='undefined'&&MAESTRO_SEED[cod]);
+  return pm || null;
+}
+
+function _nextCodigoInsumo(prefix) {
+  const re = new RegExp('^'+prefix+'-(\\d+)$','i');
+  let max = 0;
+  Object.keys(D.stock).forEach(k => { const m=k.match(re); if(m) max=Math.max(max,parseInt(m[1])); });
+  D.mrp.forEach(r => { const m=(r.codigo||'').match(re); if(m) max=Math.max(max,parseInt(m[1])); });
+  return prefix+'-'+String(max+1).padStart(4,'0');
+}
+
+function sortMI(col) {
+  if(S.miSort.col===col) S.miSort.dir*=-1;
+  else { S.miSort.col=col; S.miSort.dir=1; }
+  S.miPage=1;
+  renderMaestroInsumos();
+}
+
+function renderMaestroInsumos() {
+  const q      = (document.getElementById('mi-search')?.value||'').toLowerCase();
+  const catF   = document.getElementById('mi-cat-filter')?.value||'';
+  const srcF   = document.getElementById('mi-src-filter')?.value||'';
+
+  let data = _miAllInsumos();
+
+  if(q) data = data.filter(r =>
+    r.codigo.toLowerCase().includes(q) || r.nombre.toLowerCase().includes(q));
+  if(catF) {
+    if(catF==='otros') data = data.filter(r => !['MP','PK','INS','PT'].includes(_miCategoria(r.codigo)));
+    else               data = data.filter(r => _miCategoria(r.codigo)===catF);
+  }
+  if(srcF==='nuevo') data = data.filter(r => r._userAdded);
+  if(srcF==='base')  data = data.filter(r => !r._userAdded);
+
+  // Ordenar
+  const {col, dir} = S.miSort;
+  data.sort((a,b) => {
+    let av = a[col]??'', bv = b[col]??'';
+    if(typeof av==='string') av=av.toLowerCase();
+    if(typeof bv==='string') bv=bv.toLowerCase();
+    return (av<bv?-1:av>bv?1:0)*dir;
+  });
+
+  // KPIs
+  const all = _miAllInsumos();
+  const kpi = document.getElementById('mi-kpis');
+  if(kpi) {
+    const total   = all.length;
+    const nuevos  = all.filter(r=>r._userAdded).length;
+    const conPrecio = all.filter(r=>_miPrecio(r.codigo)).length;
+    const conStock  = all.filter(r=>r.stock>0).length;
+    const kpis = [
+      ['Total insumos', total,    'var(--acc)'],
+      ['Con stock',     conStock,  'var(--green)'],
+      ['Con precio',    conPrecio, 'var(--gold)'],
+      ['Dados de alta', nuevos,    'var(--blue)'],
+    ];
+    kpi.innerHTML = kpis.map(([l,v,c])=>`
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 18px;min-width:120px">
+        <div style="font-size:10px;color:var(--text3);font-family:var(--mono);letter-spacing:.5px">${l}</div>
+        <div style="font-size:22px;font-weight:700;color:${c}">${v}</div>
+      </div>`).join('');
+  }
+
+  // Paginación
+  const total = data.length;
+  const pages = Math.max(1, Math.ceil(total/MI_PAGE_SIZE));
+  if(S.miPage>pages) S.miPage=1;
+  const slice = data.slice((S.miPage-1)*MI_PAGE_SIZE, S.miPage*MI_PAGE_SIZE);
+
+  // Tabla
+  const tbody = document.getElementById('tbl-maestroinsumos');
+  if(tbody) tbody.innerHTML = slice.length ? slice.map(r => {
+    const cat   = _miCategoria(r.codigo);
+    const cc    = _miCatColor(cat);
+    const pm    = _miPrecio(r.codigo);
+    const pStr  = pm ? `<strong>${fmt(pm.precio,2)}</strong><span style="font-size:9px;color:var(--text3);margin-left:3px">${pm.moneda}</span>` : '<span style="color:var(--text3)">—</span>';
+    const provStr = pm?.proveedor || '—';
+    const stockCl = r.stock>0?'var(--green)':r.stock===0?'var(--text3)':'var(--red)';
+    const altaBadge = r._userAdded
+      ? `<span style="background:rgba(79,142,247,.15);color:var(--blue);font-size:8px;font-family:var(--mono);padding:2px 5px;border-radius:3px;font-weight:700">NUEVO</span>`
+      : `<span style="color:var(--text3);font-size:9px;font-family:var(--mono)">base</span>`;
+    return `<tr>
+      <td><span style="font-family:var(--mono);font-size:11px;color:var(--gold);font-weight:700">${r.codigo}</span></td>
+      <td style="max-width:250px">${r.nombre}</td>
+      <td><span style="background:${cc}22;color:${cc};font-size:9px;font-family:var(--mono);padding:2px 6px;border-radius:3px;font-weight:700">${cat}</span></td>
+      <td style="font-family:var(--mono);font-size:11px">${r.um}</td>
+      <td class="tr" style="color:${stockCl};font-family:var(--mono)">${fmt(r.stock,3)}</td>
+      <td class="tr">${pStr}</td>
+      <td style="font-size:11px;color:var(--text2)">${provStr}</td>
+      <td>${altaBadge}</td>
+      <td>
+        <button onclick="editarInsumo('${r.codigo}')" title="Editar" style="padding:4px 8px;background:transparent;border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:11px;color:var(--text2);transition:all .2s" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text2)'">✏️</button>
+        ${r._userAdded&&r.stock<=0?`<button onclick="eliminarInsumo('${r.codigo}')" title="Eliminar" style="padding:4px 8px;background:transparent;border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:11px;color:var(--text3);margin-left:4px;transition:all .2s" onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text3)'">🗑</button>`:''}
+      </td>
+    </tr>`;
+  }).join('')
+  : `<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text3)">No se encontraron insumos</td></tr>`;
+
+  // Render paginación
+  renderPag('mi-pag', total, MI_PAGE_SIZE, S.miPage, p=>{ S.miPage=p; renderMaestroInsumos(); });
+}
+
+// ── Modal: nuevo insumo ──────────────────────────────────────────────
+function abrirNuevoInsumo() {
+  document.getElementById('mi-modal-title').textContent = '+ Nuevo Insumo';
+  document.getElementById('mi-edit-cod').value = '';
+  const cat = document.getElementById('mi-cat');
+  cat.value = 'MP';
+  document.getElementById('mi-cod').value = _nextCodigoInsumo('MP');
+  document.getElementById('mi-cod').readOnly = false;
+  document.getElementById('mi-nombre').value = '';
+  document.getElementById('mi-um').value = 'kg';
+  document.getElementById('mi-stock-ini').value = '0';
+  document.getElementById('mi-precio').value = '';
+  document.getElementById('mi-moneda').value = 'USD';
+  document.getElementById('mi-proveedor').value = '';
+  document.getElementById('mi-obs').value = '';
+  _miCargarProvsDatalist();
+  openM('m-insumo');
+}
+
+function _miSuggestCodigo() {
+  const cat = document.getElementById('mi-cat')?.value||'MP';
+  const editCod = document.getElementById('mi-edit-cod')?.value;
+  if(editCod) return; // no pisar si estamos editando
+  document.getElementById('mi-cod').value = _nextCodigoInsumo(cat);
+}
+
+function _miCargarProvsDatalist() {
+  const dl = document.getElementById('mi-provs-list');
+  if(!dl) return;
+  const provs = [...new Set([
+    ...S.proveedores.map(p=>p.nombre),
+    ...S.compras.map(c=>c.proveedor)
+  ].filter(Boolean))].sort();
+  dl.innerHTML = provs.map(p=>`<option value="${p}">`).join('');
+}
+
+// ── Modal: editar insumo ─────────────────────────────────────────────
+function editarInsumo(cod) {
+  const s = D.stock[cod];
+  if(!s) return;
+  const pm = _miPrecio(cod);
+  const cat = _miCategoria(cod);
+
+  document.getElementById('mi-modal-title').textContent = '✏️ Editar Insumo — '+cod;
+  document.getElementById('mi-edit-cod').value = cod;
+  document.getElementById('mi-cat').value = ['MP','PK','INS','PT'].includes(cat)?cat:'MP';
+  document.getElementById('mi-cod').value = cod;
+  document.getElementById('mi-cod').readOnly = true; // no cambiar el código en edición
+  document.getElementById('mi-nombre').value = s.nombre||s.descripcion||'';
+  document.getElementById('mi-um').value = s.um||'kg';
+  document.getElementById('mi-stock-ini').value = ''; // no sobreescribir stock en edición
+  document.getElementById('mi-precio').value = pm?.precio||'';
+  document.getElementById('mi-moneda').value = pm?.moneda||'USD';
+  document.getElementById('mi-proveedor').value = pm?.proveedor||'';
+  document.getElementById('mi-obs').value = s._obs||'';
+  _miCargarProvsDatalist();
+  openM('m-insumo');
+}
+
+// ── Guardar (nuevo o edición) ────────────────────────────────────────
+function guardarInsumo() {
+  const editCod = document.getElementById('mi-edit-cod').value.trim();
+  const isEdit  = !!editCod;
+  const cod     = isEdit ? editCod : (document.getElementById('mi-cod').value.trim().toUpperCase());
+  const nombre  = document.getElementById('mi-nombre').value.trim();
+  const um      = document.getElementById('mi-um').value;
+  const stockIni= parseFloat(document.getElementById('mi-stock-ini').value)||0;
+  const precio  = parseFloat(document.getElementById('mi-precio').value)||0;
+  const moneda  = document.getElementById('mi-moneda').value;
+  const proveedor=document.getElementById('mi-proveedor').value.trim();
+  const obs     = document.getElementById('mi-obs').value.trim();
+
+  if(!cod)    { toast('El código es obligatorio','⚠️'); return; }
+  if(!nombre) { toast('El nombre es obligatorio','⚠️'); return; }
+  if(!isEdit && D.stock[cod]) { toast('Ya existe un insumo con ese código','⚠️'); return; }
+
+  if(isEdit) {
+    // Editar nombre, UM, obs, precio
+    D.stock[cod].nombre      = nombre;
+    D.stock[cod].descripcion = nombre;
+    D.stock[cod].um          = um;
+    D.stock[cod]._obs        = obs;
+  } else {
+    // Nuevo insumo
+    D.stock[cod] = {
+      nombre,
+      descripcion: nombre,
+      stock: stockIni,
+      um,
+      _userAdded: true,
+      _obs: obs,
+      ubicaciones: {deposito: stockIni, sala1:0, sala2:0},
+      lotes: stockIni>0 ? [{lote:'', cantidad:stockIni, vencimiento:'', ubicacion:'Depósito', proveedor, fecha:new Date().toISOString().slice(0,10)}] : []
+    };
+  }
+
+  // Precio
+  if(precio>0) {
+    if(!S.preciosInsumos) S.preciosInsumos = {};
+    S.preciosInsumos[cod] = {
+      precio,
+      moneda,
+      fuente: 'Manual',
+      proveedor: proveedor || (S.preciosInsumos[cod]?.proveedor||''),
+      fecha: new Date().toISOString().slice(0,10),
+      updatedAt: new Date().toISOString().slice(0,10)
+    };
+  }
+
+  saveState();
+  closeM('m-insumo');
+  renderMaestroInsumos();
+  toast((isEdit?'✓ Insumo actualizado':'✓ Insumo '+cod+' dado de alta')+' — '+nombre,'✓',4000);
+}
+
+// ── Eliminar insumo (solo si no tiene stock y es _userAdded) ─────────
+function eliminarInsumo(cod) {
+  const s = D.stock[cod];
+  if(!s) return;
+  if(!s._userAdded) { toast('Solo se pueden eliminar insumos dados de alta manualmente','⚠️'); return; }
+  if((parseFloat(s.stock)||0)>0) { toast('No se puede eliminar: tiene stock cargado','⚠️'); return; }
+  if(!confirm('¿Eliminar '+cod+' — '+s.nombre+'?\nEsta acción es irreversible.')) return;
+  delete D.stock[cod];
+  if(S.preciosInsumos) delete S.preciosInsumos[cod];
+  saveState();
+  renderMaestroInsumos();
+  toast('🗑 Insumo eliminado','🗑',3000);
+}
+
+// ── Importar Excel ───────────────────────────────────────────────────
+function importarExcelInsumos() {
+  const inp = document.createElement('input');
+  inp.type='file'; inp.accept='.xlsx,.xls,.csv';
+  inp.onchange = e => {
+    const f = e.target.files[0]; if(!f) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const wb = XLSX.read(ev.target.result, {type:'binary'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+        let added=0, updated=0, errors=[];
+        rows.forEach((row,i) => {
+          const cod    = String(row['Código']||row['Codigo']||row['codigo']||'').trim().toUpperCase();
+          const nombre = String(row['Nombre']||row['nombre']||row['Descripción']||row['descripcion']||'').trim();
+          const um     = String(row['UM']||row['um']||row['Unidad']||'kg').trim() || 'kg';
+          const stock  = parseFloat(row['Stock']||row['stock']||0)||0;
+          const precio = parseFloat(row['Precio']||row['precio']||0)||0;
+          const moneda = String(row['Moneda']||row['moneda']||'USD').trim()||'USD';
+          const prov   = String(row['Proveedor']||row['proveedor']||'').trim();
+          const obs    = String(row['Observaciones']||row['obs']||'').trim();
+          if(!cod)    { errors.push('Fila '+(i+2)+': código vacío'); return; }
+          if(!nombre) { errors.push('Fila '+(i+2)+': nombre vacío ('+cod+')'); return; }
+          if(D.stock[cod]) {
+            // Actualizar nombre/UM/obs — NO tocar stock existente
+            D.stock[cod].nombre=nombre; D.stock[cod].descripcion=nombre;
+            D.stock[cod].um=um; if(obs) D.stock[cod]._obs=obs;
+            updated++;
+          } else {
+            D.stock[cod] = {nombre, descripcion:nombre, stock, um, _userAdded:true, _obs:obs,
+              ubicaciones:{deposito:stock,sala1:0,sala2:0},
+              lotes: stock>0?[{lote:'',cantidad:stock,vencimiento:'',ubicacion:'Depósito',proveedor:prov,fecha:new Date().toISOString().slice(0,10)}]:[]};
+            added++;
+          }
+          if(precio>0) {
+            if(!S.preciosInsumos) S.preciosInsumos={};
+            S.preciosInsumos[cod]={precio,moneda,fuente:'Excel',proveedor:prov,fecha:new Date().toISOString().slice(0,10),updatedAt:new Date().toISOString().slice(0,10)};
+          }
+        });
+        saveState();
+        renderMaestroInsumos();
+        let msg = `✓ ${added} nuevos · ${updated} actualizados`;
+        if(errors.length) msg += ` · ⚠️ ${errors.length} errores`;
+        toast(msg,'✓',5000);
+        if(errors.length) console.warn('[Maestro Insumos] Errores importación:', errors);
+      } catch(err) {
+        toast('Error al leer el Excel: '+err.message,'⚠️',5000);
+      }
+    };
+    reader.readAsBinaryString(f);
+  };
+  inp.click();
+}
+
+// ── Exportar Excel ───────────────────────────────────────────────────
+function exportarExcelInsumos() {
+  const data = _miAllInsumos().sort((a,b)=>a.codigo.localeCompare(b.codigo));
+  const rows = data.map(r => {
+    const pm = _miPrecio(r.codigo);
+    return {
+      'Código':      r.codigo,
+      'Nombre':      r.nombre,
+      'Categoría':   _miCategoria(r.codigo),
+      'UM':          r.um,
+      'Stock actual':r.stock,
+      'Precio':      pm?.precio||'',
+      'Moneda':      pm?.moneda||'',
+      'Proveedor':   pm?.proveedor||'',
+      'Alta':        r._userAdded?'Manual':'Sistema',
+      'Observaciones':r._obs||''
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:40},{wch:10},{wch:8},{wch:12},{wch:10},{wch:8},{wch:20},{wch:10},{wch:30}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Maestro Insumos');
+  XLSX.writeFile(wb, 'MaestroInsumos_'+new Date().toISOString().slice(0,10)+'.xlsx');
 }
 
 </script>
