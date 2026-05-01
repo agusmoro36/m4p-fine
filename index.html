@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260501-056';
+  var VER = '20260501-057';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -4216,30 +4216,35 @@ async function loadFromSupabase() {
     localStorage.setItem('mrp_empaque_cleanup_v054','1');
   }
 
-  // ── One-time v056: restaurar OCs marcadas como recibidas (perdidas por corrupción Supabase) ──
+  // ── One-time v057: restaurar OCs marcadas como recibidas (perdidas por corrupción Supabase) ──
   // La corrupción de v051/052/053 sobreescribió S.compras con defaults (entregada:false)
-  // Restauramos los estados correctos usando los _sid para identificar cada OC.
-  if(!isViewer && !localStorage.getItem('mrp_oc_recepcion_fix_v056')) {
-    const _RECIBIDAS = [
+  // Restauramos los estados correctos: por _sid (seeds) o por codigo (OCs dinámicas).
+  if(!isViewer && !localStorage.getItem('mrp_oc_recepcion_fix_v057')) {
+    // OCs seed: se buscan por _sid
+    const _POR_SID = [
       'MP-0036-BASEL-5',       // EXT. ACEROLA 17%   — OC-0020-2026 (5 kg, Basel, abr-2026)
       'MP-0051-BASEL-5',       // EXT. FRUTILLA       — OC-0020-2026 (5 kg, Basel, abr-2026)
       'MP-0020-MCCASSAB-1300', // COLAGENO ULTRA BD   — OC-0022-2026 (1300 kg, MC CASSAB)
     ];
+    // OCs dinámicas (sin _sid en seed): se buscan por codigo
+    const _POR_COD = [
+      'MP-0233', // SABOR FRUTOS ROJOS + HIBISCO — recibido, adj. factura perdida
+    ];
     let fixed = 0;
-    _RECIBIDAS.forEach(sid => {
+    _POR_SID.forEach(sid => {
       const c = S.compras.find(oc => oc._sid === sid);
-      if(c && !c.entregada) {
-        c.entregada        = true;
-        c.recibidaDeposito = true;
-        c.estado           = 'Entregada';
-        fixed++;
-      }
+      if(c && !c.entregada) { c.entregada = true; c.recibidaDeposito = true; c.estado = 'Entregada'; fixed++; }
+    });
+    _POR_COD.forEach(cod => {
+      S.compras.filter(oc => oc.codigo === cod && !oc.entregada).forEach(c => {
+        c.entregada = true; c.recibidaDeposito = true; c.estado = 'Entregada'; fixed++;
+      });
     });
     if(fixed > 0) {
       saveState();
       toast(`✓ ${fixed} OC${fixed!==1?'s':''} restauradas como recibidas`,'📦',4000);
     }
-    localStorage.setItem('mrp_oc_recepcion_fix_v056','1');
+    localStorage.setItem('mrp_oc_recepcion_fix_v057','1');
   }
 
   _reRenderActivePage();
