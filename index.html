@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260501-058';
+  var VER = '20260501-059';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -4243,6 +4243,38 @@ async function loadFromSupabase() {
       toast(`✓ Stock de empaque corregido (${cleaned2} items)`,'🧹',3000);
     }
     localStorage.setItem('mrp_empaque_cleanup_v058','1');
+  }
+
+  // ── One-time v059: etiquetar stock sin lote como "empaque" (17/04/2026) ─────────────────────
+  // Si el total de stock > suma de lotes, la diferencia es stock de empaque sin lote visible.
+  // Agrega un lote explícito con ubicacion='empaque' para que se vea en la pantalla de stock.
+  if(!isViewer && !localStorage.getItem('mrp_empaque_label_v059')) {
+    const _EMPLAB = ['PK-0007','PK-0008','PK-0009','PK-0010','PK-0011','PK-0017',
+      'PK-0018','PK-0019','PK-0020','PK-0021','PK-0023','PK-0024','PK-0035','PK-0037',
+      'PK-0038','PK-0039','PK-0040','PK-0041','PK-0058','PK-0059','PK-0060','PK-0061',
+      'PK-0062','PK-0064','PK-0070','PK-0093','PK-0094','PK-0140','PK-0150','PK-0158',
+      'PK-0159','PK-0160','PK-0161','PK-0209'];
+    let labeled = 0;
+    _EMPLAB.forEach(cod => {
+      const s = D.stock[cod];
+      if(!s) return;
+      const stockTotal  = Math.round((parseFloat(s.stock)||0) * 1000) / 1000;
+      const lotesTotal  = Math.round(((s.lotes||[]).reduce((a,l)=>a+(parseFloat(l.cantidad)||0),0)) * 1000) / 1000;
+      const diff        = Math.round((stockTotal - lotesTotal) * 1000) / 1000;
+      if(diff < 0.001) return;                                    // no hay diferencia
+      if((s.lotes||[]).some(l => l.ubicacion==='empaque')) return; // ya tiene lote empaque
+      if(!s.lotes) s.lotes = [];
+      s.lotes.push({ lote:'empaque-17/04', cantidad:diff, vencimiento:'', ubicacion:'empaque', proveedor:'', fecha:'2026-04-17' });
+      if(!s.ubicaciones) s.ubicaciones = {};
+      s.ubicaciones.empaque = (s.ubicaciones.empaque||0) + diff;
+      labeled++;
+    });
+    if(labeled > 0) {
+      S.stockImportTs = Math.max(S.stockImportTs||0, Date.now());
+      saveState();
+      toast(`✓ ${labeled} items: stock de empaque visible en lotes`,'📦',3000);
+    }
+    localStorage.setItem('mrp_empaque_label_v059','1');
   }
 
   // ── One-time v057: restaurar OCs marcadas como recibidas (perdidas por corrupción Supabase) ──
