@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260501-057';
+  var VER = '20260501-058';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -4214,6 +4214,35 @@ async function loadFromSupabase() {
       toast(`✓ ${cleaned} items limpiados — stock de empaque revertido`,'🧹',3000);
     }
     localStorage.setItem('mrp_empaque_cleanup_v054','1');
+  }
+
+  // ── One-time v058: re-limpiar lotes empaque 17/04 (v054 saltó porque ya tenía el flag) ──
+  // v057 llamó saveState() con D.stock sucio (empaque incluido) porque v054 ya estaba marcado.
+  // Este bloque re-ejecuta la misma limpieza con un flag nuevo.
+  if(!isViewer && !localStorage.getItem('mrp_empaque_cleanup_v058')) {
+    const _EMPCLEAN2 = ['PK-0007','PK-0008','PK-0009','PK-0010','PK-0011','PK-0017',
+      'PK-0018','PK-0019','PK-0020','PK-0021','PK-0023','PK-0024','PK-0035','PK-0037',
+      'PK-0038','PK-0039','PK-0040','PK-0041','PK-0058','PK-0059','PK-0060','PK-0061',
+      'PK-0062','PK-0064','PK-0070','PK-0093','PK-0094','PK-0140','PK-0150','PK-0158',
+      'PK-0159','PK-0160','PK-0161','PK-0209'];
+    let cleaned2 = 0;
+    _EMPCLEAN2.forEach(cod => {
+      const s = D.stock[cod];
+      if(!s || !s.lotes) return;
+      const antes = s.lotes.filter(l => l.ubicacion==='empaque' && l.fecha==='2026-04-17');
+      if(antes.length === 0) return;
+      const totalQuitar = antes.reduce((a,l)=>a+(parseFloat(l.cantidad)||0),0);
+      s.lotes = s.lotes.filter(l => !(l.ubicacion==='empaque' && l.fecha==='2026-04-17'));
+      s.stock = Math.max(0,(parseFloat(s.stock)||0) - totalQuitar);
+      if(s.ubicaciones) s.ubicaciones.empaque = 0;
+      cleaned2++;
+    });
+    if(cleaned2 > 0) {
+      S.stockImportTs = Math.max(S.stockImportTs||0, Date.now());
+      saveState();
+      toast(`✓ Stock de empaque corregido (${cleaned2} items)`,'🧹',3000);
+    }
+    localStorage.setItem('mrp_empaque_cleanup_v058','1');
   }
 
   // ── One-time v057: restaurar OCs marcadas como recibidas (perdidas por corrupción Supabase) ──
