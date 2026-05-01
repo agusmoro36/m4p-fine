@@ -4203,6 +4203,36 @@ async function loadFromSupabase() {
     localStorage.setItem('mrp_oc_nro_fix_v038','1');
   }
 
+  // ── One-time v051: cargar stock sector empaque 17/04/2026 ────────────────
+  if(!isViewer && !localStorage.getItem('mrp_empaque_stock_v051')) {
+    const _EMP = [
+      {cod:'PK-0007',qty:30},{cod:'PK-0008',qty:76},{cod:'PK-0009',qty:69},
+      {cod:'PK-0010',qty:46},{cod:'PK-0011',qty:6},{cod:'PK-0017',qty:276},
+      {cod:'PK-0018',qty:1500},{cod:'PK-0019',qty:128},{cod:'PK-0020',qty:1500},
+      {cod:'PK-0021',qty:1250},{cod:'PK-0023',qty:2400},{cod:'PK-0024',qty:465},
+      {cod:'PK-0035',qty:76},{cod:'PK-0037',qty:80},{cod:'PK-0038',qty:16},
+      {cod:'PK-0039',qty:2},{cod:'PK-0040',qty:90},{cod:'PK-0041',qty:75},
+      {cod:'PK-0058',qty:494},{cod:'PK-0059',qty:670},{cod:'PK-0060',qty:1042},
+      {cod:'PK-0061',qty:1153},{cod:'PK-0062',qty:258},{cod:'PK-0064',qty:10},
+      {cod:'PK-0070',qty:360},{cod:'PK-0093',qty:575},{cod:'PK-0094',qty:372},
+      {cod:'PK-0140',qty:778},{cod:'PK-0150',qty:243},{cod:'PK-0158',qty:44},
+      {cod:'PK-0159',qty:25},{cod:'PK-0160',qty:2020},{cod:'PK-0161',qty:592},
+      {cod:'PK-0209',qty:472},
+    ];
+    _EMP.forEach(({cod,qty}) => {
+      if(!D.stock[cod]) D.stock[cod] = {nombre:cod,stock:0,um:'uni.',ubicaciones:{deposito:0,sala1:0,sala2:0},lotes:[]};
+      D.stock[cod].stock = (parseFloat(D.stock[cod].stock)||0) + qty;
+      if(!D.stock[cod].ubicaciones) D.stock[cod].ubicaciones = {deposito:0,sala1:0,sala2:0};
+      D.stock[cod].ubicaciones.empaque = (D.stock[cod].ubicaciones.empaque||0) + qty;
+      if(!D.stock[cod].lotes) D.stock[cod].lotes = [];
+      D.stock[cod].lotes.push({lote:'',cantidad:qty,vencimiento:'',ubicacion:'empaque',proveedor:'',fecha:'2026-04-17'});
+    });
+    S.stockImportTs = Math.max(S.stockImportTs||0, Date.now());
+    saveState();
+    toast('✓ Stock empaque cargado (17/04/2026) — 34 insumos','📦',4000);
+    localStorage.setItem('mrp_empaque_stock_v051','1');
+  }
+
   _reRenderActivePage();
 
   sbIndicador('ok');
