@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260501-054';
+  var VER = '20260501-055';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -4214,6 +4214,31 @@ async function loadFromSupabase() {
       toast(`✓ ${cleaned} items limpiados — stock de empaque revertido`,'🧹',3000);
     }
     localStorage.setItem('mrp_empaque_cleanup_v054','1');
+  }
+
+  // ── One-time v055: restaurar OCs marcadas como recibidas (perdidas por corrupción Supabase) ──
+  // La corrupción de v051/052/053 sobreescribió S.compras con defaults (entregada:false)
+  // Restauramos los estados correctos usando los _sid para identificar cada OC.
+  if(!isViewer && !localStorage.getItem('mrp_oc_recepcion_fix_v055')) {
+    const _RECIBIDAS = [
+      'MP-0036-BASEL-5',    // EXT. ACEROLA 17%  — OC-0020-2026 (5 kg, Basel, abr-2026)
+      'MP-0051-BASEL-5',    // EXT. FRUTILLA      — OC-0020-2026 (5 kg, Basel, abr-2026)
+    ];
+    let fixed = 0;
+    _RECIBIDAS.forEach(sid => {
+      const c = S.compras.find(oc => oc._sid === sid);
+      if(c && !c.entregada) {
+        c.entregada        = true;
+        c.recibidaDeposito = true;
+        c.estado           = 'Entregada';
+        fixed++;
+      }
+    });
+    if(fixed > 0) {
+      saveState();
+      toast(`✓ ${fixed} OC${fixed!==1?'s':''} restauradas como recibidas`,'📦',4000);
+    }
+    localStorage.setItem('mrp_oc_recepcion_fix_v055','1');
   }
 
   _reRenderActivePage();
