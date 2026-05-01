@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260501-055';
+  var VER = '20260501-056';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -4216,13 +4216,14 @@ async function loadFromSupabase() {
     localStorage.setItem('mrp_empaque_cleanup_v054','1');
   }
 
-  // ── One-time v055: restaurar OCs marcadas como recibidas (perdidas por corrupción Supabase) ──
+  // ── One-time v056: restaurar OCs marcadas como recibidas (perdidas por corrupción Supabase) ──
   // La corrupción de v051/052/053 sobreescribió S.compras con defaults (entregada:false)
   // Restauramos los estados correctos usando los _sid para identificar cada OC.
-  if(!isViewer && !localStorage.getItem('mrp_oc_recepcion_fix_v055')) {
+  if(!isViewer && !localStorage.getItem('mrp_oc_recepcion_fix_v056')) {
     const _RECIBIDAS = [
-      'MP-0036-BASEL-5',    // EXT. ACEROLA 17%  — OC-0020-2026 (5 kg, Basel, abr-2026)
-      'MP-0051-BASEL-5',    // EXT. FRUTILLA      — OC-0020-2026 (5 kg, Basel, abr-2026)
+      'MP-0036-BASEL-5',       // EXT. ACEROLA 17%   — OC-0020-2026 (5 kg, Basel, abr-2026)
+      'MP-0051-BASEL-5',       // EXT. FRUTILLA       — OC-0020-2026 (5 kg, Basel, abr-2026)
+      'MP-0020-MCCASSAB-1300', // COLAGENO ULTRA BD   — OC-0022-2026 (1300 kg, MC CASSAB)
     ];
     let fixed = 0;
     _RECIBIDAS.forEach(sid => {
@@ -4238,7 +4239,7 @@ async function loadFromSupabase() {
       saveState();
       toast(`✓ ${fixed} OC${fixed!==1?'s':''} restauradas como recibidas`,'📦',4000);
     }
-    localStorage.setItem('mrp_oc_recepcion_fix_v055','1');
+    localStorage.setItem('mrp_oc_recepcion_fix_v056','1');
   }
 
   _reRenderActivePage();
