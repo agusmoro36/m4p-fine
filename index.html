@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260502-064';
+  var VER = '20260502-065';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -884,6 +884,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <div class="tabs" style="margin-bottom:0">
       <div class="tab active" onclick="stockTab('consolidado',this)">📊 Consolidado</div>
       <div class="tab" onclick="stockTab('ubicacion',this)">⚖ Sala de Pesado</div>
+      <div class="tab" onclick="stockTab('rotacion',this)">🔄 Rotación</div>
     </div>
     <div class="tab-pane active" id="stp-consolidado">
       <div class="tbl-wrap"><table>
@@ -899,6 +900,10 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         <tbody id="tbl-stock"></tbody>
       </table></div>
       <div class="pag" id="pag-stock"></div>
+    </div>
+    <div class="tab-pane" id="stp-rotacion" style="padding-top:16px">
+      <div id="rot-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px"></div>
+      <div id="rot-body"></div>
     </div>
     <div class="tab-pane" id="stp-ubicacion">
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px" id="ubic-kpis"></div>
@@ -6941,6 +6946,7 @@ function stockTab(id, el) {
   if(el) el.classList.add('active');
   document.getElementById('stp-'+id).classList.add('active');
   if(id==='ubicacion') renderStockUbicacion();
+  if(id==='rotacion')  renderRotacion();
 }
 
 function renderStockUbicacion() {
@@ -7095,6 +7101,129 @@ function ejecutarTransferencia() {
   toast(`↔ ${s.nombre}: ${fmt(env,3)} ${s.um||'kg'} · ${UBIC_INFO[de].label} → ${UBIC_INFO[a].label}`,'↔',4000);
   renderStock();
   if(document.getElementById('stp-ubicacion').classList.contains('active')) renderStockUbicacion();
+}
+
+function renderRotacion() {
+  const TODOS_MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const MESES_LABEL = {ene:'Ene 26',feb:'Feb 26',mar:'Mar 26',abr:'Abr 26',may:'May 26',jun:'Jun 26',jul:'Jul 26',ago:'Ago 26',sep:'Sep 26',oct:'Oct 26',nov:'Nov 26',dic:'Dic 26'};
+
+  // Mes actual e índice
+  const mesActIdx = new Date().getMonth(); // 0=ene … 4=may
+  // Claves del plan presentes en D.productos[0]
+  const planKeys  = D.productos.length ? TODOS_MESES.filter(m => D.productos[0].hasOwnProperty(m)) : [];
+  // Meses próximos = desde el mes actual en adelante, que estén en el plan
+  const mesesProx = planKeys.filter(m => TODOS_MESES.indexOf(m) >= mesActIdx);
+
+  // Insumo → PTs que lo consumen
+  const insumoToPT = _buildInsumoToPTMap();
+
+  // Insumos con stock > 0
+  const conStock = getStockArr().filter(s => s.stock > 0);
+
+  const sinFormula  = [];
+  const sinPlanProx = [];
+
+  conStock.forEach(s => {
+    const pts = insumoToPT[s.codigo] || [];
+    if(!pts.length) { sinFormula.push(s); return; }
+
+    // ¿Algún PT tiene plan en meses próximos?
+    const tienePlanProx = mesesProx.length > 0 && mesesProx.some(mes =>
+      pts.some(pt => {
+        const prod = D.productos.find(p => p.codigo === pt.codigo);
+        return prod && (prod[mes] || 0) > 0;
+      })
+    );
+    if(!tienePlanProx) {
+      // Último mes del plan con qty > 0
+      const mesesConPlan = planKeys.filter(m =>
+        pts.some(pt => {
+          const prod = D.productos.find(p => p.codigo === pt.codigo);
+          return prod && (prod[m] || 0) > 0;
+        })
+      );
+      const ultimoMes    = mesesConPlan.length ? mesesConPlan[mesesConPlan.length - 1] : null;
+      const mesesSinPlan = ultimoMes !== null ? mesActIdx - TODOS_MESES.indexOf(ultimoMes) : null;
+      sinPlanProx.push({ ...s, pts, ultimoMes, mesesSinPlan });
+    }
+  });
+
+  // KPIs
+  const riesgo = sinFormula.length + sinPlanProx.length;
+  const proxLabel = mesesProx.map(m => MESES_LABEL[m]).join(' / ') || 'próximos meses';
+  document.getElementById('rot-kpis').innerHTML = [
+    {label:'Insumos en stock',          val: conStock.length,      color:'var(--gold)',   sub:'con cantidad > 0'},
+    {label:'Sin fórmula activa',        val: sinFormula.length,    color: sinFormula.length  ? 'var(--red)'    : 'var(--green)', sub:'no están en ningún BOM'},
+    {label:'Sin plan próximo',          val: sinPlanProx.length,   color: sinPlanProx.length ? 'var(--orange)' : 'var(--green)', sub:`sin demanda en ${proxLabel}`},
+    {label:'En riesgo de inmovilización', val: riesgo,             color: riesgo             ? 'var(--red)'    : 'var(--green)', sub:'requieren atención'},
+  ].map(k=>`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 18px">
+    <div style="font-size:9px;color:var(--text3);font-family:var(--mono);letter-spacing:1.5px;margin-bottom:8px">${k.label.toUpperCase()}</div>
+    <div style="font-size:22px;font-weight:700;color:${k.color};font-family:var(--mono);line-height:1.2">${k.val}</div>
+    <div style="font-size:10px;color:var(--text3);margin-top:4px">${k.sub}</div>
+  </div>`).join('');
+
+  let html = '';
+
+  // ── Sección 1: Sin fórmula ──────────────────────────────────────
+  if(sinFormula.length) {
+    const rows = sinFormula.map(s=>`<tr>
+      <td style="font-family:var(--mono);font-size:11px;color:var(--gold)">${s.codigo}</td>
+      <td style="font-size:12px">${s.nombre}</td>
+      <td class="td-mono tr">${fmt(s.stock,2)} <span style="font-size:9px;color:var(--text3)">${s.um||'kg'}</span></td>
+      <td><span style="font-size:10px;font-family:var(--mono);background:var(--red-dim);border:1px solid rgba(192,57,43,.3);color:var(--red);border-radius:4px;padding:2px 8px">Sin fórmula</span></td>
+    </tr>`).join('');
+    html += `<div style="background:var(--bg2);border:1px solid rgba(192,57,43,.35);border-radius:12px;margin-bottom:16px;overflow:hidden">
+      <div style="padding:14px 20px;background:rgba(192,57,43,.07);border-bottom:1px solid rgba(192,57,43,.2);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span style="font-size:15px;font-weight:700;color:var(--red)">⚠ Sin fórmula activa</span>
+        <span style="font-size:11px;color:var(--text3);font-family:var(--mono)">${sinFormula.length} insumo${sinFormula.length!==1?'s':''} en stock no figuran en ningún BOM cargado</span>
+      </div>
+      <div class="tbl-wrap" style="margin:0"><table>
+        <thead><tr><th>Código</th><th>Insumo</th><th class="tr">Stock</th><th>Estado</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  // ── Sección 2: Sin plan próximo ─────────────────────────────────
+  if(sinPlanProx.length) {
+    const rows = sinPlanProx.map(s => {
+      const chips = s.pts.map(pt =>
+        `<span style="font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);color:var(--gold);margin:2px;display:inline-block" title="${pt.nombre}">${pt.codigo}</span>`
+      ).join('');
+      const ultLabel = s.ultimoMes ? MESES_LABEL[s.ultimoMes] : '—';
+      const sinUsoHtml = s.mesesSinPlan !== null
+        ? `<span style="font-family:var(--mono);font-size:10px;color:${s.mesesSinPlan>=2?'var(--red)':'var(--orange)'}">hace ${s.mesesSinPlan} ${s.mesesSinPlan===1?'mes':'meses'}</span>`
+        : `<span style="font-size:10px;color:var(--text3)">sin historial</span>`;
+      return `<tr>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--gold)">${s.codigo}</td>
+        <td style="font-size:12px">${s.nombre}</td>
+        <td class="td-mono tr">${fmt(s.stock,2)} <span style="font-size:9px;color:var(--text3)">${s.um||'kg'}</span></td>
+        <td style="max-width:200px">${chips}</td>
+        <td style="font-size:11px;color:var(--text3)">${ultLabel}</td>
+        <td>${sinUsoHtml}</td>
+      </tr>`;
+    }).join('');
+    html += `<div style="background:var(--bg2);border:1px solid rgba(249,115,22,.35);border-radius:12px;overflow:hidden">
+      <div style="padding:14px 20px;background:rgba(249,115,22,.07);border-bottom:1px solid rgba(249,115,22,.2);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span style="font-size:15px;font-weight:700;color:var(--orange)">⏸ Sin plan de producción próximo</span>
+        <span style="font-size:11px;color:var(--text3);font-family:var(--mono)">${sinPlanProx.length} insumo${sinPlanProx.length!==1?'s':''} en stock — los PT que los consumen no tienen cantidades en ${proxLabel}</span>
+      </div>
+      <div class="tbl-wrap" style="margin:0"><table>
+        <thead><tr><th>Código</th><th>Insumo</th><th class="tr">Stock</th><th>Usado en PT</th><th>Último plan</th><th>Sin uso</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  if(!sinFormula.length && !sinPlanProx.length) {
+    html = `<div style="text-align:center;padding:60px;color:var(--text3)">
+      <div style="font-size:32px;margin-bottom:12px">✓</div>
+      <div style="font-size:14px;font-weight:600;color:var(--green)">Todo en orden</div>
+      <div style="font-size:12px;margin-top:8px">Todos los insumos en stock están asociados a un BOM y tienen plan de producción en ${proxLabel}.</div>
+    </div>`;
+  }
+
+  document.getElementById('rot-body').innerHTML = html;
 }
 
 function renderStock(){
