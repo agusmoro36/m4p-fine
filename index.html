@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260501-060';
+  var VER = '20260502-061';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3949,6 +3949,7 @@ async function loadFromSupabase() {
   // Siempre aplicar Supabase cuando sbTs >= lsTs (incluye el caso sbTs === lsTs).
   // El estado de Supabase NO tiene base64 (saveState siempre lo stripea).
   applyState(data.value);
+  if(typeof _autoMergePrecios === 'function') _autoMergePrecios(); // llena precios faltantes desde OCs/seed
   // applyState() ya mergeó OCs locales (_uid), movimientos y producciones.
   // CRÍTICO: guardar en localStorage los valores POST-MERGE, no data.value directo.
   // Así cada campo tiene el union de local + remoto, sin pérdidas.
@@ -11648,6 +11649,29 @@ const MAESTRO_SEED = {"MP-0003":{"precio":1.5,"moneda":"USD","fuente":"OC","prov
 "INS-0034":{"precio":0.4,"moneda":"USD","fuente":"OC","proveedor":"CHEMIT ARGENTINA","fecha":"2024-06-04","updatedAt":"2024-06-04"},
 "INS-0035":{"precio":0.9,"moneda":"USD","fuente":"OC","proveedor":"CHEMIT ARGENTINA","fecha":"2025-06-11","updatedAt":"2025-06-11"},
 "INS-0036":{"precio":4.5,"moneda":"USD","fuente":"OC","proveedor":"GRUPO EXPEDIT","fecha":"2025-07-21","updatedAt":"2025-07-21"}};
+
+// Auto-merge silencioso: llena precios faltantes desde MAESTRO_SEED y OCs activas (no pisa manuales)
+function _autoMergePrecios() {
+  if(!S.preciosInsumos) S.preciosInsumos = {};
+  let added = 0;
+  // 1. Seed histórico
+  Object.entries(MAESTRO_SEED).forEach(([cod, v]) => {
+    if(!S.preciosInsumos[cod]) { S.preciosInsumos[cod] = {...v}; added++; }
+  });
+  // 2. OCs activas con precio para items aún sin precio en el maestro
+  S.compras.forEach(c => {
+    if(!c.codigo || !(c.precio > 0) || S.preciosInsumos[c.codigo]) return;
+    S.preciosInsumos[c.codigo] = {
+      precio: parseFloat(c.precio), moneda: c.moneda || 'USD',
+      fuente: 'OC', proveedor: c.proveedor || '',
+      fecha: c.fecha || '', updatedAt: c.fecha || new Date().toISOString().slice(0,10)
+    };
+    added++;
+  });
+  return added;
+}
+// Aplicar al arrancar (MAESTRO_SEED ya definido aquí)
+(function(){ const n = _autoMergePrecios(); if(n > 0) saveState(); })();
 
 function cargarPreciosHistoricos() {
   if(!S.preciosInsumos) S.preciosInsumos = {};
