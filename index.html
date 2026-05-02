@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260502-062';
+  var VER = '20260502-063';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -1348,12 +1348,20 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <div class="sh">
       <div class="sh-title">⊗ Análisis PPP</div>
       <div class="sh-actions">
-        <input type="text" class="finput" id="ppp-search" placeholder="Buscar insumo…" oninput="renderPPP()" style="width:220px">
+        <input type="text" class="finput" id="ppp-search" placeholder="Buscar insumo…" oninput="renderPPP()" style="width:200px">
         <select class="fsel" id="ppp-proveedor" onchange="renderPPP()">
           <option value="">Todos los proveedores</option>
         </select>
+        <select class="fsel" id="ppp-variacion" onchange="renderPPP()" style="display:none">
+          <option value="">Todas las variaciones</option>
+          <option value="sube">↑ Subió (PPP > precio)</option>
+          <option value="baja">↓ Bajó (PPP < precio)</option>
+          <option value="estable">≈ Estable (±2%)</option>
+          <option value="sin_ppp">Sin PPP calculado</option>
+        </select>
         <select class="fsel" id="ppp-vista" onchange="renderPPP()">
-          <option value="insumo">Por insumo</option>
+          <option value="resumen">Resumen</option>
+          <option value="insumo">Detalle por insumo</option>
           <option value="proveedor">Por proveedor</option>
         </select>
       </div>
@@ -12128,7 +12136,12 @@ function renderPPP() {
   const insumoMap = _buildInsumoToPTMap();
   const search    = (document.getElementById('ppp-search')?.value || '').toLowerCase().trim();
   const filtProv  = (document.getElementById('ppp-proveedor')?.value || '').toLowerCase();
-  const vista     = document.getElementById('ppp-vista')?.value || 'insumo';
+  const vista     = document.getElementById('ppp-vista')?.value || 'resumen';
+  const filtVar   = document.getElementById('ppp-variacion')?.value || '';
+
+  // Mostrar filtro de variación sólo en vista resumen
+  const varSel = document.getElementById('ppp-variacion');
+  if(varSel) varSel.style.display = vista === 'resumen' ? '' : 'none';
 
   // Nombre de insumo
   const nomMap = {};
@@ -12181,6 +12194,61 @@ function renderPPP() {
   const body = document.getElementById('ppp-body');
   if(!codigos.length) {
     body.innerHTML = `<div style="text-align:center;color:var(--text3);padding:60px;font-size:14px">Sin resultados</div>`;
+    return;
+  }
+
+  if(vista === 'resumen') {
+    // ─── Vista resumen: tabla plana con PPP y variación ───
+    const filas = codigos.map(cod => {
+      const entries = filtProv ? hist[cod].filter(e => (e.proveedor||'').toLowerCase() === filtProv) : hist[cod];
+      if(!entries.length) return null;
+      const nom    = nomMap[cod] || cod;
+      const pv     = S.preciosInsumos?.[cod];
+      const pppRes = _calcPPP(entries);
+
+      // Calcular variación y tag
+      let varPct = null, varTag = 'sin_ppp';
+      if(pppRes && pv && pv.precio > 0 && pv.moneda === pppRes.moneda) {
+        varPct = ((pppRes.ppp - pv.precio) / pv.precio) * 100;
+        varTag = Math.abs(varPct) <= 2 ? 'estable' : varPct > 2 ? 'sube' : 'baja';
+      }
+
+      // Aplicar filtro de variación
+      if(filtVar && varTag !== filtVar) return null;
+
+      const sym     = pppRes ? (pppRes.moneda === 'ARS' ? '$' : 'U$D') : (pv?.moneda === 'ARS' ? '$' : 'U$D');
+      const provRef = entries[0]?.proveedor || '—';
+
+      let varCell = `<td class="td-mono tr" style="color:var(--text3)">—</td>`;
+      if(varPct !== null) {
+        const vc = varTag === 'estable' ? 'var(--text3)' : varTag === 'sube' ? 'var(--red)' : 'var(--green)';
+        const vi = varTag === 'sube' ? '↑' : varTag === 'baja' ? '↓' : '≈';
+        varCell = `<td class="td-mono tr" style="color:${vc};font-weight:600">${vi} ${varPct>=0?'+':''}${varPct.toFixed(1)}%</td>`;
+      }
+
+      return `<tr>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--gold)">${cod}</td>
+        <td style="font-size:12px">${nom}</td>
+        <td class="td-mono tr" style="color:var(--green)">${pv && pv.precio > 0 ? `${pv.moneda==='ARS'?'$':'U$D'} ${fmt(pv.precio,2)}` : '<span style="color:var(--text3)">—</span>'}</td>
+        <td class="td-mono tr" style="color:var(--gold)">${pppRes ? `${sym} ${fmt(pppRes.ppp,2)}` : '<span style="color:var(--text3)">—</span>'}</td>
+        ${varCell}
+        <td class="td-mono tr" style="color:var(--text3)">${entries.length}</td>
+        <td style="font-size:11px;color:var(--text3)">${provRef}</td>
+      </tr>`;
+    }).filter(Boolean);
+
+    if(!filas.length) {
+      body.innerHTML = `<div style="text-align:center;color:var(--text3);padding:60px;font-size:14px">Sin resultados para el filtro seleccionado</div>`;
+      return;
+    }
+    body.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <div class="tbl-wrap" style="margin:0">
+        <table><thead><tr>
+          <th>Código</th><th>Insumo</th><th class="tr">Precio vigente</th>
+          <th class="tr">PPP</th><th class="tr">Variación</th><th class="tr">N° OCs</th><th>Proveedor ref.</th>
+        </tr></thead><tbody>${filas.join('')}</tbody></table>
+      </div>
+    </div>`;
     return;
   }
 
