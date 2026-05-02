@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260502-063';
+  var VER = '20260502-064';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -1364,6 +1364,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
           <option value="insumo">Detalle por insumo</option>
           <option value="proveedor">Por proveedor</option>
         </select>
+        <button class="btn btn-b btn-sm" onclick="exportarPPP()">↓ Excel</button>
       </div>
     </div>
     <div id="ppp-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px"></div>
@@ -12371,6 +12372,65 @@ function renderPPP() {
       ${pppSummary}
     </div>`;
   }).join('');
+}
+
+function exportarPPP() {
+  if(typeof XLSX === 'undefined') return;
+  const hist     = buildPriceHistory();
+  const search   = (document.getElementById('ppp-search')?.value || '').toLowerCase().trim();
+  const filtProv = (document.getElementById('ppp-proveedor')?.value || '').toLowerCase();
+  const filtVar  = document.getElementById('ppp-variacion')?.value || '';
+
+  // Nombre de insumo
+  const nomMap = {};
+  Object.values(D.bom || {}).forEach(b => (b.insumos||[]).forEach(i => { if(!nomMap[i.codigo]) nomMap[i.codigo] = i.nombre; }));
+  Object.entries(D.stock||{}).forEach(([cod, v]) => { if(!nomMap[cod]) nomMap[cod] = v.nombre||''; });
+  Object.entries(BOM_COMPLETO).forEach(([,b]) => (b.insumos||[]).forEach(i => { if(!nomMap[i.codigo]) nomMap[i.codigo] = i.nombre; }));
+
+  const rows = Object.keys(hist).filter(cod => {
+    const entries = hist[cod];
+    if(filtProv && !entries.some(e => (e.proveedor||'').toLowerCase() === filtProv)) return false;
+    const nom = (nomMap[cod]||'').toLowerCase();
+    if(search && !cod.toLowerCase().includes(search) && !nom.includes(search)) return false;
+    return true;
+  }).sort().map(cod => {
+    const entries = filtProv ? hist[cod].filter(e => (e.proveedor||'').toLowerCase() === filtProv) : hist[cod];
+    if(!entries.length) return null;
+    const nom    = nomMap[cod] || cod;
+    const pv     = S.preciosInsumos?.[cod];
+    const pppRes = _calcPPP(entries);
+
+    let varPct = null, varTag = 'Sin PPP';
+    if(pppRes && pv && pv.precio > 0 && pv.moneda === pppRes.moneda) {
+      varPct = ((pppRes.ppp - pv.precio) / pv.precio) * 100;
+      varTag = Math.abs(varPct) <= 2 ? 'Estable' : varPct > 2 ? 'Subió' : 'Bajó';
+    }
+
+    // Aplicar filtro variación (mapeo a valores del select)
+    const tagMap = { sube: 'Subió', baja: 'Bajó', estable: 'Estable', sin_ppp: 'Sin PPP' };
+    if(filtVar && varTag !== (tagMap[filtVar] || filtVar)) return null;
+
+    const ultimaOC = entries[0];
+    return {
+      'Código':          cod,
+      'Insumo':          nom,
+      'Precio vigente':  pv?.precio > 0 ? pv.precio : '',
+      'Moneda precio':   pv?.precio > 0 ? (pv.moneda || 'USD') : '',
+      'PPP':             pppRes ? Math.round(pppRes.ppp * 100) / 100 : '',
+      'Moneda PPP':      pppRes ? pppRes.moneda : '',
+      'Variación %':     varPct !== null ? Math.round(varPct * 10) / 10 : '',
+      'Tendencia':       varTag,
+      'N° OCs':          entries.length,
+      'Proveedor ref.':  ultimaOC?.proveedor || '',
+      'Última OC':       ultimaOC?.fecha || '',
+    };
+  }).filter(Boolean);
+
+  if(!rows.length) { toast('Sin datos para exportar', '⚠'); return; }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'PPP Variaciones');
+  XLSX.writeFile(wb, 'ppp_variaciones_' + new Date().toISOString().slice(0,10) + '.xlsx');
+  toast('Exportado ↓', '✓');
 }
 
 function exportarCostos() {
