@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260502-065';
+  var VER = '20260502-066';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -4367,7 +4367,7 @@ function _reRenderActivePage() {
   if(!activePage) return;
   const renders = {
     dashboard: renderDashboard, mrp: renderMRP, plan: renderPlan,
-    semanal: renderSemanal, bom: renderBOMPage, proyeccion: renderProyeccion,
+    bom: renderBOMPage, proyeccion: renderProyeccion,
     compras: renderCompras, propuestas: renderPropuestas, recepcion: renderRecepcion,
     proveedores: renderProveedoresEnhanced, stock: renderStock, historial: renderHistorial,
     alertas: renderAlertas, calculadora: renderCalcPage, planificador: renderPlanificador,
