@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260502-067';
+  var VER = '20260504-068';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -2838,6 +2838,10 @@ const _SEED_COMPRAS = [
   {_sid:'MP-0036-BASEL-5',nro:'OC-0020-2026',codigo:'MP-0036',descripcion:'EXT. ACEROLA 17%',productos:'',cantidad:5,um:'kg',precio:54,total_usd:270,moneda:'USD',proveedor:'BASEL',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-04-20',condicion_pago:'30 días',lead_time:0},
   {_sid:'MP-0051-BASEL-5',nro:'OC-0020-2026',codigo:'MP-0051',descripcion:'EXT. FRUTILLA',productos:'',cantidad:5,um:'kg',precio:49.5,total_usd:247.5,moneda:'USD',proveedor:'BASEL',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-04-20',condicion_pago:'30 días',lead_time:0},
   {_sid:'PK-0019-CHIARELLO-1050',nro:'OC-0026-2026',codigo:'PK-0019',descripcion:'ETIQUETA SUPERGREENS LIMON 29.7 CM X 5.1',productos:'',cantidad:1050,um:'uni.',precio:223,total_usd:167.25,moneda:'ARS',tipo_cambio:1400,proveedor:'MAXIMILIANO CHIARELLO',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-04-23',condicion_pago:'50% transferencia y 50% a 30 días',lead_time:7},
+  {_sid:'PK-0183-BERGMAN-1500',nro:'OC-0011-2026',codigo:'PK-0183',descripcion:'estuche vece',productos:'',cantidad:1500,um:'kg',precio:1.09,moneda:'USD',proveedor:'CASA BERGMAN',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-04-07',condicion_pago:'50% anticipo y 50% contra entrega',lead_time:25},
+  {_sid:'INS-0026-BERGMAN-1',nro:'OC-0012-2026',codigo:'INS-0026',descripcion:'1 sacabocado',productos:'',cantidad:1,um:'uni.',precio:139.19,moneda:'USD',proveedor:'CASA BERGMAN',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-04-07',lead_time:25,items:[{codigo:'INS-0026',descripcion:'1 sacabocado',cantidad:1,um:'uni.',precio:139.19},{codigo:'INS-0027',descripcion:'cuñete relieve vece',cantidad:1,um:'uni.',precio:117.22}]},
+  {_sid:'PK-0199-CHIARELLO-3660',nro:'OC-0027-2026',codigo:'PK-0199',descripcion:'ETIQUETA PEAK FRENTE',productos:'',cantidad:3660,um:'uni.',precio:116,moneda:'ARS',proveedor:'MAXIMILIANO CHIARELLO',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-04-29',condicion_pago:'50% transferencia y 50% a 30 días',lead_time:0,items:[{codigo:'PK-0199',descripcion:'ETIQUETA PEAK FRENTE',cantidad:3660,um:'uni.',precio:116},{codigo:'PK-0200',descripcion:'ETIQUETA PEAK TABLA NUTRICIONAL',cantidad:3660,um:'uni.',precio:350},{codigo:'PK-0201',descripcion:'ETIQUETA PEAK MODO DE USO',cantidad:3660,um:'uni.',precio:116}]},
+  {_sid:'PK-0202-CHIARELLO-3000',nro:'OC-0028-2026',codigo:'PK-0202',descripcion:'ETIQUETA BEAUTY FRENTE',productos:'',cantidad:3000,um:'uni.',precio:116,moneda:'ARS',proveedor:'MAXIMILIANO CHIARELLO',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-04-29',lead_time:7,items:[{codigo:'PK-0202',descripcion:'ETIQUETA BEAUTY FRENTE',cantidad:3000,um:'uni.',precio:116},{codigo:'PK-0203',descripcion:'ETIQUETA BEAUTY TABLA NUTRICIONAL',cantidad:3000,um:'uni.',precio:350},{codigo:'PK-0204',descripcion:'ETIQUETA BEAUTY MODO DE USO',cantidad:3000,um:'uni.',precio:116}]},
 ];
 
 const S = {
