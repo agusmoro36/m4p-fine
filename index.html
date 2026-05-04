@@ -11828,7 +11828,7 @@ function _autoMergePrecios() {
   return added;
 }
 // Aplicar al arrancar (MAESTRO_SEED ya definido aquí)
-(function(){ const n = _autoMergePrecios(); if(n > 0) saveState(); })();
+(function(){ _autoMergePrecios(); })(); // solo en memoria, no persiste para no pisar Supabase antes de que cargue
 
 function cargarPreciosHistoricos() {
   if(!S.preciosInsumos) S.preciosInsumos = {};
