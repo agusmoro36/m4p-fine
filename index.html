@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260502-066';
+  var VER = '20260502-067';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -489,6 +489,12 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         letter-spacing:.5px;display:flex;align-items:center;gap:6px;
         transition:opacity .2s" title="Guardar todo en la nube">
         ☁ Guardar
+      </button>
+      <button onclick="descargarBackup()" style="
+        background:transparent;color:var(--gold);border:1px solid var(--gold);border-radius:8px;
+        padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:.5px;
+        display:flex;align-items:center;gap:5px;transition:opacity .2s" title="Descargar backup JSON del estado completo">
+        ↓ Backup
       </button>
       <div style="display:flex;align-items:center;gap:6px">
         <button class="btn-reset" onclick="toggleDark()" id="btn-dark" title="Modo oscuro / claro" style="font-size:13px;padding:2px 6px">🌙</button>
@@ -3298,6 +3304,37 @@ async function sbLoad() {
     if(error || !data) return null;
     return data;
   } catch(e) { return null; }
+}
+
+function descargarBackup() {
+  const payload = {
+    _backupDate: new Date().toISOString(),
+    _version: typeof VER !== 'undefined' ? VER : '?',
+    preciosInsumos: S.preciosInsumos || {},
+    compras: S.compras,
+    comprasPropuestas: S.comprasPropuestas || [],
+    cotizacionesExtra: S.cotizacionesExtra || [],
+    movimientos: S.movimientos || [],
+    producciones: S.producciones || [],
+    proveedores: S.proveedores || [],
+    productos: D.productos,
+    stock: D.stock,
+    facturasToggles: typeof facturasState !== 'undefined'
+      ? facturasState.reduce((acc,f) => { acc[f._id] = {pagada: f.pagada, entregada: f.entregada}; return acc; }, {})
+      : {},
+    facturasExtra: S.facturasExtra || [],
+    revalidas: S.revalidas || {},
+    ts: Date.now()
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const fecha = new Date().toISOString().slice(0,10);
+  a.href     = url;
+  a.download = `mrp_backup_${fecha}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Backup descargado ↓', '✓', 3000);
 }
 
 async function guardarNube() {
