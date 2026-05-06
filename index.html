@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260504-069';
+  var VER = '20260506-070';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -881,6 +881,19 @@ body.viewer-mode .page-filters select { pointer-events:auto }
           <option value="vence60">Por vencer (&lt;60d)</option>
           <option value="vencido">Vencidos</option>
         </select>
+        <div style="position:relative" id="formula-filter-wrap">
+          <button class="btn btn-sm" id="btn-formula-filter" onclick="toggleFormulaDropdown(event)" style="border-color:var(--gold);color:var(--gold);position:relative">
+            🔬 Fórmula<span id="formula-filter-badge" style="display:none;margin-left:5px;background:var(--gold);color:#000;border-radius:10px;padding:1px 6px;font-size:9px;font-weight:700"></span>
+          </button>
+          <div id="formula-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);right:0;z-index:200;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 0;min-width:280px;max-height:420px;overflow-y:auto;box-shadow:0 6px 24px rgba(0,0,0,.4)">
+            <div style="padding:6px 14px 4px;font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.05em">FILTRAR POR FÓRMULA</div>
+            <div id="formula-dropdown-body"></div>
+            <div style="border-top:1px solid var(--border);margin-top:6px;padding:8px 14px;display:flex;gap:8px">
+              <button class="btn btn-sm" onclick="limpiarFiltroFormula()" style="flex:1;font-size:11px">Limpiar</button>
+              <button class="btn btn-sm" onclick="exportarStockFormula()" style="flex:1;font-size:11px;border-color:#22c55e;color:#22c55e">↓ Excel</button>
+            </div>
+          </div>
+        </div>
         <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-stock" placeholder="Buscar..." oninput="renderStock();renderStockUbicacion()"></div>
         <button class="btn btn-p btn-sm" onclick="abrirTransferir(null)">↔ Transferir</button>
         <button class="btn btn-sm" onclick="abrirAjusteStock(null)" style="border-color:var(--gold);color:var(--gold)">✏ Ajuste</button>
@@ -2891,6 +2904,7 @@ const S = {
   histPage:1,
   mrpSort:{col:'',dir:1}, mrpSemaFilter:'',
   stockSort:{col:'nombre',dir:1},
+  stockFiltroFormulas:[],
   mrpPage:1, stockPage:1, stockUbicPage:1, comprasPage:1,
   per:20,
   importHistory:[],
@@ -7268,10 +7282,158 @@ function renderRotacion() {
   document.getElementById('rot-body').innerHTML = html;
 }
 
+function _getInsumosDeFormulas(ptCodes){
+  const set=new Set();
+  ptCodes.forEach(cod=>{const b=BOM_COMPLETO[cod];if(b?.insumos)b.insumos.forEach(i=>set.add(i.codigo));});
+  return set;
+}
+
+function toggleFormulaDropdown(e){
+  if(e)e.stopPropagation();
+  const dd=document.getElementById('formula-dropdown');
+  const open=dd.style.display==='none';
+  dd.style.display=open?'block':'none';
+  if(open) _renderFormulaDropdownBody();
+}
+
+function _renderFormulaDropdownBody(){
+  // agrupar BOM_COMPLETO por cliente
+  const grupos={};
+  Object.entries(BOM_COMPLETO).forEach(([cod,b])=>{
+    const cli=b.cliente||'Otros';
+    if(!grupos[cli])grupos[cli]=[];
+    grupos[cli].push({cod,nombre:b.nombre,codigo_prod:b.codigo_prod});
+  });
+  const orden=['DIABLA','FINE','Otros'];
+  const clientes=Object.keys(grupos).sort((a,b)=>{
+    const ia=orden.indexOf(a),ib=orden.indexOf(b);
+    return (ia===-1?99:ia)-(ib===-1?99:ib);
+  });
+  let html='';
+  clientes.forEach(cli=>{
+    const items=grupos[cli].sort((a,b)=>a.codigo_prod.localeCompare(b.codigo_prod));
+    html+=`<div style="padding:4px 14px 2px;font-size:10px;font-weight:700;color:var(--gold2);letter-spacing:.06em;margin-top:4px">${cli}</div>`;
+    // botón seleccionar todos del cliente
+    html+=`<div style="padding:2px 14px 4px">
+      <button class="btn btn-sm" onclick="_toggleClienteFormula('${cli}')" style="font-size:10px;width:100%;text-align:left;border-color:var(--border)">
+        ✓ Todos ${cli}
+      </button></div>`;
+    items.forEach(({cod,nombre,codigo_prod})=>{
+      const chk=S.stockFiltroFormulas.includes(cod);
+      html+=`<label style="display:flex;align-items:center;gap:8px;padding:5px 14px;cursor:pointer;border-radius:0;transition:background .1s" onmouseover="this.style.background='rgba(201,168,76,.07)'" onmouseout="this.style.background=''">
+        <input type="checkbox" ${chk?'checked':''} onchange="toggleStockFormulaPT('${cod}')" style="accent-color:var(--gold);width:13px;height:13px;cursor:pointer">
+        <span style="font-size:12px"><span style="font-family:var(--mono);color:var(--text3);font-size:10px">${codigo_prod}</span> ${nombre}</span>
+      </label>`;
+    });
+  });
+  document.getElementById('formula-dropdown-body').innerHTML=html;
+}
+
+function _toggleClienteFormula(cli){
+  const ptsCli=Object.entries(BOM_COMPLETO).filter(([,b])=>(b.cliente||'Otros')===cli).map(([cod])=>cod);
+  const todosOn=ptsCli.every(c=>S.stockFiltroFormulas.includes(c));
+  if(todosOn){
+    S.stockFiltroFormulas=S.stockFiltroFormulas.filter(c=>!ptsCli.includes(c));
+  } else {
+    ptsCli.forEach(c=>{if(!S.stockFiltroFormulas.includes(c))S.stockFiltroFormulas.push(c);});
+  }
+  _renderFormulaDropdownBody();
+  _actualizarBadgeFormula();
+  renderStock();
+}
+
+function toggleStockFormulaPT(cod){
+  const idx=S.stockFiltroFormulas.indexOf(cod);
+  if(idx===-1)S.stockFiltroFormulas.push(cod);
+  else S.stockFiltroFormulas.splice(idx,1);
+  _actualizarBadgeFormula();
+  renderStock();
+}
+
+function _actualizarBadgeFormula(){
+  const n=S.stockFiltroFormulas.length;
+  const badge=document.getElementById('formula-filter-badge');
+  const btn=document.getElementById('btn-formula-filter');
+  if(!badge)return;
+  if(n>0){
+    badge.style.display='inline';badge.textContent=n;
+    if(btn)btn.style.background='rgba(201,168,76,.15)';
+  } else {
+    badge.style.display='none';
+    if(btn)btn.style.background='';
+  }
+}
+
+function limpiarFiltroFormula(){
+  S.stockFiltroFormulas=[];
+  _actualizarBadgeFormula();
+  _renderFormulaDropdownBody();
+  renderStock();
+}
+
+function exportarStockFormula(){
+  const pts=S.stockFiltroFormulas;
+  const insumosSet=pts.length>0?_getInsumosDeFormulas(pts):null;
+  let data=getStockArr();
+  if(insumosSet)data=data.filter(s=>insumosSet.has(s.codigo));
+  const wb=XLSX.utils.book_new();
+  // hoja principal
+  const rows=[['Código','Insumo','Stock actual','UM','Nivel']];
+  data.forEach(s=>{
+    const pct=s.stock>0?Math.min(100,(s.stock/Math.max(...data.map(x=>x.stock))||1)*100):0;
+    const nivel=s.stock<=0?'Sin stock':pct<10?'Crítico':pct<40?'Bajo':'OK';
+    rows.push([s.codigo,s.nombre,s.stock,s.um||'kg',nivel]);
+  });
+  if(pts.length>0){
+    // columnas de necesidad por PT seleccionado
+    const ptInfo=pts.map(c=>({cod:c,bom:BOM_COMPLETO[c]})).filter(x=>x.bom);
+    rows[0].push(...ptInfo.map(x=>`Qty/lote (${x.bom.codigo_prod})`));
+    data.forEach((s,i)=>{
+      ptInfo.forEach(({cod,bom})=>{
+        const ins=bom.insumos?.find(x=>x.codigo===s.codigo);
+        rows[i+1].push(ins?ins.cantidad:'—');
+      });
+    });
+  }
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=rows[0].map((_,i)=>({wch:i===1?40:i===0?12:14}));
+  XLSX.utils.book_append_sheet(wb,ws,'Stock');
+  // hoja por cada PT seleccionado
+  pts.forEach(ptCod=>{
+    const bom=BOM_COMPLETO[ptCod];if(!bom)return;
+    const h=[['Código','Insumo','Qty/lote','UM','Stock actual','Stock (lotes cubiertos)']];
+    (bom.insumos||[]).forEach(ins=>{
+      const st=getStockArr().find(x=>x.codigo===ins.codigo);
+      const stockAct=st?st.stock:0;
+      const lotesCub=ins.cantidad>0?(stockAct/ins.cantidad).toFixed(1):'—';
+      h.push([ins.codigo,ins.nombre,ins.cantidad,ins.um,stockAct,lotesCub]);
+    });
+    const wsP=XLSX.utils.aoa_to_sheet(h);
+    wsP['!cols']=[{wch:12},{wch:40},{wch:12},{wch:8},{wch:14},{wch:20}];
+    XLSX.utils.book_append_sheet(wb,wsP,bom.codigo_prod.slice(0,31));
+  });
+  const label=pts.length>0?('_'+pts.map(c=>BOM_COMPLETO[c]?.codigo_prod||c).join('-').slice(0,40)):'_todos';
+  XLSX.writeFile(wb,`stock_formula${label}.xlsx`);
+  document.getElementById('formula-dropdown').style.display='none';
+  toast('Excel descargado ↓','✓',3000);
+}
+
+// Cerrar dropdown al click afuera
+document.addEventListener('click',e=>{
+  const wrap=document.getElementById('formula-filter-wrap');
+  if(wrap&&!wrap.contains(e.target)){
+    const dd=document.getElementById('formula-dropdown');
+    if(dd)dd.style.display='none';
+  }
+});
+
 function renderStock(){
   const q=document.getElementById('s-stock').value.toLowerCase();
   const fs=document.getElementById('f-stock').value;
+  // filtro fórmula
+  const insumosFormula=S.stockFiltroFormulas.length>0?_getInsumosDeFormulas(S.stockFiltroFormulas):null;
   let data=getStockArr().map(s=>({...s, _venc: proximaVenc(s)})).filter(s=>{
+    if(insumosFormula&&!insumosFormula.has(s.codigo)) return false;
     if(q&&!s.codigo.toLowerCase().includes(q)&&!s.nombre.toLowerCase().includes(q)) return false;
     if(fs==='ok'&&s.stock<=0) return false;
     if(fs==='zero'&&s.stock>0) return false;
