@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260506-070';
+  var VER = '20260508-071';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -738,7 +738,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
       📦 Stock real actualizado · DFC calculado desde stock real · Corré el MRP para ver proyección con déficits exactos
     </div>
     <!-- Tabla DFC — thead dinámico generado por renderProyeccion() -->
-    <div class="tbl-wrap"><table>
+    <div class="tbl-wrap" style="overflow-x:auto"><table style="min-width:1100px">
       <thead id="proyeccion-thead"><tr>
         <th class="tc" style="min-width:90px">Estado</th>
         <th onclick="sortMRP('codigo')">Código ↕</th>
