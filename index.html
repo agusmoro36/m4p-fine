@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260508-071';
+  var VER = '20260508-072';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3462,8 +3462,16 @@ function _loadComprasSnap(incomingTs) {
     if(!raw) return;
     const snap = JSON.parse(raw);
     if(!snap?.compras || !snap.ts) return;
-    if(snap.ts <= (incomingTs || 0)) return; // estado entrante es igual o más nuevo — no pisar
-    // Snapshot más nuevo → restaurar edición del usuario
+
+    // ── PASO 1: Siempre mergear OCs con _uid del snapshot — nunca perder OCs
+    //    creadas en este dispositivo, sin importar qué estado gana por timestamp.
+    snap.compras.filter(c => c._uid).forEach(oc => {
+      if(!S.compras.find(c => c._uid === oc._uid)) S.compras.push(oc);
+    });
+
+    // ── PASO 2: Si el snapshot es más nuevo que el estado entrante, también
+    //    restaurar el resto de los datos del snapshot (estados, observaciones, etc.)
+    if(snap.ts <= (incomingTs || 0)) return; // estado entrante igual o más nuevo — no pisar el resto
     S.compras = snap.compras;
     // Re-mergear seeds por si hubo cambios de versión
     _SEED_COMPRAS.forEach(sc => {
@@ -3475,7 +3483,7 @@ function _loadComprasSnap(incomingTs) {
       );
       if(existing) {
         if(!existing._sid) existing._sid = sc._sid;
-        if(!existing.nro && sc.nro) existing.nro = sc.nro; // propagar nro desde seed si falta
+        if(!existing.nro && sc.nro) existing.nro = sc.nro;
       }
       else S.compras.push({...sc});
     });
@@ -8820,7 +8828,12 @@ document.addEventListener('visibilitychange', () => {
 // pagehide en lugar de beforeunload: evita guardar estado obsoleto cuando
 // Safari/iOS manda la página a bfcache (standalone mode). Solo guarda cuando
 // la página se destruye realmente (e.persisted === false).
-window.addEventListener('pagehide', (e) => { if(!e.persisted) saveState(); });
+window.addEventListener('pagehide', (e) => {
+  // Siempre guardar el snap de compras en localStorage antes de cerrar,
+  // así _loadComprasSnap puede recuperar OCs aunque Supabase esté desactualizado.
+  _saveComprasSnap();
+  if(!e.persisted) saveState();
+});
 
 // Safari bfcache: cuando el usuario vuelve con el botón "atrás" o restaura la pestaña,
 // el JS está "congelado" con datos viejos. Forzamos recarga desde Supabase para que
