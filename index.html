@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260512-076';
+  var VER = '20260512-077';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3198,41 +3198,6 @@ async function sbSave(payload, retries=3) {
 // Clave separada para adjuntos PDF (no mezclar con el estado principal)
 const SB_ADJ_KEY = 'mrp_fine_adjuntos_v8';
 
-// ── OCs creadas por el usuario: clave Supabase dedicada, solo se mergea, nunca se pisa ──
-// Garantiza que una OC nueva sobreviva aunque el estado principal sea sobreescrito
-// por otro dispositivo o sesión.
-const SB_OCS_KEY = 'mrp_fine_ocs_created_v8';
-
-async function sbSaveNuevaOC(oc) {
-  if(!SB_CLIENT) return;
-  try {
-    // Leer lista actual
-    const { data } = await SB_CLIENT.from(SB_TABLE).select('value').eq('key', SB_OCS_KEY).single();
-    const lista = data?.value?.ocs || [];
-    // Agregar si no existe por _uid
-    if(!lista.find(x => x._uid === oc._uid)) {
-      const {adjunto:_a, adjuntosExtra:_b, ...ocSinAdj} = oc; // sin base64
-      lista.push(ocSinAdj);
-      await SB_CLIENT.from(SB_TABLE).upsert({ key: SB_OCS_KEY, value: { ocs: lista } });
-    }
-  } catch(e) { console.warn('sbSaveNuevaOC:', e); }
-}
-
-async function sbMergeOCsCreadas() {
-  if(!SB_CLIENT) return 0;
-  try {
-    const { data } = await SB_CLIENT.from(SB_TABLE).select('value').eq('key', SB_OCS_KEY).single();
-    const lista = data?.value?.ocs || [];
-    let merged = 0;
-    lista.forEach(oc => {
-      if(!S.compras.find(c => c._uid === oc._uid)) {
-        S.compras.push(oc);
-        merged++;
-      }
-    });
-    return merged;
-  } catch(e) { return 0; }
-}
 
 async function sbSaveAdjuntos(adjuntosMap, retries=3) {
   if(!SB_CLIENT || !Object.keys(adjuntosMap).length) return true;
@@ -4088,9 +4053,6 @@ async function loadFromSupabase() {
   if(typeof _autoMergePrecios === 'function') _autoMergePrecios(); // llena precios faltantes desde OCs/seed
   // Mergear OCs creadas por el usuario desde clave Supabase dedicada —
   // garantiza que ninguna OC se pierda aunque el estado principal haya sido pisado.
-  sbMergeOCsCreadas().then(n => {
-    if(n > 0) { saveState(); if(document.querySelector('.page.active')?.id==='page-compras') renderCompras && renderCompras(); }
-  });
   // applyState() ya mergeó OCs locales (_uid), movimientos y producciones.
   // CRÍTICO: guardar en localStorage los valores POST-MERGE, no data.value directo.
   // Así cada campo tiene el union de local + remoto, sin pérdidas.
@@ -7018,8 +6980,6 @@ function addCompra(){
     closeM('m-compra');
     renderCompras();
     saveState();
-    // Guardar en clave Supabase dedicada — sobrevive aunque el estado principal sea pisado
-    sbSaveNuevaOC(nuevaOCObj);
     toast('OC agregada','✓');
   }
 }
