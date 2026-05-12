@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260512-092';
+  var VER = '20260512-093';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3863,6 +3863,7 @@ function applyState(st) {
       // pero el baseline hardcodeado las tiene, restauramos la distribución
       // correcta ajustando el depósito por la diferencia de stock total.
       const newSeedIsNewer = STOCK_SEED_VERSION > (st.stockSeedVersion || '0');
+      if(newSeedIsNewer) window._stockSeedWasUpdated = true;
       Object.entries(st.stock).forEach(([k, v]) => {
         const base = D.stock[k];
         const lotesExistentes = base?.lotes;
@@ -4089,8 +4090,15 @@ async function loadFromSupabase() {
 
   // Siempre aplicar Supabase cuando sbTs >= lsTs (incluye el caso sbTs === lsTs).
   // El estado de Supabase NO tiene base64 (saveState siempre lo stripea).
+  window._stockSeedWasUpdated = false;
   applyState(data.value);
   if(typeof _autoMergePrecios === 'function') _autoMergePrecios(); // llena precios faltantes desde OCs/seed
+  // Si el seed de stock es más nuevo que lo que tenía Supabase → guardar inmediatamente en la nube
+  // para que futuros accesos ya carguen los valores correctos sin conflictos.
+  if(window._stockSeedWasUpdated) {
+    console.log('Stock seed actualizado → sincronizando a Supabase...');
+    setTimeout(() => saveState(), 1500);
+  }
   // Mergear OCs creadas por el usuario desde clave Supabase dedicada —
   // garantiza que ninguna OC se pierda aunque el estado principal haya sido pisado.
   // applyState() ya mergeó OCs locales (_uid), movimientos y producciones.
