@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260512-082';
+  var VER = '20260512-083';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -9633,7 +9633,7 @@ function imprimirOP() {
     .doc-title{text-align:right}.doc-title h1{font-size:18px;font-weight:700;margin-bottom:4px}
     .doc-title p{font-size:12px;color:#666}
     .section{margin-bottom:24px}
-    .section-title{font-size:13px;font-weight:700;letter-spacing:.5px;color:#8B6914;text-transform:uppercase;border-bottom:1px solid #e8d99a;padding-bottom:5px;margin-bottom:12px}
+    .section-title{font-size:13px;font-weight:700;letter-spacing:.5px;color:#fff;text-transform:uppercase;background:#8B6914;padding:6px 10px;margin-bottom:12px;border-radius:3px}
     table{width:100%;border-collapse:collapse;font-size:11px}
     thead tr{background:#8B6914;color:#fff}
     th{padding:7px 9px;text-align:left;font-weight:600}
@@ -9651,8 +9651,9 @@ function imprimirOP() {
     .kpis{display:flex;gap:14px;margin-bottom:20px}
     .kpi{flex:1;border:1px solid #e8d99a;border-radius:6px;padding:12px 16px;text-align:center}
     .kpi-n{font-size:28px;font-weight:700;line-height:1}
-    .kpi-l{font-size:11px;color:#666;margin-top:4px}
+    .kpi-l{font-size:12px;font-weight:600;color:#333;margin-top:6px}
     .kpi.ok .kpi-n{color:#1e7e34}.kpi.warn .kpi-n{color:#856404}.kpi.bad .kpi-n{color:#b22222}
+    .kpi.ok{border-color:#1e7e34}.kpi.warn{border-color:#856404}.kpi.bad{border-color:#b22222}
     .doc-footer{margin-top:28px;padding-top:10px;border-top:1px solid #e8d99a;font-size:10px;color:#999;display:flex;justify-content:space-between}
     .th-sala{background:#7a5c0e!important}`;
 
