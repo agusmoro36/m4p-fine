@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260512-077';
+  var VER = '20260512-078';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -1204,58 +1204,83 @@ body.viewer-mode .page-filters select { pointer-events:auto }
 
   <!-- ══ PLANIFICADOR INTELIGENTE ══ -->
   <div class="page" id="page-planificador">
-    <div class="sh">
-      <div class="sh-title">✦ Planificador Inteligente — ¿Qué podés producir hoy?</div>
-      <div class="sh-actions">
-        <select class="fsel" id="plan-filtro-tipo" onchange="renderPlanificador()">
-          <option value="">Todas las marcas</option>
-        </select>
-        <select class="fsel" id="plan-modo" onchange="renderPlanificador()">
-          <option value="maximo">Máximo posible</option>
-          <option value="lote">Por lote mínimo</option>
-        </select>
-        <button class="btn btn-p" onclick="renderPlanificador()">⟳ Actualizar</button>
-        <button class="btn btn-b btn-sm" onclick="exportarPlanificador()">↓ Exportar</button>
-      </div>
+    <!-- Tabs -->
+    <div class="tabs" id="planificador-tabs" style="margin-bottom:16px">
+      <div class="tab active" onclick="planTabSwitch('ia',this)">✦ Planificador IA</div>
+      <div class="tab" onclick="planTabSwitch('op',this)">📋 Orden de Producción Semanal</div>
     </div>
 
-    <!-- KPIs rápidos -->
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" id="plan-kpis"></div>
-
-    <!-- Resultados principales -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
-      <div>
-        <div class="sh"><div class="sh-title" style="color:var(--gold2)">✓ Podés producir ahora</div></div>
-        <div id="plan-puede" style="display:flex;flex-direction:column;gap:8px"></div>
-      </div>
-      <div>
-        <div class="sh"><div class="sh-title" style="color:var(--red)">✗ Faltan insumos</div></div>
-        <div id="plan-nopuede" style="display:flex;flex-direction:column;gap:8px"></div>
-      </div>
-    </div>
-
-    <!-- Detalle del producto seleccionado -->
-    <div id="plan-detalle" style="display:none">
+    <!-- ── Sección IA (existente) ── -->
+    <div id="plan-ia-section">
       <div class="sh">
-        <div class="sh-title" id="plan-detalle-titulo">Detalle de insumos</div>
-        <div class="sh-actions" id="plan-detalle-actions"></div>
+        <div class="sh-title">✦ Planificador Inteligente — ¿Qué podés producir hoy?</div>
+        <div class="sh-actions">
+          <select class="fsel" id="plan-filtro-tipo" onchange="renderPlanificador()">
+            <option value="">Todas las marcas</option>
+          </select>
+          <select class="fsel" id="plan-modo" onchange="renderPlanificador()">
+            <option value="maximo">Máximo posible</option>
+            <option value="lote">Por lote mínimo</option>
+          </select>
+          <button class="btn btn-p" onclick="renderPlanificador()">⟳ Actualizar</button>
+          <button class="btn btn-b btn-sm" onclick="exportarPlanificador()">↓ Exportar</button>
+        </div>
       </div>
-      <div id="plan-detalle-resumen"></div>
-      <div id="plan-target-wrap"></div>
-      <div class="tbl-wrap">
-        <table>
-          <thead><tr>
-            <th>Insumo</th><th>Descripción</th>
-            <th class="tr">Cant/Lote</th>
-            <th class="tr">Nec. Total</th>
-            <th class="tr">Stock Actual</th>
-            <th class="tr">Falta</th>
-            <th class="tr">Un. posibles / objetivo</th>
-            <th>Estado</th><th>Acción</th>
-          </tr></thead>
-          <tbody id="plan-detalle-tbody"></tbody>
-        </table>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" id="plan-kpis"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+        <div>
+          <div class="sh"><div class="sh-title" style="color:var(--gold2)">✓ Podés producir ahora</div></div>
+          <div id="plan-puede" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+        <div>
+          <div class="sh"><div class="sh-title" style="color:var(--red)">✗ Faltan insumos</div></div>
+          <div id="plan-nopuede" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
       </div>
+      <div id="plan-detalle" style="display:none">
+        <div class="sh">
+          <div class="sh-title" id="plan-detalle-titulo">Detalle de insumos</div>
+          <div class="sh-actions" id="plan-detalle-actions"></div>
+        </div>
+        <div id="plan-detalle-resumen"></div>
+        <div id="plan-target-wrap"></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Insumo</th><th>Descripción</th>
+              <th class="tr">Cant/Lote</th><th class="tr">Nec. Total</th>
+              <th class="tr">Stock Actual</th><th class="tr">Falta</th>
+              <th class="tr">Un. posibles / objetivo</th>
+              <th>Estado</th><th>Acción</th>
+            </tr></thead>
+            <tbody id="plan-detalle-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Sección Orden de Producción Semanal (nueva) ── -->
+    <div id="plan-op-section" style="display:none">
+      <div class="sh">
+        <div class="sh-title">📋 Orden de Producción Semanal — Pedido a Sala de Pesado</div>
+        <div class="sh-actions">
+          <input type="week" id="op-semana" class="fsel"
+            style="font-family:var(--mono);font-size:12px;min-width:160px"
+            title="Semana de producción">
+          <button class="btn btn-p" onclick="calcularOP()">⊞ Calcular pedido</button>
+          <button class="btn" id="btn-imprimir-op" style="display:none;border-color:var(--gold);color:var(--gold)" onclick="imprimirOP()">🖨 Generar PDF</button>
+          <button class="btn btn-sm" onclick="limpiarOP()" style="opacity:.6" title="Limpiar cantidades">✕ Limpiar</button>
+        </div>
+      </div>
+
+      <!-- Ingreso de cantidades por producto -->
+      <div style="margin-bottom:8px;font-size:11px;color:var(--text3);font-family:var(--mono)">
+        Ingresá los kg a producir por producto. Solo se incluyen los insumos pesados (kg).
+      </div>
+      <div id="op-productos-wrap"></div>
+
+      <!-- Resultados -->
+      <div id="op-resultados" style="display:none;margin-top:24px"></div>
     </div>
   </div>
 
@@ -9361,6 +9386,391 @@ function analizarProducto(cod){
   const maxUnidades=maxLotes*loteMin;  // convertir lotes → unidades
   const pct=bom.insumos.length>0?Math.round((conStock/bom.insumos.length)*100):0;
   return {codigo:cod,nombre:bom.nombre,cliente:bom.cliente||'FINE',loteMin,max:maxUnidades,maxLotes,limitante:lim,insumos:detalles,conStock,sinStock,total:bom.insumos.length,pctOk:pct};
+}
+
+// ══════════════════════════════════════════════════════════════
+// ORDEN DE PRODUCCIÓN SEMANAL
+// ══════════════════════════════════════════════════════════════
+let _opQty = {}; // {ptCod: kg}
+
+function planTabSwitch(id, el) {
+  document.querySelectorAll('#planificador-tabs .tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  const isIA = id === 'ia';
+  document.getElementById('plan-ia-section').style.display = isIA ? '' : 'none';
+  document.getElementById('plan-op-section').style.display = isIA ? 'none' : '';
+  if(!isIA) _renderOPTabla();
+}
+
+function _renderOPTabla() {
+  // Agrupar PTs por cliente, solo los que tienen insumos en kg
+  const grupos = {};
+  Object.entries(BOM_COMPLETO).forEach(([cod, b]) => {
+    const hasKg = (b.insumos||[]).some(i => (i.um||'').toLowerCase() === 'kg');
+    if(!hasKg) return;
+    const cli = b.cliente || 'Otros';
+    if(!grupos[cli]) grupos[cli] = [];
+    grupos[cli].push({cod, b});
+  });
+
+  const clientes = Object.keys(grupos).sort((a,b) => a.localeCompare(b));
+  let html = `<div class="tbl-wrap"><table style="min-width:600px">
+    <thead><tr>
+      <th style="width:110px">Código PT</th>
+      <th>Producto</th>
+      <th style="width:90px;text-align:center">Cliente</th>
+      <th class="tr" style="width:100px">Lote mín (kg)</th>
+      <th class="tr" style="width:130px">Cantidad a producir (kg)</th>
+    </tr></thead><tbody>`;
+
+  clientes.forEach(cli => {
+    html += `<tr><td colspan="5" style="background:var(--bg2);padding:6px 12px;font-size:11px;font-family:var(--mono);color:var(--gold2);letter-spacing:.5px;font-weight:600">${cli}</td></tr>`;
+    grupos[cli].sort((a,b) => a.b.nombre.localeCompare(b.b.nombre)).forEach(({cod, b}) => {
+      const qty = _opQty[cod] != null ? _opQty[cod] : '';
+      html += `<tr>
+        <td><span class="pill" style="font-size:10px;font-family:var(--mono)">${cod}</span></td>
+        <td style="font-size:13px">${b.nombre}</td>
+        <td style="text-align:center;font-size:11px;color:var(--text3)">${cli}</td>
+        <td class="tr" style="font-family:var(--mono);font-size:12px;color:var(--text3)">${fmt(b.lote_min,0)}</td>
+        <td class="tr"><input type="number" min="0" step="0.1"
+          data-pt="${cod}"
+          style="width:100px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-family:var(--mono);font-size:13px;color:var(--gold);text-align:right;outline:none;transition:border .2s"
+          onfocus="this.style.borderColor='var(--gold)'"
+          onblur="this.style.borderColor='var(--border)'"
+          oninput="_opQty['${cod}']=parseFloat(this.value)||0"
+          value="${qty}"
+          placeholder="—"></td>
+      </tr>`;
+    });
+  });
+
+  html += `</tbody></table></div>`;
+  document.getElementById('op-productos-wrap').innerHTML = html;
+}
+
+function calcularOP() {
+  const req = {}; // {cod: {nombre, necesario, pesado, sala1, sala2, deposito}}
+
+  Object.entries(_opQty).forEach(([ptCod, qty_kg]) => {
+    if(!qty_kg || qty_kg <= 0) return;
+    const bom = BOM_COMPLETO[ptCod];
+    if(!bom || !bom.lote_min) return;
+    const factor = qty_kg / bom.lote_min;
+
+    (bom.insumos || []).forEach(ins => {
+      if((ins.um||'').toLowerCase() !== 'kg') return;
+      if(!req[ins.codigo]) {
+        const st = D.stock[ins.codigo] || {};
+        const ub = st.ubicaciones || {};
+        req[ins.codigo] = {
+          nombre: ins.nombre || st.nombre || ins.codigo,
+          necesario: 0,
+          sala1: ub.sala1 || 0,
+          sala2: ub.sala2 || 0,
+          deposito: ub.deposito || 0,
+        };
+        req[ins.codigo].pesado = req[ins.codigo].sala1 + req[ins.codigo].sala2;
+      }
+      req[ins.codigo].necesario += ins.cantidad * factor;
+    });
+  });
+
+  const rows = Object.entries(req).map(([cod, r]) => {
+    r.cod = cod;
+    r.pedido = Math.max(0, r.necesario - r.pesado);
+    r.faltante = Math.max(0, r.pedido - r.deposito);
+    return r;
+  }).filter(r => r.necesario > 0.0001);
+
+  if(!rows.length) {
+    toast('Ingresá al menos una cantidad para calcular.','⚠',3000);
+    return;
+  }
+
+  // Ordenar: faltantes primero, luego los que hay que pedir, luego ok
+  rows.sort((a,b) => {
+    const pa = a.faltante > 0 ? 0 : a.pedido > 0 ? 1 : 2;
+    const pb = b.faltante > 0 ? 0 : b.pedido > 0 ? 1 : 2;
+    if(pa !== pb) return pa - pb;
+    return a.nombre.localeCompare(b.nombre);
+  });
+
+  window._opRows = rows;
+  window._opFecha = document.getElementById('op-semana')?.value || '';
+
+  _renderOPResultados(rows);
+  document.getElementById('btn-imprimir-op').style.display = '';
+}
+
+function _renderOPResultados(rows) {
+  const falt = rows.filter(r => r.faltante > 0).length;
+  const pedir = rows.filter(r => r.pedido > 0 && r.faltante <= 0).length;
+  const ok = rows.filter(r => r.pedido <= 0).length;
+
+  // Formatear semana
+  let semLabel = '';
+  const sw = window._opFecha;
+  if(sw) {
+    const [yr, wk] = sw.split('-W');
+    semLabel = `Semana ${wk} / ${yr}`;
+  }
+
+  let html = `
+    <div class="sh"><div class="sh-title" style="color:var(--gold2)">Resultado — ${semLabel||'Semana sin especificar'}</div></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
+      <div class="kpi-card" style="border-color:var(--green)">
+        <div class="kpi-val" style="color:var(--green)">${ok}</div>
+        <div class="kpi-lab">Insumos con stock en pesado</div>
+      </div>
+      <div class="kpi-card" style="border-color:var(--gold)">
+        <div class="kpi-val" style="color:var(--gold)">${pedir}</div>
+        <div class="kpi-lab">A pedir a depósito</div>
+      </div>
+      <div class="kpi-card" style="border-color:var(--red)">
+        <div class="kpi-val" style="color:var(--red)">${falt}</div>
+        <div class="kpi-lab">Sin stock suficiente en sistema</div>
+      </div>
+    </div>
+    <div class="tbl-wrap" style="overflow-x:auto">
+    <table style="min-width:820px">
+      <thead><tr>
+        <th style="width:100px">Código</th>
+        <th>Insumo</th>
+        <th class="tr" style="width:110px">Necesario (kg)</th>
+        <th class="tr" style="width:120px">Stock Pesado (kg)</th>
+        <th class="tr" style="width:130px">Pedir a Depósito (kg)</th>
+        <th class="tr" style="width:120px">Hay en Depósito (kg)</th>
+        <th class="tr" style="width:110px">Faltante Total</th>
+        <th style="width:80px">Estado</th>
+      </tr></thead><tbody>`;
+
+  rows.forEach(r => {
+    const isFalt = r.faltante > 0.001;
+    const isPedir = r.pedido > 0.001 && !isFalt;
+    const isOk = !isFalt && !isPedir;
+    const rowBg = isFalt ? 'background:rgba(220,50,50,.06)' : isPedir ? 'background:rgba(212,175,55,.04)' : '';
+    const estado = isFalt
+      ? `<span style="color:var(--red);font-weight:700;font-size:11px">⚠ FALTA</span>`
+      : isPedir
+      ? `<span style="color:var(--gold);font-weight:600;font-size:11px">↑ PEDIR</span>`
+      : `<span style="color:var(--green);font-size:11px">✓ OK</span>`;
+    html += `<tr style="${rowBg}">
+      <td><span class="pill" style="font-size:10px;font-family:var(--mono)">${r.cod}</span></td>
+      <td style="font-size:13px">${r.nombre}</td>
+      <td class="tr" style="font-family:var(--mono);font-size:12px">${fmt(r.necesario,3)}</td>
+      <td class="tr" style="font-family:var(--mono);font-size:12px">${fmt(r.pesado,3)}</td>
+      <td class="tr" style="font-family:var(--mono);font-size:12px;font-weight:${isPedir||isFalt?700:400};color:${isPedir?'var(--gold)':isFalt?'var(--red)':'inherit'}">${r.pedido>0.001?fmt(r.pedido,3):'—'}</td>
+      <td class="tr" style="font-family:var(--mono);font-size:12px">${fmt(r.deposito,3)}</td>
+      <td class="tr" style="font-family:var(--mono);font-size:12px;font-weight:${isFalt?700:400};color:${isFalt?'var(--red)':'inherit'}">${r.faltante>0.001?fmt(r.faltante,3):'—'}</td>
+      <td style="text-align:center">${estado}</td>
+    </tr>`;
+  });
+
+  html += `</tbody></table></div>`;
+  const wrap = document.getElementById('op-resultados');
+  wrap.style.display = '';
+  wrap.innerHTML = html;
+  wrap.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function limpiarOP() {
+  _opQty = {};
+  _renderOPTabla();
+  document.getElementById('op-resultados').style.display = 'none';
+  document.getElementById('btn-imprimir-op').style.display = 'none';
+}
+
+function imprimirOP() {
+  const rows = window._opRows || [];
+  if(!rows.length) return;
+
+  const sw = window._opFecha || '';
+  let semLabel = '';
+  if(sw) {
+    const [yr, wk] = sw.split('-W');
+    semLabel = `Semana ${wk} / ${yr}`;
+  }
+
+  // Productos planificados
+  const prodRows = Object.entries(_opQty)
+    .filter(([,v]) => v > 0)
+    .map(([cod, kg]) => ({cod, nombre: BOM_COMPLETO[cod]?.nombre||cod, cliente: BOM_COMPLETO[cod]?.cliente||'', kg}))
+    .sort((a,b) => a.cliente.localeCompare(b.cliente)||a.nombre.localeCompare(b.nombre));
+
+  const faltantes = rows.filter(r => r.faltante > 0.001);
+  const pedido = rows.filter(r => r.pedido > 0.001 && r.faltante <= 0.001);
+  const enStock = rows.filter(r => r.pedido <= 0.001);
+
+  const today = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+
+  const printHtml = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Orden de Producción Semanal${semLabel?' — '+semLabel:''}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Arial',sans-serif;color:#1a1a1a;background:#fff;padding:20mm 18mm;font-size:11px}
+  /* HEADER */
+  .doc-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #8B6914;padding-bottom:12px;margin-bottom:18px}
+  .doc-logo{font-size:22px;font-weight:700;letter-spacing:1px;color:#8B6914}
+  .doc-logo span{font-size:11px;font-weight:400;color:#666;display:block;letter-spacing:.3px}
+  .doc-title{text-align:right}
+  .doc-title h1{font-size:17px;font-weight:700;color:#1a1a1a;margin-bottom:3px}
+  .doc-title p{font-size:11px;color:#666}
+  /* SECCIÓN */
+  .section{margin-bottom:20px}
+  .section-title{font-size:12px;font-weight:700;letter-spacing:.5px;color:#8B6914;text-transform:uppercase;border-bottom:1px solid #e8d99a;padding-bottom:4px;margin-bottom:10px}
+  /* TABLA */
+  table{width:100%;border-collapse:collapse;font-size:10.5px}
+  thead tr{background:#8B6914;color:#fff}
+  th{padding:6px 8px;text-align:left;font-weight:600;letter-spacing:.3px}
+  th.tr{text-align:right}
+  td{padding:5px 8px;border-bottom:1px solid #f0e8d0;vertical-align:middle}
+  td.tr{text-align:right;font-family:'Courier New',monospace;font-size:10px}
+  tr:nth-child(even){background:#fdfaf3}
+  tr.warn{background:#fff8e6}
+  tr.bad{background:#fff0f0}
+  .badge{display:inline-block;padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:.3px}
+  .badge-ok{background:#e6f4ea;color:#1e7e34}
+  .badge-warn{background:#fff3cd;color:#856404}
+  .badge-bad{background:#fde8e8;color:#b22222}
+  .pill{background:#f5ede0;color:#8B6914;border-radius:3px;padding:1px 5px;font-size:9px;font-family:'Courier New',monospace}
+  /* KPIs */
+  .kpis{display:flex;gap:12px;margin-bottom:16px}
+  .kpi{flex:1;border:1px solid #e8d99a;border-radius:6px;padding:10px 14px;text-align:center}
+  .kpi-n{font-size:26px;font-weight:700;line-height:1}
+  .kpi-l{font-size:10px;color:#666;margin-top:3px}
+  .kpi.ok .kpi-n{color:#1e7e34}
+  .kpi.warn .kpi-n{color:#856404}
+  .kpi.bad .kpi-n{color:#b22222}
+  /* footer */
+  .doc-footer{margin-top:24px;padding-top:10px;border-top:1px solid #e8d99a;font-size:9px;color:#999;display:flex;justify-content:space-between}
+  @media print{body{padding:12mm 14mm}@page{margin:0}}
+</style>
+</head>
+<body>
+<div class="doc-header">
+  <div class="doc-logo">MRP FINE COMPANY<span>Sistema de Gestión de Producción</span></div>
+  <div class="doc-title">
+    <h1>Orden de Producción Semanal</h1>
+    <p>${semLabel||'Semana sin especificar'} &nbsp;·&nbsp; Generado el ${today}</p>
+  </div>
+</div>
+
+<!-- KPIs -->
+<div class="kpis">
+  <div class="kpi ok"><div class="kpi-n">${enStock.length}</div><div class="kpi-l">Con stock en pesado</div></div>
+  <div class="kpi warn"><div class="kpi-n">${pedido.length}</div><div class="kpi-l">A pedir a depósito</div></div>
+  <div class="kpi bad"><div class="kpi-n">${faltantes.length}</div><div class="kpi-l">Sin stock suficiente</div></div>
+</div>
+
+<!-- Producción planificada -->
+<div class="section">
+  <div class="section-title">Producción Planificada</div>
+  <table>
+    <thead><tr>
+      <th style="width:110px">Código PT</th>
+      <th>Producto</th>
+      <th style="width:80px">Cliente</th>
+      <th class="tr" style="width:120px">Cantidad (kg)</th>
+    </tr></thead>
+    <tbody>
+      ${prodRows.map(p=>`<tr>
+        <td><span class="pill">${p.cod}</span></td>
+        <td>${p.nombre}</td>
+        <td style="color:#666">${p.cliente}</td>
+        <td class="tr"><strong>${fmt2(p.kg,1)}</strong></td>
+      </tr>`).join('')}
+    </tbody>
+  </table>
+</div>
+
+${pedido.length||faltantes.length ? `
+<!-- Pedido a Depósito -->
+<div class="section">
+  <div class="section-title">Pedido a Depósito — Insumos a Retirar</div>
+  <table>
+    <thead><tr>
+      <th style="width:100px">Código</th>
+      <th>Insumo</th>
+      <th class="tr" style="width:110px">Necesario (kg)</th>
+      <th class="tr" style="width:110px">Stock Pesado (kg)</th>
+      <th class="tr" style="width:120px">A retirar de Depósito (kg)</th>
+      <th class="tr" style="width:110px">Hay en Depósito (kg)</th>
+      <th style="width:80px;text-align:center">Estado</th>
+    </tr></thead>
+    <tbody>
+      ${[...faltantes,...pedido].map(r=>{
+        const cls = r.faltante>0.001?'bad':'warn';
+        const badge = r.faltante>0.001?'badge-bad':'badge-warn';
+        const lbl = r.faltante>0.001?'FALTA':'PEDIR';
+        return `<tr class="${cls}">
+          <td><span class="pill">${r.cod}</span></td>
+          <td>${r.nombre}</td>
+          <td class="tr">${fmt2(r.necesario,3)}</td>
+          <td class="tr">${fmt2(r.pesado,3)}</td>
+          <td class="tr"><strong>${fmt2(r.pedido,3)}</strong></td>
+          <td class="tr">${fmt2(r.deposito,3)}</td>
+          <td style="text-align:center"><span class="badge ${badge}">${lbl}</span></td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>
+</div>` : ''}
+
+<!-- Todos los insumos -->
+<div class="section">
+  <div class="section-title">Detalle Completo de Insumos</div>
+  <table>
+    <thead><tr>
+      <th style="width:100px">Código</th>
+      <th>Insumo</th>
+      <th class="tr" style="width:110px">Necesario (kg)</th>
+      <th class="tr" style="width:110px">Stock Pesado (kg)</th>
+      <th class="tr" style="width:120px">Pedir a Depósito (kg)</th>
+      <th class="tr" style="width:110px">Hay en Depósito (kg)</th>
+      <th class="tr" style="width:100px">Faltante Total</th>
+      <th style="width:70px;text-align:center">Estado</th>
+    </tr></thead>
+    <tbody>
+      ${rows.map(r=>{
+        const isFalt=r.faltante>0.001, isPedir=r.pedido>0.001&&!isFalt;
+        const cls=isFalt?'bad':isPedir?'warn':'';
+        const badge=isFalt?'badge-bad':isPedir?'badge-warn':'badge-ok';
+        const lbl=isFalt?'FALTA':isPedir?'PEDIR':'OK';
+        return `<tr class="${cls}">
+          <td><span class="pill">${r.cod}</span></td>
+          <td>${r.nombre}</td>
+          <td class="tr">${fmt2(r.necesario,3)}</td>
+          <td class="tr">${fmt2(r.pesado,3)}</td>
+          <td class="tr">${r.pedido>0.001?'<strong>'+fmt2(r.pedido,3)+'</strong>':'—'}</td>
+          <td class="tr">${fmt2(r.deposito,3)}</td>
+          <td class="tr">${r.faltante>0.001?fmt2(r.faltante,3):'—'}</td>
+          <td style="text-align:center"><span class="badge ${badge}">${lbl}</span></td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>
+</div>
+
+<div class="doc-footer">
+  <span>MRP Fine Company — Documento generado automáticamente</span>
+  <span>${today} &nbsp;·&nbsp; ${semLabel||''}</span>
+</div>
+
+<script>window.onload=function(){window.print();}<\/script>
+</body></html>`;
+
+  const w = window.open('','_blank','width=1000,height=750');
+  w.document.write(printHtml);
+  w.document.close();
+}
+
+// helper para el print (sin dependencia de fmt global)
+function fmt2(n,dec){
+  if(!n && n!==0) return '—';
+  return Number(n).toLocaleString('es-AR',{minimumFractionDigits:dec,maximumFractionDigits:dec});
 }
 
 function renderPlanificador(){
