@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260512-095';
+  var VER = '20260512-096';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -9708,7 +9708,7 @@ function imprimirOP() {
 </div>
 ${pedido.length||faltantes.length?`
 <div class="section">
-  <div class="section-title">Pedido a Depósito — Insumos a Retirar</div>
+  <div class="section-title" style="background:#b22222">⚠ A pedir a Depósito / Faltantes</div>
   <table><thead><tr>
     <th style="width:95px">Código</th><th>Insumo</th><th>Usado en</th>
     <th class="tr" style="width:100px">Necesario (kg)</th>
@@ -9723,7 +9723,7 @@ ${pedido.length||faltantes.length?`
       const badge=r.faltante>0.001?'badge-bad':'badge-warn';
       const lbl=r.faltante>0.001?'FALTA':'PEDIR';
       return`<tr class="${cls}">
-        <td><span class="pill">${r.cod}</span></td><td>${r.nombre}</td>
+        <td><span class="pill">${r.cod}</span></td><td><strong>${r.nombre}</strong></td>
         <td style="font-size:10px;color:#555">${(r.productos||[]).join(', ')}</td>
         <td class="tr">${fmt2(r.necesario,3)}</td>
         <td class="tr">${r.sala1>0.001?fmt2(r.sala1,3):'—'}</td>
@@ -9732,6 +9732,26 @@ ${pedido.length||faltantes.length?`
         <td class="tr">${fmt2(r.deposito,3)}</td>
         <td style="text-align:center"><span class="badge ${badge}">${lbl}</span></td>
       </tr>`;}).join('')}
+  </tbody></table>
+</div>`:''}
+${enStock.length?`
+<div class="section">
+  <div class="section-title" style="background:#1e7e34">✓ Con stock en sala de pesado — No requieren pedido</div>
+  <table><thead><tr>
+    <th style="width:95px">Código</th><th>Insumo</th><th>Usado en</th>
+    <th class="tr" style="width:100px">Necesario (kg)</th>
+    <th class="tr" style="width:90px;background:#7a5c0e">⚖ Sala 1 (kg)</th>
+    <th class="tr" style="width:90px;background:#7a5c0e">⚖ Sala 2 (kg)</th>
+    <th style="width:70px;text-align:center">Estado</th>
+  </tr></thead><tbody>
+    ${enStock.map(r=>`<tr>
+      <td><span class="pill">${r.cod}</span></td><td>${r.nombre}</td>
+      <td style="font-size:10px;color:#555">${(r.productos||[]).join(', ')}</td>
+      <td class="tr">${fmt2(r.necesario,3)}</td>
+      <td class="tr">${r.sala1>0.001?fmt2(r.sala1,3):'—'}</td>
+      <td class="tr">${r.sala2>0.001?fmt2(r.sala2,3):'—'}</td>
+      <td style="text-align:center"><span class="badge badge-ok">OK</span></td>
+    </tr>`).join('')}
   </tbody></table>
 </div>`:''}
 <div class="doc-footer">
