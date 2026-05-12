@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260512-081';
+  var VER = '20260512-082';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -9611,207 +9611,191 @@ function imprimirOP() {
 
   const sw = window._opFecha || '';
   let semLabel = '';
-  if(sw) {
-    const [yr, wk] = sw.split('-W');
-    semLabel = `Semana ${wk} / ${yr}`;
-  }
+  if(sw) { const [yr,wk]=sw.split('-W'); semLabel=`Semana ${wk} / ${yr}`; }
 
-  // Productos planificados
   const prodRows = Object.entries(_opQty)
-    .filter(([,v]) => v > 0)
-    .map(([cod, kg]) => ({cod, nombre: BOM_COMPLETO[cod]?.nombre||cod, cliente: BOM_COMPLETO[cod]?.cliente||'', kg}))
-    .sort((a,b) => a.cliente.localeCompare(b.cliente)||a.nombre.localeCompare(b.nombre));
+    .filter(([,v])=>v>0)
+    .map(([cod,kg])=>({cod,nombre:BOM_COMPLETO[cod]?.nombre||cod,cliente:BOM_COMPLETO[cod]?.cliente||'',kg}))
+    .sort((a,b)=>a.cliente.localeCompare(b.cliente)||a.nombre.localeCompare(b.nombre));
 
-  const faltantes = rows.filter(r => r.faltante > 0.001);
-  const pedido = rows.filter(r => r.pedido > 0.001 && r.faltante <= 0.001);
-  const enStock = rows.filter(r => r.pedido <= 0.001);
-
+  const faltantes = rows.filter(r=>r.faltante>0.001);
+  const pedido    = rows.filter(r=>r.pedido>0.001&&r.faltante<=0.001);
+  const enStock   = rows.filter(r=>r.pedido<=0.001);
   const today = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
 
-  const printHtml = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Orden de Producción Semanal${semLabel?' — '+semLabel:''}</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Arial',sans-serif;color:#1a1a1a;background:#fff;padding:20mm 18mm;font-size:11px}
-  /* HEADER */
-  .doc-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #8B6914;padding-bottom:12px;margin-bottom:18px}
-  .doc-logo{font-size:22px;font-weight:700;letter-spacing:1px;color:#8B6914}
-  .doc-logo span{font-size:11px;font-weight:400;color:#666;display:block;letter-spacing:.3px}
-  .doc-title{text-align:right}
-  .doc-title h1{font-size:17px;font-weight:700;color:#1a1a1a;margin-bottom:3px}
-  .doc-title p{font-size:11px;color:#666}
-  /* SECCIÓN */
-  .section{margin-bottom:20px}
-  .section-title{font-size:12px;font-weight:700;letter-spacing:.5px;color:#8B6914;text-transform:uppercase;border-bottom:1px solid #e8d99a;padding-bottom:4px;margin-bottom:10px}
-  /* TABLA */
-  table{width:100%;border-collapse:collapse;font-size:10.5px}
-  thead tr{background:#8B6914;color:#fff}
-  th{padding:6px 8px;text-align:left;font-weight:600;letter-spacing:.3px}
-  th.tr{text-align:right}
-  td{padding:5px 8px;border-bottom:1px solid #f0e8d0;vertical-align:middle}
-  td.tr{text-align:right;font-family:'Courier New',monospace;font-size:10px}
-  tr:nth-child(even){background:#fdfaf3}
-  tr.warn{background:#fff8e6}
-  tr.bad{background:#fff0f0}
-  .badge{display:inline-block;padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:.3px}
-  .badge-ok{background:#e6f4ea;color:#1e7e34}
-  .badge-warn{background:#fff3cd;color:#856404}
-  .badge-bad{background:#fde8e8;color:#b22222}
-  .pill{background:#f5ede0;color:#8B6914;border-radius:3px;padding:1px 5px;font-size:9px;font-family:'Courier New',monospace}
-  /* KPIs */
-  .kpis{display:flex;gap:12px;margin-bottom:16px}
-  .kpi{flex:1;border:1px solid #e8d99a;border-radius:6px;padding:10px 14px;text-align:center}
-  .kpi-n{font-size:26px;font-weight:700;line-height:1}
-  .kpi-l{font-size:10px;color:#666;margin-top:3px}
-  .kpi.ok .kpi-n{color:#1e7e34}
-  .kpi.warn .kpi-n{color:#856404}
-  .kpi.bad .kpi-n{color:#b22222}
-  /* footer */
-  .doc-footer{margin-top:24px;padding-top:10px;border-top:1px solid #e8d99a;font-size:9px;color:#999;display:flex;justify-content:space-between}
-  @media print{body{padding:12mm 14mm}@page{margin:0}}
-</style>
-</head>
-<body>
+  // ── Construir HTML del contenido ──
+  const css = `
+    *{box-sizing:border-box;margin:0;padding:0}
+    .op-doc{font-family:Arial,sans-serif;color:#1a1a1a;background:#fff;padding:36px 40px;width:1400px;font-size:12px}
+    .doc-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #8B6914;padding-bottom:14px;margin-bottom:20px}
+    .doc-logo{font-size:24px;font-weight:700;letter-spacing:1px;color:#8B6914}
+    .doc-logo span{font-size:12px;font-weight:400;color:#666;display:block}
+    .doc-title{text-align:right}.doc-title h1{font-size:18px;font-weight:700;margin-bottom:4px}
+    .doc-title p{font-size:12px;color:#666}
+    .section{margin-bottom:24px}
+    .section-title{font-size:13px;font-weight:700;letter-spacing:.5px;color:#8B6914;text-transform:uppercase;border-bottom:1px solid #e8d99a;padding-bottom:5px;margin-bottom:12px}
+    table{width:100%;border-collapse:collapse;font-size:11px}
+    thead tr{background:#8B6914;color:#fff}
+    th{padding:7px 9px;text-align:left;font-weight:600}
+    th.tr{text-align:right}
+    td{padding:6px 9px;border-bottom:1px solid #f0e8d0;vertical-align:middle}
+    td.tr{text-align:right;font-family:'Courier New',monospace;font-size:10.5px}
+    tr:nth-child(even) td{background:#fdfaf3}
+    tr.warn td{background:#fff8e6}
+    tr.bad td{background:#fff0f0}
+    .badge{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:700}
+    .badge-ok{background:#e6f4ea;color:#1e7e34}
+    .badge-warn{background:#fff3cd;color:#856404}
+    .badge-bad{background:#fde8e8;color:#b22222}
+    .pill{background:#f5ede0;color:#8B6914;border-radius:3px;padding:2px 6px;font-size:10px;font-family:'Courier New',monospace}
+    .kpis{display:flex;gap:14px;margin-bottom:20px}
+    .kpi{flex:1;border:1px solid #e8d99a;border-radius:6px;padding:12px 16px;text-align:center}
+    .kpi-n{font-size:28px;font-weight:700;line-height:1}
+    .kpi-l{font-size:11px;color:#666;margin-top:4px}
+    .kpi.ok .kpi-n{color:#1e7e34}.kpi.warn .kpi-n{color:#856404}.kpi.bad .kpi-n{color:#b22222}
+    .doc-footer{margin-top:28px;padding-top:10px;border-top:1px solid #e8d99a;font-size:10px;color:#999;display:flex;justify-content:space-between}
+    .th-sala{background:#7a5c0e!important}`;
+
+  const bodyHtml = `
 <div class="doc-header">
   <div class="doc-logo">MRP FINE COMPANY<span>Sistema de Gestión de Producción</span></div>
-  <div class="doc-title">
-    <h1>Orden de Producción Semanal</h1>
-    <p>${semLabel||'Semana sin especificar'} &nbsp;·&nbsp; Generado el ${today}</p>
-  </div>
+  <div class="doc-title"><h1>Orden de Producción Semanal</h1>
+    <p>${semLabel||'Semana sin especificar'} · Generado el ${today}</p></div>
 </div>
-
-<!-- KPIs -->
 <div class="kpis">
   <div class="kpi ok"><div class="kpi-n">${enStock.length}</div><div class="kpi-l">Con stock en pesado</div></div>
   <div class="kpi warn"><div class="kpi-n">${pedido.length}</div><div class="kpi-l">A pedir a depósito</div></div>
   <div class="kpi bad"><div class="kpi-n">${faltantes.length}</div><div class="kpi-l">Sin stock suficiente</div></div>
 </div>
-
-<!-- Producción planificada -->
 <div class="section">
   <div class="section-title">Producción Planificada</div>
-  <table>
-    <thead><tr>
-      <th style="width:110px">Código PT</th>
-      <th>Producto</th>
-      <th style="width:80px">Cliente</th>
-      <th class="tr" style="width:110px">kg mezcla / batch</th>
-      <th class="tr" style="width:120px">kg mezcla a producir</th>
-    </tr></thead>
-    <tbody>
-      ${prodRows.map(p=>{
-        const kb = _kgMezclaBatch(BOM_COMPLETO[p.cod]||{});
-        return `<tr>
-        <td><span class="pill">${p.cod}</span></td>
-        <td>${p.nombre}</td>
-        <td style="color:#666">${p.cliente}</td>
-        <td class="tr" style="color:#888">${fmt2(kb,2)}</td>
-        <td class="tr"><strong>${fmt2(p.kg,1)}</strong></td>
-      </tr>`;}).join('')}
-    </tbody>
-  </table>
+  <table><thead><tr>
+    <th style="width:110px">Código PT</th><th>Producto</th><th style="width:80px">Cliente</th>
+    <th class="tr" style="width:130px">kg mezcla / batch</th>
+    <th class="tr" style="width:140px">kg mezcla a producir</th>
+  </tr></thead><tbody>
+    ${prodRows.map(p=>{const kb=_kgMezclaBatch(BOM_COMPLETO[p.cod]||{});return`<tr>
+      <td><span class="pill">${p.cod}</span></td><td>${p.nombre}</td>
+      <td style="color:#666">${p.cliente}</td>
+      <td class="tr" style="color:#888">${fmt2(kb,2)}</td>
+      <td class="tr"><strong>${fmt2(p.kg,1)}</strong></td>
+    </tr>`;}).join('')}
+  </tbody></table>
 </div>
-
-${pedido.length||faltantes.length ? `
-<!-- Pedido a Depósito -->
+${pedido.length||faltantes.length?`
 <div class="section">
   <div class="section-title">Pedido a Depósito — Insumos a Retirar</div>
-  <table>
-    <thead>
-      <tr>
-        <th style="width:90px" rowspan="2">Código</th>
-        <th rowspan="2">Insumo</th>
-        <th rowspan="2">Usado en</th>
-        <th class="tr" style="width:90px" rowspan="2">Necesario (kg)</th>
-        <th colspan="2" style="text-align:center;background:#7a5c0e">⚖ Stock Sala de Pesado</th>
-        <th class="tr" style="width:105px" rowspan="2">A retirar de Depósito (kg)</th>
-        <th class="tr" style="width:90px" rowspan="2">Hay en Depósito (kg)</th>
-        <th style="width:65px;text-align:center" rowspan="2">Estado</th>
-      </tr>
-      <tr>
-        <th class="tr" style="width:80px;background:#7a5c0e;font-size:9px">Sala 1 (kg)</th>
-        <th class="tr" style="width:80px;background:#7a5c0e;font-size:9px">Sala 2 (kg)</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${[...faltantes,...pedido].map(r=>{
-        const cls = r.faltante>0.001?'bad':'warn';
-        const badge = r.faltante>0.001?'badge-bad':'badge-warn';
-        const lbl = r.faltante>0.001?'FALTA':'PEDIR';
-        return `<tr class="${cls}">
-          <td><span class="pill">${r.cod}</span></td>
-          <td>${r.nombre}</td>
-          <td style="font-size:9px;color:#555">${(r.productos||[]).join(', ')}</td>
-          <td class="tr">${fmt2(r.necesario,3)}</td>
-          <td class="tr">${r.sala1>0.001?fmt2(r.sala1,3):'—'}</td>
-          <td class="tr">${r.sala2>0.001?fmt2(r.sala2,3):'—'}</td>
-          <td class="tr"><strong>${fmt2(r.pedido,3)}</strong></td>
-          <td class="tr">${fmt2(r.deposito,3)}</td>
-          <td style="text-align:center"><span class="badge ${badge}">${lbl}</span></td>
-        </tr>`;
-      }).join('')}
-    </tbody>
-  </table>
-</div>` : ''}
-
-<!-- Todos los insumos -->
+  <table><thead>
+    <tr>
+      <th rowspan="2" style="width:95px">Código</th><th rowspan="2">Insumo</th>
+      <th rowspan="2">Usado en</th>
+      <th class="tr" rowspan="2" style="width:100px">Necesario (kg)</th>
+      <th colspan="2" style="text-align:center" class="th-sala">⚖ Stock Sala de Pesado</th>
+      <th class="tr" rowspan="2" style="width:120px">A retirar de Depósito (kg)</th>
+      <th class="tr" rowspan="2" style="width:100px">Hay en Depósito (kg)</th>
+      <th rowspan="2" style="width:70px;text-align:center">Estado</th>
+    </tr>
+    <tr><th class="tr th-sala" style="width:90px;font-size:10px">Sala 1 (kg)</th>
+        <th class="tr th-sala" style="width:90px;font-size:10px">Sala 2 (kg)</th></tr>
+  </thead><tbody>
+    ${[...faltantes,...pedido].map(r=>{
+      const cls=r.faltante>0.001?'bad':'warn';
+      const badge=r.faltante>0.001?'badge-bad':'badge-warn';
+      const lbl=r.faltante>0.001?'FALTA':'PEDIR';
+      return`<tr class="${cls}">
+        <td><span class="pill">${r.cod}</span></td><td>${r.nombre}</td>
+        <td style="font-size:10px;color:#555">${(r.productos||[]).join(', ')}</td>
+        <td class="tr">${fmt2(r.necesario,3)}</td>
+        <td class="tr">${r.sala1>0.001?fmt2(r.sala1,3):'—'}</td>
+        <td class="tr">${r.sala2>0.001?fmt2(r.sala2,3):'—'}</td>
+        <td class="tr"><strong>${fmt2(r.pedido,3)}</strong></td>
+        <td class="tr">${fmt2(r.deposito,3)}</td>
+        <td style="text-align:center"><span class="badge ${badge}">${lbl}</span></td>
+      </tr>`;}).join('')}
+  </tbody></table>
+</div>`:''}
 <div class="section">
   <div class="section-title">Detalle Completo de Insumos</div>
-  <table>
-    <thead>
-      <tr>
-        <th style="width:90px" rowspan="2">Código</th>
-        <th rowspan="2">Insumo</th>
-        <th rowspan="2">Usado en</th>
-        <th class="tr" style="width:90px" rowspan="2">Necesario (kg)</th>
-        <th colspan="2" style="text-align:center;background:#7a5c0e">⚖ Stock Sala de Pesado</th>
-        <th class="tr" style="width:100px" rowspan="2">Pedir a Depósito (kg)</th>
-        <th class="tr" style="width:90px" rowspan="2">Hay en Depósito (kg)</th>
-        <th class="tr" style="width:80px" rowspan="2">Faltante Total</th>
-        <th style="width:55px;text-align:center" rowspan="2">Estado</th>
-      </tr>
-      <tr>
-        <th class="tr" style="width:80px;background:#7a5c0e;font-size:9px">Sala 1 (kg)</th>
-        <th class="tr" style="width:80px;background:#7a5c0e;font-size:9px">Sala 2 (kg)</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rows.map(r=>{
-        const isFalt=r.faltante>0.001, isPedir=r.pedido>0.001&&!isFalt;
-        const cls=isFalt?'bad':isPedir?'warn':'';
-        const badge=isFalt?'badge-bad':isPedir?'badge-warn':'badge-ok';
-        const lbl=isFalt?'FALTA':isPedir?'PEDIR':'OK';
-        return `<tr class="${cls}">
-          <td><span class="pill">${r.cod}</span></td>
-          <td>${r.nombre}</td>
-          <td style="font-size:9px;color:#555">${(r.productos||[]).join(', ')}</td>
-          <td class="tr">${fmt2(r.necesario,3)}</td>
-          <td class="tr">${r.sala1>0.001?fmt2(r.sala1,3):'—'}</td>
-          <td class="tr">${r.sala2>0.001?fmt2(r.sala2,3):'—'}</td>
-          <td class="tr">${r.pedido>0.001?'<strong>'+fmt2(r.pedido,3)+'</strong>':'—'}</td>
-          <td class="tr">${fmt2(r.deposito,3)}</td>
-          <td class="tr">${r.faltante>0.001?fmt2(r.faltante,3):'—'}</td>
-          <td style="text-align:center"><span class="badge ${badge}">${lbl}</span></td>
-        </tr>`;
-      }).join('')}
-    </tbody>
-  </table>
+  <table><thead>
+    <tr>
+      <th rowspan="2" style="width:95px">Código</th><th rowspan="2">Insumo</th>
+      <th rowspan="2">Usado en</th>
+      <th class="tr" rowspan="2" style="width:100px">Necesario (kg)</th>
+      <th colspan="2" style="text-align:center" class="th-sala">⚖ Stock Sala de Pesado</th>
+      <th class="tr" rowspan="2" style="width:110px">Pedir a Depósito (kg)</th>
+      <th class="tr" rowspan="2" style="width:100px">Hay en Depósito (kg)</th>
+      <th class="tr" rowspan="2" style="width:90px">Faltante Total</th>
+      <th rowspan="2" style="width:65px;text-align:center">Estado</th>
+    </tr>
+    <tr><th class="tr th-sala" style="width:90px;font-size:10px">Sala 1 (kg)</th>
+        <th class="tr th-sala" style="width:90px;font-size:10px">Sala 2 (kg)</th></tr>
+  </thead><tbody>
+    ${rows.map(r=>{
+      const isFalt=r.faltante>0.001,isPedir=r.pedido>0.001&&!isFalt;
+      const cls=isFalt?'bad':isPedir?'warn':'';
+      const badge=isFalt?'badge-bad':isPedir?'badge-warn':'badge-ok';
+      const lbl=isFalt?'FALTA':isPedir?'PEDIR':'OK';
+      return`<tr class="${cls}">
+        <td><span class="pill">${r.cod}</span></td><td>${r.nombre}</td>
+        <td style="font-size:10px;color:#555">${(r.productos||[]).join(', ')}</td>
+        <td class="tr">${fmt2(r.necesario,3)}</td>
+        <td class="tr">${r.sala1>0.001?fmt2(r.sala1,3):'—'}</td>
+        <td class="tr">${r.sala2>0.001?fmt2(r.sala2,3):'—'}</td>
+        <td class="tr">${r.pedido>0.001?'<strong>'+fmt2(r.pedido,3)+'</strong>':'—'}</td>
+        <td class="tr">${fmt2(r.deposito,3)}</td>
+        <td class="tr">${r.faltante>0.001?fmt2(r.faltante,3):'—'}</td>
+        <td style="text-align:center"><span class="badge ${badge}">${lbl}</span></td>
+      </tr>`;}).join('')}
+  </tbody></table>
 </div>
-
 <div class="doc-footer">
   <span>MRP Fine Company — Documento generado automáticamente</span>
-  <span>${today} &nbsp;·&nbsp; ${semLabel||''}</span>
-</div>
+  <span>${today} · ${semLabel||''}</span>
+</div>`;
 
-<script>window.onload=function(){window.print();}<\/script>
-</body></html>`;
+  // ── Renderizar con html2canvas → jsPDF ──
+  const styleEl = document.createElement('style');
+  styleEl.textContent = css;
+  document.head.appendChild(styleEl);
 
-  const w = window.open('','_blank','width=1000,height=750');
-  w.document.write(printHtml);
-  w.document.close();
+  const wrap = document.createElement('div');
+  wrap.className = 'op-doc';
+  wrap.style.cssText = 'position:fixed;top:0;left:-9999px;z-index:-1';
+  wrap.innerHTML = bodyHtml;
+  document.body.appendChild(wrap);
+
+  toast('Generando PDF…','⌛',15000);
+
+  html2canvas(wrap, {scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false})
+  .then(canvas => {
+    document.body.removeChild(wrap);
+    document.head.removeChild(styleEl);
+
+    const {jsPDF} = window.jspdf;
+    const pdf = new jsPDF({orientation:'landscape', unit:'mm', format:'a4'});
+    const pgW = pdf.internal.pageSize.getWidth();   // 297mm
+    const pgH = pdf.internal.pageSize.getHeight();  // 210mm
+    const pxPerMm = canvas.width / pgW;
+    const pgHpx = pgH * pxPerMm;
+    let yOff = 0;
+
+    while(yOff < canvas.height) {
+      if(yOff > 0) pdf.addPage();
+      const sliceH = Math.min(pgHpx, canvas.height - yOff);
+      const tmp = document.createElement('canvas');
+      tmp.width = canvas.width; tmp.height = pgHpx;
+      const ctx = tmp.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,tmp.width,tmp.height);
+      ctx.drawImage(canvas, 0, yOff, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+      pdf.addImage(tmp.toDataURL('image/jpeg',0.92),'JPEG',0,0,pgW,pgH);
+      yOff += pgHpx;
+    }
+
+    const fname = `Orden-Produccion${semLabel?'-'+semLabel.replace(/\s*\/\s*/,'-W').replace(/\s/g,''):''}.pdf`;
+    pdf.save(fname);
+    toast('PDF descargado','✓',3000);
+  })
+  .catch(()=>{ toast('Error al generar PDF','✗',3000); });
 }
 
 // helper para el print (sin dependencia de fmt global)
