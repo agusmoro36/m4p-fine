@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260512-079';
+  var VER = '20260512-080';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -1275,7 +1275,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
 
       <!-- Ingreso de cantidades por producto -->
       <div style="margin-bottom:8px;font-size:11px;color:var(--text3);font-family:var(--mono)">
-        Ingresá los kg a producir por producto. Solo se incluyen los insumos pesados (kg).
+        Ingresá los <strong>kg de mezcla</strong> a producir por producto (según el batch record). El sistema calcula los insumos proporcionalmente.
       </div>
       <div id="op-productos-wrap"></div>
 
@@ -9414,27 +9414,28 @@ function _renderOPTabla() {
   });
 
   const clientes = Object.keys(grupos).sort((a,b) => a.localeCompare(b));
-  let html = `<div class="tbl-wrap"><table style="min-width:600px">
+  let html = `<div class="tbl-wrap"><table style="min-width:640px">
     <thead><tr>
       <th style="width:110px">Código PT</th>
       <th>Producto</th>
-      <th style="width:90px;text-align:center">Cliente</th>
-      <th class="tr" style="width:100px">Lote mín (kg)</th>
-      <th class="tr" style="width:130px">Cantidad a producir (kg)</th>
+      <th style="width:80px;text-align:center">Cliente</th>
+      <th class="tr" style="width:120px" title="kg totales de materias primas por batch">kg mezcla / batch</th>
+      <th class="tr" style="width:150px">kg de mezcla a producir</th>
     </tr></thead><tbody>`;
 
   clientes.forEach(cli => {
     html += `<tr><td colspan="5" style="background:var(--bg2);padding:6px 12px;font-size:11px;font-family:var(--mono);color:var(--gold2);letter-spacing:.5px;font-weight:600">${cli}</td></tr>`;
     grupos[cli].sort((a,b) => a.b.nombre.localeCompare(b.b.nombre)).forEach(({cod, b}) => {
       const qty = _opQty[cod] != null ? _opQty[cod] : '';
+      const kgBatch = _kgMezclaBatch(b);
       html += `<tr>
         <td><span class="pill" style="font-size:10px;font-family:var(--mono)">${cod}</span></td>
         <td style="font-size:13px">${b.nombre}</td>
         <td style="text-align:center;font-size:11px;color:var(--text3)">${cli}</td>
-        <td class="tr" style="font-family:var(--mono);font-size:12px;color:var(--text3)">${fmt(b.lote_min,0)}</td>
+        <td class="tr" style="font-family:var(--mono);font-size:12px;color:var(--text3)">${fmt(kgBatch,2)}</td>
         <td class="tr"><input type="number" min="0" step="0.1"
           data-pt="${cod}"
-          style="width:100px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-family:var(--mono);font-size:13px;color:var(--gold);text-align:right;outline:none;transition:border .2s"
+          style="width:110px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-family:var(--mono);font-size:13px;color:var(--gold);text-align:right;outline:none;transition:border .2s"
           onfocus="this.style.borderColor='var(--gold)'"
           onblur="this.style.borderColor='var(--border)'"
           oninput="_opQty['${cod}']=parseFloat(this.value)||0"
@@ -9448,14 +9449,23 @@ function _renderOPTabla() {
   document.getElementById('op-productos-wrap').innerHTML = html;
 }
 
+// Retorna los kg totales de mezcla (solo MP-*) de un batch del BOM
+function _kgMezclaBatch(bom) {
+  return (bom.insumos || [])
+    .filter(i => (i.um||'').toLowerCase() === 'kg' && i.codigo.startsWith('MP-'))
+    .reduce((s, i) => s + (i.cantidad||0), 0);
+}
+
 function calcularOP() {
   const req = {}; // {cod: {nombre, necesario, pesado, sala1, sala2, deposito}}
 
   Object.entries(_opQty).forEach(([ptCod, qty_kg]) => {
     if(!qty_kg || qty_kg <= 0) return;
     const bom = BOM_COMPLETO[ptCod];
-    if(!bom || !bom.lote_min) return;
-    const factor = qty_kg / bom.lote_min;
+    if(!bom) return;
+    const kgBatch = _kgMezclaBatch(bom);
+    if(!kgBatch) return;
+    const factor = qty_kg / kgBatch; // qty_kg = kg de mezcla a producir
 
     (bom.insumos || []).forEach(ins => {
       if((ins.um||'').toLowerCase() !== 'kg') return;
@@ -9681,15 +9691,19 @@ function imprimirOP() {
       <th style="width:110px">Código PT</th>
       <th>Producto</th>
       <th style="width:80px">Cliente</th>
-      <th class="tr" style="width:120px">Cantidad (kg)</th>
+      <th class="tr" style="width:110px">kg mezcla / batch</th>
+      <th class="tr" style="width:120px">kg mezcla a producir</th>
     </tr></thead>
     <tbody>
-      ${prodRows.map(p=>`<tr>
+      ${prodRows.map(p=>{
+        const kb = _kgMezclaBatch(BOM_COMPLETO[p.cod]||{});
+        return `<tr>
         <td><span class="pill">${p.cod}</span></td>
         <td>${p.nombre}</td>
         <td style="color:#666">${p.cliente}</td>
+        <td class="tr" style="color:#888">${fmt2(kb,2)}</td>
         <td class="tr"><strong>${fmt2(p.kg,1)}</strong></td>
-      </tr>`).join('')}
+      </tr>`;}).join('')}
     </tbody>
   </table>
 </div>
