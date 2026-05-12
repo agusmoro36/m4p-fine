@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260508-073';
+  var VER = '20260512-074';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -6207,18 +6207,27 @@ function renderCompras(){
     const tieneData = c.adjunto && c.adjunto.data;
     const tieneRef  = !tieneData && c.adjunto && c.adjunto.nombre;
     const esViewer = document.body.classList.contains('viewer-mode');
+    const extrasCount = (c.adjuntosExtra||[]).length;
+    const btnVerTodas = (tieneData||tieneRef)
+      ? `<button class="btn btn-sm" onclick="verFacturasExtra(${idx})" title="Ver todas las facturas (${1+extrasCount})" style="font-size:10px;padding:3px 6px;color:var(--gold2);border-color:rgba(212,175,55,.4);background:rgba(212,175,55,.06)">📎${extrasCount>0?` +${extrasCount}`:''}</button>`
+      : '';
+    const btnAgregarExtra = !esViewer && (tieneData||tieneRef)
+      ? `<label for="oc-file-input-extra" onclick="prepararAdjuntoExtra(${idx})" class="btn btn-sm" title="Agregar otra factura" style="font-size:10px;padding:3px 7px;cursor:pointer;color:var(--text3);border-color:var(--border)">+</label>`
+      : '';
     const btnFactura = tieneData
       ? `<button class="btn btn-sm" onclick="verFactura(${idx})" title="${c.adjunto.nombre}"
            style="font-size:10px;padding:3px 7px;color:var(--acc);border-color:var(--acc);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
            📄 ${c.adjunto.nombre.length>12 ? c.adjunto.nombre.slice(0,10)+'…' : c.adjunto.nombre}
          </button>
          ${!esViewer ? `<button class="btn btn-sm" onclick="quitarFactura(${idx})" title="Quitar factura"
-           style="font-size:10px;padding:3px 6px;color:var(--text3);border-color:var(--border)">✕</button>` : ''}`
+           style="font-size:10px;padding:3px 6px;color:var(--text3);border-color:var(--border)">✕</button>` : ''}
+         ${btnVerTodas}${btnAgregarExtra}`
       : tieneRef
         ? `<button class="btn btn-sm" onclick="verFactura(${idx})" title="Cargar factura desde la nube: ${c.adjunto.nombre}"
              style="font-size:10px;padding:3px 7px;color:var(--text3);border-color:var(--border)">
              📄 ${c.adjunto.nombre.length>12 ? c.adjunto.nombre.slice(0,10)+'…' : c.adjunto.nombre} ⟳
-           </button>`
+           </button>
+           ${btnVerTodas}${btnAgregarExtra}`
         : (!esViewer
             ? `<label for="oc-file-input" onclick="prepararAdjunto(${idx})" class="btn btn-sm"
                  title="Adjuntar factura (PDF/JPG/PNG)"
@@ -6349,6 +6358,106 @@ function _onFileSelect(e){
     });
   };
   reader.readAsDataURL(file);
+}
+
+// ══════════════════════════════════════
+// FACTURAS EXTRA — múltiples por OC
+// ══════════════════════════════════════
+let _adjuntandoExtraIdx = null;
+
+function prepararAdjuntoExtra(idx){
+  if(document.body.classList.contains('viewer-mode')){ toast('El viewer no puede adjuntar facturas','⚠️',2000); return; }
+  _adjuntandoExtraIdx = idx;
+  _adjuntandoIdx = null; // asegura que el input principal no interfiera
+  document.getElementById('oc-file-input-extra').value = '';
+}
+
+function _onFileSelectExtra(e){
+  const file = e.target.files[0];
+  if(!file || _adjuntandoExtraIdx === null) return;
+  if(file.size > 8 * 1024 * 1024){ toast('Archivo muy grande (máx 8 MB)','⚠️',3000); return; }
+  const targetIdx = _adjuntandoExtraIdx;
+  _adjuntandoExtraIdx = null;
+  const sizeKB = Math.round(file.size / 1024);
+  toast(`⟳ Leyendo factura (${sizeKB} KB)...`, '📎', 1500);
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const adjunto = { nombre: file.name, tipo: file.type, data: ev.target.result, tamaño: file.size };
+    const oc = S.compras[targetIdx];
+    if(!oc.adjuntosExtra) oc.adjuntosExtra = [];
+    const xIdx = oc.adjuntosExtra.length;
+    oc.adjuntosExtra.push(adjunto);
+    // localStorage
+    try { localStorage.setItem('mrp_adj_x_' + _adjKey(oc) + '_' + xIdx, JSON.stringify(adjunto)); } catch(e){}
+    // estado + nube
+    _saveComprasSnap();
+    saveState();
+    // Supabase fila individual
+    toast(`⟳ Subiendo a la nube (${sizeKB} KB)...`, '☁', 5000);
+    const sbKey = 'adj_' + _adjKey(oc) + '_x' + xIdx;
+    if(SB_CLIENT){
+      SB_CLIENT.from(SB_TABLE).upsert({ key: sbKey, value: { nombre: adjunto.nombre, tipo: adjunto.tipo, data: adjunto.data, tamaño: adjunto.tamaño }})
+        .then(({error}) => {
+          if(!error) toast(`✓ Factura "${file.name}" guardada en la nube`,'☁',4000);
+          else toast('⚠ No se pudo subir a la nube','⚠️',6000);
+        });
+    }
+    renderCompras();
+    // Si el modal estaba abierto, refrescarlo
+    if(document.getElementById('m-facturas-extra').style.display !== 'none') verFacturasExtra(targetIdx);
+  };
+  reader.readAsDataURL(file);
+}
+
+function verFacturasExtra(idx){
+  const oc = S.compras[idx];
+  if(!oc){ return; }
+  _adjuntandoExtraIdx = idx;
+  // Actualizar el onclick del botón agregar del modal
+  document.getElementById('btn-agregar-extra-modal').onclick = ()=>prepararAdjuntoExtra(idx);
+  // Construir lista: adjunto principal + extras
+  const todas = [];
+  if(oc.adjunto?.nombre) todas.push({...oc.adjunto, _tipo:'principal'});
+  (oc.adjuntosExtra||[]).forEach((a,i) => todas.push({...a, _tipo:'extra', _xIdx:i}));
+  const list = document.getElementById('facturas-extra-list');
+  list.innerHTML = todas.length === 0
+    ? '<div style="color:var(--text3);font-size:13px;text-align:center;padding:12px">Sin facturas adjuntas</div>'
+    : todas.map((a) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:18px">📄</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.nombre||'—'}</div>
+          <div style="font-size:10px;color:var(--text3)">${a._tipo==='principal'?'Principal':'Extra '+(a._xIdx+1)} · ${a.tamaño?Math.round(a.tamaño/1024)+' KB':'—'}</div>
+        </div>
+        ${a.data
+          ? `<button class="btn btn-sm" onclick="_verAdjExtra(${idx},'${a._tipo}',${a._xIdx??-1})" style="font-size:10px;padding:3px 7px;color:var(--acc);border-color:var(--acc)">Ver</button>`
+          : `<span style="font-size:10px;color:var(--text3)">⟳ nube</span>`}
+        ${a._tipo==='extra'
+          ? `<button class="btn btn-sm" onclick="quitarFacturaExtra(${idx},${a._xIdx})" style="font-size:10px;padding:3px 6px;color:var(--red);border-color:var(--red)">✕</button>`
+          : ''}
+      </div>`).join('');
+  document.getElementById('m-facturas-extra').style.display = 'flex';
+}
+
+function cerrarFacturasExtra(){
+  document.getElementById('m-facturas-extra').style.display = 'none';
+}
+
+function _verAdjExtra(idx, tipo, xIdx){
+  const oc = S.compras[idx];
+  if(!oc) return;
+  const adj = tipo === 'principal' ? oc.adjunto : (oc.adjuntosExtra||[])[xIdx];
+  if(adj?.data) abrirVisorFactura(adj.data, adj.nombre, adj.tipo);
+}
+
+function quitarFacturaExtra(idx, xIdx){
+  const oc = S.compras[idx];
+  if(!oc?.adjuntosExtra) return;
+  if(!confirm('¿Quitar esta factura adjunta?')) return;
+  oc.adjuntosExtra.splice(xIdx, 1);
+  try { localStorage.removeItem('mrp_adj_x_' + _adjKey(oc) + '_' + xIdx); } catch(e){}
+  _saveComprasSnap(); saveState(); renderCompras();
+  verFacturasExtra(idx);
 }
 
 function verFactura(idx){
@@ -13543,5 +13652,22 @@ function exportarExcelInsumos() {
 </script>
 <!-- Input de archivo para adjuntar facturas — fuera de todos los page divs para que funcione desde cualquier página -->
 <input type="file" id="oc-file-input" accept=".pdf,.jpg,.jpeg,.png,.xml" style="display:none;position:fixed" onchange="_onFileSelect(event)">
+<!-- Input extra para facturas adicionales por OC -->
+<input type="file" id="oc-file-input-extra" accept=".pdf,.jpg,.jpeg,.png,.xml" style="display:none;position:fixed" onchange="_onFileSelectExtra(event)">
+<!-- Modal listado de facturas extra -->
+<div id="m-facturas-extra" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);backdrop-filter:blur(4px)" onclick="cerrarFacturasExtra()">
+  <div onclick="event.stopPropagation()" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;min-width:320px;max-width:480px;max-height:80vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-weight:700;font-size:14px">📎 Facturas adjuntas</div>
+      <button onclick="cerrarFacturasExtra()" style="background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div id="facturas-extra-list"></div>
+    <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+      <label for="oc-file-input-extra" id="btn-agregar-extra-modal" onclick="" class="btn btn-sm" style="cursor:pointer;color:var(--gold2);border-color:rgba(212,175,55,.4);background:rgba(212,175,55,.06);width:100%;justify-content:center;display:flex;align-items:center;gap:6px;padding:8px">
+        + Agregar otra factura
+      </label>
+    </div>
+  </div>
+</div>
 </body>
 </html>
