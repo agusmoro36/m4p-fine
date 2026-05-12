@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260512-090';
+  var VER = '20260512-091';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3868,19 +3868,28 @@ function applyState(st) {
         const lotesExistentes = base?.lotes;
         D.stock[k] = base ? {...base, ...v} : {...v};
         if(base?.ubicaciones) {
-          const vSala   = (v.ubicaciones?.sala1||0) + (v.ubicaciones?.sala2||0);
-          const baseSala = (base.ubicaciones.sala1||0) + (base.ubicaciones.sala2||0);
-          // Restaurar ubicaciones del baseline cuando: (a) seed es más nuevo que Supabase,
-          // o (b) Supabase perdió la distribución de salas.
-          if(newSeedIsNewer || (v.ubicaciones && vSala < 0.001 && baseSala > 0.001)) {
-            const vTotal   = parseFloat(v.stock) || parseFloat(base.stock) || 0;
-            const baseSum  = (base.ubicaciones.deposito||0) + baseSala;
-            const extra    = Math.max(0, vTotal - baseSum);
+          if(newSeedIsNewer) {
+            // Seed nuevo: usar exactamente los valores hardcodeados (deposito, sala1, sala2, stock)
             D.stock[k].ubicaciones = {
-              deposito: Math.round(((base.ubicaciones.deposito||0) + extra) * 1000) / 1000,
-              sala1: base.ubicaciones.sala1 || 0,
-              sala2: base.ubicaciones.sala2 || 0
+              deposito: base.ubicaciones.deposito || 0,
+              sala1:    base.ubicaciones.sala1    || 0,
+              sala2:    base.ubicaciones.sala2    || 0
             };
+            D.stock[k].stock = base.stock;
+          } else {
+            // Supabase perdió la distribución de salas → restaurar desde baseline
+            const vSala    = (v.ubicaciones?.sala1||0) + (v.ubicaciones?.sala2||0);
+            const baseSala = (base.ubicaciones.sala1||0) + (base.ubicaciones.sala2||0);
+            if(v.ubicaciones && vSala < 0.001 && baseSala > 0.001) {
+              const vTotal  = parseFloat(v.stock) || parseFloat(base.stock) || 0;
+              const baseSum = (base.ubicaciones.deposito||0) + baseSala;
+              const extra   = Math.max(0, vTotal - baseSum);
+              D.stock[k].ubicaciones = {
+                deposito: Math.round(((base.ubicaciones.deposito||0) + extra) * 1000) / 1000,
+                sala1: base.ubicaciones.sala1 || 0,
+                sala2: base.ubicaciones.sala2 || 0
+              };
+            }
           }
         }
         if (!v.lotes && lotesExistentes) D.stock[k].lotes = lotesExistentes;
