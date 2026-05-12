@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260512-094';
+  var VER = '20260512-095';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -9734,36 +9734,6 @@ ${pedido.length||faltantes.length?`
       </tr>`;}).join('')}
   </tbody></table>
 </div>`:''}
-<div class="section">
-  <div class="section-title">Detalle Completo de Insumos</div>
-  <table><thead><tr>
-    <th style="width:95px">Código</th><th>Insumo</th><th>Usado en</th>
-    <th class="tr" style="width:100px">Necesario (kg)</th>
-    <th class="tr" style="width:90px;background:#7a5c0e">⚖ Sala 1 (kg)</th>
-    <th class="tr" style="width:90px;background:#7a5c0e">⚖ Sala 2 (kg)</th>
-    <th class="tr" style="width:110px">Pedir a Depósito (kg)</th>
-    <th class="tr" style="width:100px">Hay en Depósito (kg)</th>
-    <th class="tr" style="width:90px">Faltante Total</th>
-    <th style="width:65px;text-align:center">Estado</th>
-  </tr></thead><tbody>
-    ${rows.map(r=>{
-      const isFalt=r.faltante>0.001,isPedir=r.pedido>0.001&&!isFalt;
-      const cls=isFalt?'bad':isPedir?'warn':'';
-      const badge=isFalt?'badge-bad':isPedir?'badge-warn':'badge-ok';
-      const lbl=isFalt?'FALTA':isPedir?'PEDIR':'OK';
-      return`<tr class="${cls}">
-        <td><span class="pill">${r.cod}</span></td><td>${r.nombre}</td>
-        <td style="font-size:10px;color:#555">${(r.productos||[]).join(', ')}</td>
-        <td class="tr">${fmt2(r.necesario,3)}</td>
-        <td class="tr">${r.sala1>0.001?fmt2(r.sala1,3):'—'}</td>
-        <td class="tr">${r.sala2>0.001?fmt2(r.sala2,3):'—'}</td>
-        <td class="tr">${r.pedido>0.001?'<strong>'+fmt2(r.pedido,3)+'</strong>':'—'}</td>
-        <td class="tr">${fmt2(r.deposito,3)}</td>
-        <td class="tr">${r.faltante>0.001?fmt2(r.faltante,3):'—'}</td>
-        <td style="text-align:center"><span class="badge ${badge}">${lbl}</span></td>
-      </tr>`;}).join('')}
-  </tbody></table>
-</div>
 <div class="doc-footer">
   <span>MRP Fine Company — Documento generado automáticamente</span>
   <span>${today} · ${semLabel||''}</span>
