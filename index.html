@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260512-078';
+  var VER = '20260512-079';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -9520,7 +9520,7 @@ function _renderOPResultados(rows) {
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
       <div class="kpi-card" style="border-color:var(--green)">
         <div class="kpi-val" style="color:var(--green)">${ok}</div>
-        <div class="kpi-lab">Insumos con stock en pesado</div>
+        <div class="kpi-lab">Con stock en pesado</div>
       </div>
       <div class="kpi-card" style="border-color:var(--gold)">
         <div class="kpi-val" style="color:var(--gold)">${pedir}</div>
@@ -9528,37 +9528,45 @@ function _renderOPResultados(rows) {
       </div>
       <div class="kpi-card" style="border-color:var(--red)">
         <div class="kpi-val" style="color:var(--red)">${falt}</div>
-        <div class="kpi-lab">Sin stock suficiente en sistema</div>
+        <div class="kpi-lab">Sin stock suficiente</div>
       </div>
     </div>
     <div class="tbl-wrap" style="overflow-x:auto">
-    <table style="min-width:820px">
-      <thead><tr>
-        <th style="width:100px">Código</th>
-        <th>Insumo</th>
-        <th class="tr" style="width:110px">Necesario (kg)</th>
-        <th class="tr" style="width:120px">Stock Pesado (kg)</th>
-        <th class="tr" style="width:130px">Pedir a Depósito (kg)</th>
-        <th class="tr" style="width:120px">Hay en Depósito (kg)</th>
-        <th class="tr" style="width:110px">Faltante Total</th>
-        <th style="width:80px">Estado</th>
-      </tr></thead><tbody>`;
+    <table style="min-width:1000px">
+      <thead>
+        <tr>
+          <th rowspan="2" style="width:100px">Código</th>
+          <th rowspan="2">Insumo</th>
+          <th rowspan="2" class="tr" style="width:105px">Necesario<br>(kg)</th>
+          <th colspan="2" style="text-align:center;background:rgba(212,175,55,.15);border-bottom:1px solid var(--border)">⚖ Stock Sala de Pesado</th>
+          <th rowspan="2" class="tr" style="width:110px">Pedir a<br>Depósito (kg)</th>
+          <th rowspan="2" class="tr" style="width:110px">Hay en<br>Depósito (kg)</th>
+          <th rowspan="2" class="tr" style="width:100px">Faltante<br>Total</th>
+          <th rowspan="2" style="width:75px">Estado</th>
+        </tr>
+        <tr>
+          <th class="tr" style="width:100px;background:rgba(212,175,55,.1);font-size:10px">Sala 1 (kg)</th>
+          <th class="tr" style="width:100px;background:rgba(212,175,55,.1);font-size:10px">Sala 2 (kg)</th>
+        </tr>
+      </thead><tbody>`;
 
   rows.forEach(r => {
     const isFalt = r.faltante > 0.001;
     const isPedir = r.pedido > 0.001 && !isFalt;
-    const isOk = !isFalt && !isPedir;
     const rowBg = isFalt ? 'background:rgba(220,50,50,.06)' : isPedir ? 'background:rgba(212,175,55,.04)' : '';
     const estado = isFalt
       ? `<span style="color:var(--red);font-weight:700;font-size:11px">⚠ FALTA</span>`
       : isPedir
       ? `<span style="color:var(--gold);font-weight:600;font-size:11px">↑ PEDIR</span>`
       : `<span style="color:var(--green);font-size:11px">✓ OK</span>`;
+    const s1 = r.sala1 > 0.001 ? `<span style="color:var(--gold2)">${fmt(r.sala1,3)}</span>` : `<span style="color:var(--text3)">—</span>`;
+    const s2 = r.sala2 > 0.001 ? `<span style="color:var(--gold2)">${fmt(r.sala2,3)}</span>` : `<span style="color:var(--text3)">—</span>`;
     html += `<tr style="${rowBg}">
       <td><span class="pill" style="font-size:10px;font-family:var(--mono)">${r.cod}</span></td>
       <td style="font-size:13px">${r.nombre}</td>
       <td class="tr" style="font-family:var(--mono);font-size:12px">${fmt(r.necesario,3)}</td>
-      <td class="tr" style="font-family:var(--mono);font-size:12px">${fmt(r.pesado,3)}</td>
+      <td class="tr" style="font-family:var(--mono);font-size:12px;background:rgba(212,175,55,.04)">${s1}</td>
+      <td class="tr" style="font-family:var(--mono);font-size:12px;background:rgba(212,175,55,.04)">${s2}</td>
       <td class="tr" style="font-family:var(--mono);font-size:12px;font-weight:${isPedir||isFalt?700:400};color:${isPedir?'var(--gold)':isFalt?'var(--red)':'inherit'}">${r.pedido>0.001?fmt(r.pedido,3):'—'}</td>
       <td class="tr" style="font-family:var(--mono);font-size:12px">${fmt(r.deposito,3)}</td>
       <td class="tr" style="font-family:var(--mono);font-size:12px;font-weight:${isFalt?700:400};color:${isFalt?'var(--red)':'inherit'}">${r.faltante>0.001?fmt(r.faltante,3):'—'}</td>
@@ -9691,15 +9699,21 @@ ${pedido.length||faltantes.length ? `
 <div class="section">
   <div class="section-title">Pedido a Depósito — Insumos a Retirar</div>
   <table>
-    <thead><tr>
-      <th style="width:100px">Código</th>
-      <th>Insumo</th>
-      <th class="tr" style="width:110px">Necesario (kg)</th>
-      <th class="tr" style="width:110px">Stock Pesado (kg)</th>
-      <th class="tr" style="width:120px">A retirar de Depósito (kg)</th>
-      <th class="tr" style="width:110px">Hay en Depósito (kg)</th>
-      <th style="width:80px;text-align:center">Estado</th>
-    </tr></thead>
+    <thead>
+      <tr>
+        <th style="width:100px" rowspan="2">Código</th>
+        <th rowspan="2">Insumo</th>
+        <th class="tr" style="width:100px" rowspan="2">Necesario (kg)</th>
+        <th colspan="2" style="text-align:center;background:#7a5c0e">⚖ Stock Sala de Pesado</th>
+        <th class="tr" style="width:115px" rowspan="2">A retirar de Depósito (kg)</th>
+        <th class="tr" style="width:100px" rowspan="2">Hay en Depósito (kg)</th>
+        <th style="width:70px;text-align:center" rowspan="2">Estado</th>
+      </tr>
+      <tr>
+        <th class="tr" style="width:90px;background:#7a5c0e;font-size:9px">Sala 1 (kg)</th>
+        <th class="tr" style="width:90px;background:#7a5c0e;font-size:9px">Sala 2 (kg)</th>
+      </tr>
+    </thead>
     <tbody>
       ${[...faltantes,...pedido].map(r=>{
         const cls = r.faltante>0.001?'bad':'warn';
@@ -9709,7 +9723,8 @@ ${pedido.length||faltantes.length ? `
           <td><span class="pill">${r.cod}</span></td>
           <td>${r.nombre}</td>
           <td class="tr">${fmt2(r.necesario,3)}</td>
-          <td class="tr">${fmt2(r.pesado,3)}</td>
+          <td class="tr">${r.sala1>0.001?fmt2(r.sala1,3):'—'}</td>
+          <td class="tr">${r.sala2>0.001?fmt2(r.sala2,3):'—'}</td>
           <td class="tr"><strong>${fmt2(r.pedido,3)}</strong></td>
           <td class="tr">${fmt2(r.deposito,3)}</td>
           <td style="text-align:center"><span class="badge ${badge}">${lbl}</span></td>
@@ -9723,16 +9738,22 @@ ${pedido.length||faltantes.length ? `
 <div class="section">
   <div class="section-title">Detalle Completo de Insumos</div>
   <table>
-    <thead><tr>
-      <th style="width:100px">Código</th>
-      <th>Insumo</th>
-      <th class="tr" style="width:110px">Necesario (kg)</th>
-      <th class="tr" style="width:110px">Stock Pesado (kg)</th>
-      <th class="tr" style="width:120px">Pedir a Depósito (kg)</th>
-      <th class="tr" style="width:110px">Hay en Depósito (kg)</th>
-      <th class="tr" style="width:100px">Faltante Total</th>
-      <th style="width:70px;text-align:center">Estado</th>
-    </tr></thead>
+    <thead>
+      <tr>
+        <th style="width:100px" rowspan="2">Código</th>
+        <th rowspan="2">Insumo</th>
+        <th class="tr" style="width:100px" rowspan="2">Necesario (kg)</th>
+        <th colspan="2" style="text-align:center;background:#7a5c0e">⚖ Stock Sala de Pesado</th>
+        <th class="tr" style="width:110px" rowspan="2">Pedir a Depósito (kg)</th>
+        <th class="tr" style="width:100px" rowspan="2">Hay en Depósito (kg)</th>
+        <th class="tr" style="width:90px" rowspan="2">Faltante Total</th>
+        <th style="width:60px;text-align:center" rowspan="2">Estado</th>
+      </tr>
+      <tr>
+        <th class="tr" style="width:90px;background:#7a5c0e;font-size:9px">Sala 1 (kg)</th>
+        <th class="tr" style="width:90px;background:#7a5c0e;font-size:9px">Sala 2 (kg)</th>
+      </tr>
+    </thead>
     <tbody>
       ${rows.map(r=>{
         const isFalt=r.faltante>0.001, isPedir=r.pedido>0.001&&!isFalt;
@@ -9743,7 +9764,8 @@ ${pedido.length||faltantes.length ? `
           <td><span class="pill">${r.cod}</span></td>
           <td>${r.nombre}</td>
           <td class="tr">${fmt2(r.necesario,3)}</td>
-          <td class="tr">${fmt2(r.pesado,3)}</td>
+          <td class="tr">${r.sala1>0.001?fmt2(r.sala1,3):'—'}</td>
+          <td class="tr">${r.sala2>0.001?fmt2(r.sala2,3):'—'}</td>
           <td class="tr">${r.pedido>0.001?'<strong>'+fmt2(r.pedido,3)+'</strong>':'—'}</td>
           <td class="tr">${fmt2(r.deposito,3)}</td>
           <td class="tr">${r.faltante>0.001?fmt2(r.faltante,3):'—'}</td>
