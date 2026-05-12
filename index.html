@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260512-080';
+  var VER = '20260512-081';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -9467,6 +9467,7 @@ function calcularOP() {
     if(!kgBatch) return;
     const factor = qty_kg / kgBatch; // qty_kg = kg de mezcla a producir
 
+    const ptNombre = bom.nombre || ptCod;
     (bom.insumos || []).forEach(ins => {
       if((ins.um||'').toLowerCase() !== 'kg') return;
       if(!req[ins.codigo]) {
@@ -9478,10 +9479,13 @@ function calcularOP() {
           sala1: ub.sala1 || 0,
           sala2: ub.sala2 || 0,
           deposito: ub.deposito || 0,
+          productos: [],
         };
         req[ins.codigo].pesado = req[ins.codigo].sala1 + req[ins.codigo].sala2;
       }
       req[ins.codigo].necesario += ins.cantidad * factor;
+      if(!req[ins.codigo].productos.includes(ptNombre))
+        req[ins.codigo].productos.push(ptNombre);
     });
   });
 
@@ -9545,18 +9549,19 @@ function _renderOPResultados(rows) {
     <table style="min-width:1000px">
       <thead>
         <tr>
-          <th rowspan="2" style="width:100px">Código</th>
+          <th rowspan="2" style="width:95px">Código</th>
           <th rowspan="2">Insumo</th>
-          <th rowspan="2" class="tr" style="width:105px">Necesario<br>(kg)</th>
+          <th rowspan="2" style="width:160px">Usado en</th>
+          <th rowspan="2" class="tr" style="width:95px">Necesario<br>(kg)</th>
           <th colspan="2" style="text-align:center;background:rgba(212,175,55,.15);border-bottom:1px solid var(--border)">⚖ Stock Sala de Pesado</th>
-          <th rowspan="2" class="tr" style="width:110px">Pedir a<br>Depósito (kg)</th>
-          <th rowspan="2" class="tr" style="width:110px">Hay en<br>Depósito (kg)</th>
-          <th rowspan="2" class="tr" style="width:100px">Faltante<br>Total</th>
-          <th rowspan="2" style="width:75px">Estado</th>
+          <th rowspan="2" class="tr" style="width:100px">Pedir a<br>Depósito (kg)</th>
+          <th rowspan="2" class="tr" style="width:100px">Hay en<br>Depósito (kg)</th>
+          <th rowspan="2" class="tr" style="width:90px">Faltante<br>Total</th>
+          <th rowspan="2" style="width:70px">Estado</th>
         </tr>
         <tr>
-          <th class="tr" style="width:100px;background:rgba(212,175,55,.1);font-size:10px">Sala 1 (kg)</th>
-          <th class="tr" style="width:100px;background:rgba(212,175,55,.1);font-size:10px">Sala 2 (kg)</th>
+          <th class="tr" style="width:95px;background:rgba(212,175,55,.1);font-size:10px">Sala 1 (kg)</th>
+          <th class="tr" style="width:95px;background:rgba(212,175,55,.1);font-size:10px">Sala 2 (kg)</th>
         </tr>
       </thead><tbody>`;
 
@@ -9571,9 +9576,11 @@ function _renderOPResultados(rows) {
       : `<span style="color:var(--green);font-size:11px">✓ OK</span>`;
     const s1 = r.sala1 > 0.001 ? `<span style="color:var(--gold2)">${fmt(r.sala1,3)}</span>` : `<span style="color:var(--text3)">—</span>`;
     const s2 = r.sala2 > 0.001 ? `<span style="color:var(--gold2)">${fmt(r.sala2,3)}</span>` : `<span style="color:var(--text3)">—</span>`;
+    const usadoEn = (r.productos||[]).map(p=>`<span style="font-size:10px;background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:1px 5px;white-space:nowrap">${p}</span>`).join(' ');
     html += `<tr style="${rowBg}">
       <td><span class="pill" style="font-size:10px;font-family:var(--mono)">${r.cod}</span></td>
       <td style="font-size:13px">${r.nombre}</td>
+      <td style="font-size:11px;line-height:1.6">${usadoEn}</td>
       <td class="tr" style="font-family:var(--mono);font-size:12px">${fmt(r.necesario,3)}</td>
       <td class="tr" style="font-family:var(--mono);font-size:12px;background:rgba(212,175,55,.04)">${s1}</td>
       <td class="tr" style="font-family:var(--mono);font-size:12px;background:rgba(212,175,55,.04)">${s2}</td>
@@ -9715,17 +9722,18 @@ ${pedido.length||faltantes.length ? `
   <table>
     <thead>
       <tr>
-        <th style="width:100px" rowspan="2">Código</th>
+        <th style="width:90px" rowspan="2">Código</th>
         <th rowspan="2">Insumo</th>
-        <th class="tr" style="width:100px" rowspan="2">Necesario (kg)</th>
+        <th rowspan="2">Usado en</th>
+        <th class="tr" style="width:90px" rowspan="2">Necesario (kg)</th>
         <th colspan="2" style="text-align:center;background:#7a5c0e">⚖ Stock Sala de Pesado</th>
-        <th class="tr" style="width:115px" rowspan="2">A retirar de Depósito (kg)</th>
-        <th class="tr" style="width:100px" rowspan="2">Hay en Depósito (kg)</th>
-        <th style="width:70px;text-align:center" rowspan="2">Estado</th>
+        <th class="tr" style="width:105px" rowspan="2">A retirar de Depósito (kg)</th>
+        <th class="tr" style="width:90px" rowspan="2">Hay en Depósito (kg)</th>
+        <th style="width:65px;text-align:center" rowspan="2">Estado</th>
       </tr>
       <tr>
-        <th class="tr" style="width:90px;background:#7a5c0e;font-size:9px">Sala 1 (kg)</th>
-        <th class="tr" style="width:90px;background:#7a5c0e;font-size:9px">Sala 2 (kg)</th>
+        <th class="tr" style="width:80px;background:#7a5c0e;font-size:9px">Sala 1 (kg)</th>
+        <th class="tr" style="width:80px;background:#7a5c0e;font-size:9px">Sala 2 (kg)</th>
       </tr>
     </thead>
     <tbody>
@@ -9736,6 +9744,7 @@ ${pedido.length||faltantes.length ? `
         return `<tr class="${cls}">
           <td><span class="pill">${r.cod}</span></td>
           <td>${r.nombre}</td>
+          <td style="font-size:9px;color:#555">${(r.productos||[]).join(', ')}</td>
           <td class="tr">${fmt2(r.necesario,3)}</td>
           <td class="tr">${r.sala1>0.001?fmt2(r.sala1,3):'—'}</td>
           <td class="tr">${r.sala2>0.001?fmt2(r.sala2,3):'—'}</td>
@@ -9754,18 +9763,19 @@ ${pedido.length||faltantes.length ? `
   <table>
     <thead>
       <tr>
-        <th style="width:100px" rowspan="2">Código</th>
+        <th style="width:90px" rowspan="2">Código</th>
         <th rowspan="2">Insumo</th>
-        <th class="tr" style="width:100px" rowspan="2">Necesario (kg)</th>
+        <th rowspan="2">Usado en</th>
+        <th class="tr" style="width:90px" rowspan="2">Necesario (kg)</th>
         <th colspan="2" style="text-align:center;background:#7a5c0e">⚖ Stock Sala de Pesado</th>
-        <th class="tr" style="width:110px" rowspan="2">Pedir a Depósito (kg)</th>
-        <th class="tr" style="width:100px" rowspan="2">Hay en Depósito (kg)</th>
-        <th class="tr" style="width:90px" rowspan="2">Faltante Total</th>
-        <th style="width:60px;text-align:center" rowspan="2">Estado</th>
+        <th class="tr" style="width:100px" rowspan="2">Pedir a Depósito (kg)</th>
+        <th class="tr" style="width:90px" rowspan="2">Hay en Depósito (kg)</th>
+        <th class="tr" style="width:80px" rowspan="2">Faltante Total</th>
+        <th style="width:55px;text-align:center" rowspan="2">Estado</th>
       </tr>
       <tr>
-        <th class="tr" style="width:90px;background:#7a5c0e;font-size:9px">Sala 1 (kg)</th>
-        <th class="tr" style="width:90px;background:#7a5c0e;font-size:9px">Sala 2 (kg)</th>
+        <th class="tr" style="width:80px;background:#7a5c0e;font-size:9px">Sala 1 (kg)</th>
+        <th class="tr" style="width:80px;background:#7a5c0e;font-size:9px">Sala 2 (kg)</th>
       </tr>
     </thead>
     <tbody>
@@ -9777,6 +9787,7 @@ ${pedido.length||faltantes.length ? `
         return `<tr class="${cls}">
           <td><span class="pill">${r.cod}</span></td>
           <td>${r.nombre}</td>
+          <td style="font-size:9px;color:#555">${(r.productos||[]).join(', ')}</td>
           <td class="tr">${fmt2(r.necesario,3)}</td>
           <td class="tr">${r.sala1>0.001?fmt2(r.sala1,3):'—'}</td>
           <td class="tr">${r.sala2>0.001?fmt2(r.sala2,3):'—'}</td>
