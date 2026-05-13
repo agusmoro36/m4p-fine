@@ -4701,6 +4701,7 @@ function correrMRP() {
   const necesidades = {}; // {cod: {mar: X, abr: Y, ...}}
   const nombreInsumo = {}; // {cod: nombre}
   const umInsumo = {}; // {cod: um}
+  const productosQueUsan = {}; // {cod: Set<descripcion>}
 
   D.productos.forEach(prod => {
     const bom = D.bom[prod.codigo];
@@ -4717,6 +4718,8 @@ function correrMRP() {
         necesidades[ins.codigo][mes] = (necesidades[ins.codigo][mes] || 0) + (ins.cantidad * batches);
         nombreInsumo[ins.codigo] = ins.nombre;
         umInsumo[ins.codigo] = ins.um || 'kg';
+        if(!productosQueUsan[ins.codigo]) productosQueUsan[ins.codigo] = new Set();
+        productosQueUsan[ins.codigo].add(prod.descripcion || prod.codigo);
       });
     });
   });
@@ -4724,7 +4727,11 @@ function correrMRP() {
   // 3. Para cada mes, calcular OCs confirmadas pendientes de entrega
   const ocsPendientes = {}; // {cod: {mar: X, abr: Y, ...}}
   S.compras.filter(c => !c.entregada && c.estado !== 'Cancelada').forEach(c => {
-    if(!c.codigo || !c.cantidad) return;
+    // Soportar OC single (legacy c.codigo) y multi-item (c.items[])
+    const lineas = (c.items && c.items.length > 0)
+      ? c.items
+      : (c.codigo ? [{codigo: c.codigo, cantidad: c.cantidad}] : []);
+    if(!lineas.length) return;
     let mesEntrega = null;
     if(c.fecha_entrega) {
       const d = new Date(c.fecha_entrega);
@@ -4733,8 +4740,11 @@ function correrMRP() {
       mesEntrega = mKeys[m];
     }
     if(!mesEntrega) mesEntrega = meses[0];
-    if(!ocsPendientes[c.codigo]) ocsPendientes[c.codigo] = {};
-    ocsPendientes[c.codigo][mesEntrega] = (ocsPendientes[c.codigo][mesEntrega] || 0) + (c.cantidad || 0);
+    lineas.forEach(it => {
+      if(!it.codigo || !it.cantidad) return;
+      if(!ocsPendientes[it.codigo]) ocsPendientes[it.codigo] = {};
+      ocsPendientes[it.codigo][mesEntrega] = (ocsPendientes[it.codigo][mesEntrega] || 0) + (parseFloat(it.cantidad) || 0);
+    });
   });
 
   // 4. Calcular stock proyectado mes a mes y detectar déficits
@@ -4772,6 +4782,7 @@ function correrMRP() {
       stockActual,
       meses: rowMeses,
       tieneDeficit: Object.values(rowMeses).some(m => m.deficit > 0),
+      productos: productosQueUsan[cod] ? [...productosQueUsan[cod]] : [],
     });
   });
 
@@ -4909,13 +4920,14 @@ function renderMRPResultado() {
           <tr>
             <th>Código</th>
             <th>Insumo</th>
+            <th>Productos PT</th>
             <th class="tr">Stock actual</th>
             ${meses.map(m=>`
               <th class="tc" colspan="3" style="background:var(--bg3);border-left:2px solid var(--border)">${mesLabels[m]||m}</th>
             `).join('')}
           </tr>
           <tr style="font-size:9px;color:var(--text3)">
-            <th></th><th></th><th></th>
+            <th></th><th></th><th></th><th></th>
             ${meses.map(()=>`
               <th class="tr" style="border-left:2px solid var(--border)">Necesidad</th>
               <th class="tr">OC ingreso</th>
@@ -4926,9 +4938,14 @@ function renderMRPResultado() {
         <tbody id="tbl-mrp-resultado">
           ${resultado.map(ins => {
             const rowBg = ins.tieneDeficit ? 'background:rgba(239,68,68,.04)' : '';
+            const ptChips = (ins.productos||[]).map(p => {
+              const short = p.replace(/^FINE /i,'').replace(/^DIABLA /i,'').substring(0,18);
+              return `<span style="display:inline-block;background:rgba(201,168,76,.12);color:var(--gold);border-radius:3px;padding:1px 5px;font-size:9px;font-family:var(--mono);margin:1px;white-space:nowrap">${short}</span>`;
+            }).join('');
             return `<tr style="${rowBg}" data-deficit="${ins.tieneDeficit}">
               <td class="td-code">${ins.codigo}</td>
               <td class="td-name">${ins.nombre}</td>
+              <td style="max-width:200px;line-height:1.6">${ptChips||'<span style="color:var(--text3);font-size:10px">—</span>'}</td>
               <td class="td-mono tr">${fmt(ins.stockActual,2)} <span style="font-size:9px;color:var(--text3)">${ins.um}</span></td>
               ${meses.map(mes => {
                 const m = ins.meses[mes];
