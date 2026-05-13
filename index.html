@@ -589,11 +589,13 @@ body.viewer-mode .page-filters select { pointer-events:auto }
         <div style="display:flex;align-items:center;gap:8px">
           <label style="font-size:12px;color:var(--text3)">Horizonte:</label>
           <select class="fsel" id="mrp-horizonte" style="min-width:160px">
-            <option value='["mar"]'>1 mes (Marzo)</option>
-            <option value='["mar","abr"]' selected>2 meses (Mar → Abr)</option>
-            <option value='["mar","abr","may"]'>3 meses (Mar → May)</option>
-            <option value='["abr"]'>Solo Abril</option>
+            <option value='["may"]' selected>Solo Mayo</option>
+            <option value='["may","jun"]'>2 meses (May → Jun)</option>
             <option value='["abr","may"]'>2 meses (Abr → May)</option>
+            <option value='["abr"]'>Solo Abril</option>
+            <option value='["mar","abr","may"]'>3 meses (Mar → May)</option>
+            <option value='["mar","abr"]'>2 meses (Mar → Abr)</option>
+            <option value='["mar"]'>Solo Marzo</option>
           </select>
         </div>
         <button class="btn btn-p" onclick="correrMRP()" style="font-size:13px;padding:8px 20px;font-weight:600">▶ Correr MRP</button>
