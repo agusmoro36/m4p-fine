@@ -3225,6 +3225,37 @@ async function sbSave(payload, retries=3) {
 // Clave separada para adjuntos PDF (no mezclar con el estado principal)
 const SB_ADJ_KEY = 'mrp_fine_adjuntos_v8';
 
+// Clave separada para metadata de reválidas — NUNCA tocada por scripts de stock ni restauraciones
+const SB_REVALIDAS_KEY = 'mrp_fine_revalidas_v8';
+
+async function sbSaveRevalidasMeta() {
+  if(!SB_CLIENT) return false;
+  const rev = S.revalidas || {};
+  if(!Object.keys(rev).length) return true;
+  try {
+    const { error } = await SB_CLIENT.from(SB_TABLE).upsert({
+      key: SB_REVALIDAS_KEY,
+      value: rev,
+      update_at: new Date().toISOString()
+    }, { onConflict: 'key' });
+    return !error;
+  } catch(e) { return false; }
+}
+
+async function sbLoadRevalidasMeta() {
+  if(!SB_CLIENT) return;
+  try {
+    const { data, error } = await SB_CLIENT
+      .from(SB_TABLE).select('value')
+      .eq('key', SB_REVALIDAS_KEY).single();
+    if(error || !data?.value) return;
+    // Merge: reválidas del key dedicado + las que ya tenga S.revalidas (locales más nuevas ganan)
+    S.revalidas = { ...data.value, ...(S.revalidas || {}) };
+    _aplicarVencimientosRevalidas();
+    console.log(`✓ Reválidas cargadas desde key dedicado: ${Object.keys(data.value).length} entradas`);
+  } catch(e) { /* silencioso */ }
+}
+
 
 async function sbSaveAdjuntos(adjuntosMap, retries=3) {
   if(!SB_CLIENT || !Object.keys(adjuntosMap).length) return true;
@@ -4107,6 +4138,9 @@ async function loadFromSupabase() {
     producciones: S.producciones   // post-merge (local + remoto)
   };
   try { localStorage.setItem(LS_KEY, JSON.stringify(_lsVal)); } catch(e) {}
+
+  // 0) Cargar reválidas desde su key dedicado (protegido de restauraciones/scripts de stock)
+  sbLoadRevalidasMeta();
 
   // 1) Restaurar adjuntos desde localStorage del dispositivo (rápido, offline)
   const adjRestaurados = _restaurarAdjuntosLS();
@@ -10574,6 +10608,7 @@ function guardarRevalida() {
   };
   _saveRevalidasSnap(); // snapshot dedicado — protege vencimientoRevalida contra race conditions
   saveState();
+  sbSaveRevalidasMeta(); // guardar en key dedicado de Supabase — protege contra restauraciones de OC/stock
   actualizarBadgeAlertas();
   closeM('m-revalida');
   renderStock();
