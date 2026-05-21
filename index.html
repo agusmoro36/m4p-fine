@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260513-097';
+  var VER = '20260521-098';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -904,7 +904,8 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     </div>
     <div class="tabs" style="margin-bottom:0">
       <div class="tab active" onclick="stockTab('consolidado',this)">📊 Consolidado</div>
-      <div class="tab" onclick="stockTab('ubicacion',this)">⚖ Sala de Pesado</div>
+      <div class="tab" onclick="stockTab('deposito',this)">📦 Depósito</div>
+      <div class="tab" onclick="stockTab('ubicacion',this)">⚖ Salas de Pesado</div>
       <div class="tab" onclick="stockTab('rotacion',this)">🔄 Rotación</div>
     </div>
     <div class="tab-pane active" id="stp-consolidado">
@@ -925,6 +926,22 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <div class="tab-pane" id="stp-rotacion" style="padding-top:16px">
       <div id="rot-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px"></div>
       <div id="rot-body"></div>
+    </div>
+    <div class="tab-pane" id="stp-deposito">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px" id="dep-kpis"></div>
+      <div class="tbl-wrap"><table class="tbl">
+        <thead><tr>
+          <th>Código</th>
+          <th>Insumo</th>
+          <th style="font-size:10px;color:var(--text2)">🏷 Lote</th>
+          <th class="tr">Cantidad</th>
+          <th>Vencimiento</th>
+          <th style="font-size:10px;color:var(--text2)">📍 Ubicación</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="tbl-stock-dep"></tbody>
+      </table></div>
+      <div class="pag" id="pag-stock-dep"></div>
     </div>
     <div class="tab-pane" id="stp-ubicacion">
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px" id="ubic-kpis"></div>
@@ -7221,6 +7238,107 @@ function stockTab(id, el) {
   document.getElementById('stp-'+id).classList.add('active');
   if(id==='ubicacion') renderStockUbicacion();
   if(id==='rotacion')  renderRotacion();
+  if(id==='deposito')  renderStockDeposito();
+}
+
+function renderStockDeposito() {
+  initAllUbicaciones();
+  const q = (document.getElementById('s-stock')?.value||'').toLowerCase();
+  const arr = getStockArr();
+
+  // Construir filas por lote de depósito
+  // Un "lote de depósito" es: lote cuya ubicacion NO contiene "Sala P"
+  // Si el insumo tiene deposito > 0 pero sin lotes de depósito, creamos fila sintética
+  const rows = [];
+  let totalKgDep = 0, insumosConDep = 0, venc30 = 0, vencidos = 0;
+
+  arr.forEach(s => {
+    const u = getUbic(s);
+    const cantDep = u.deposito || 0;
+    if(cantDep <= 0) return;
+    if(q && !s.codigo.toLowerCase().includes(q) && !s.nombre.toLowerCase().includes(q)) return;
+
+    totalKgDep += cantDep;
+    insumosConDep++;
+
+    // Lotes de depósito: los que no son sala
+    const lotesDep = (s.lotes||[]).filter(l => {
+      const ub = (l.ubicacion||'').toLowerCase();
+      return !ub.includes('sala p') && (l.cantidad > 0 || l.vencimiento);
+    });
+
+    if(lotesDep.length > 0) {
+      lotesDep.forEach((l, idx) => {
+        const dias = diasHastaVenc(l.vencimiento);
+        if(dias !== null && dias < 0) vencidos++;
+        else if(dias !== null && dias <= 30) venc30++;
+        const rowStyle = dias!==null&&dias<0
+          ? 'background:rgba(192,57,43,.09);border-left:3px solid var(--red)'
+          : dias!==null&&dias<=30 ? 'background:rgba(249,115,22,.05)' : '';
+        const revKey = `${s.codigo}__${(l.lote||'').trim()||'#'+idx}`;
+        const hasRev = !!(S.revalidas||{})[revKey];
+        rows.push({cod:s.codigo, nombre:s.nombre, um:s.um||'kg', lote:l.lote||'—', cant:l.cantidad||cantDep, venc:l.vencimiento||'', ubic:l.ubicacion||'—', rowStyle, hasRev, revKey, loteIdx:idx});
+      });
+    } else {
+      // Sin lote asignado al depósito — fila sintética con cant total del depósito
+      rows.push({cod:s.codigo, nombre:s.nombre, um:s.um||'kg', lote:'—', cant:cantDep, venc:'', ubic:'Depósito', rowStyle:'', hasRev:false, revKey:'', loteIdx:-1});
+    }
+  });
+
+  // KPIs
+  document.getElementById('dep-kpis').innerHTML = [
+    {label:'📦 Total en Depósito', val: fmt(totalKgDep,2)+' kg', sub: insumosConDep+' insumos', color:'var(--acc)'},
+    {label:'🧩 Insumos', val: insumosConDep, sub:'con stock en depósito', color:'var(--gold)'},
+    {label:'⚠ Por vencer', val: venc30, sub:'en menos de 30 días', color: venc30>0?'var(--orange)':'var(--text3)'},
+    {label:'🔴 Vencidos', val: vencidos, sub:'lotes vencidos en depósito', color: vencidos>0?'var(--red)':'var(--text3)'},
+  ].map(k=>`<div class="card" style="padding:14px 16px;border-top:3px solid ${k.color}">
+    <div style="font-size:10px;color:var(--text3);margin-bottom:4px">${k.label}</div>
+    <div style="font-size:22px;font-weight:700;color:${k.color};font-family:var(--mono)">${k.val}</div>
+    <div style="font-size:10px;color:var(--text3);margin-top:3px">${k.sub}</div>
+  </div>`).join('');
+
+  if(!rows.length) {
+    document.getElementById('tbl-stock-dep').innerHTML =
+      `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text3)">
+        <div style="font-size:32px;margin-bottom:8px">📦</div>
+        <div>No hay stock en depósito con los filtros actuales.</div>
+      </td></tr>`;
+    renderPag('pag-stock-dep', 0, 25, 1, ()=>{});
+    return;
+  }
+
+  const PER = 30, page = S.stockDepPage||1;
+  const paged = paginate(rows, page, PER);
+
+  document.getElementById('tbl-stock-dep').innerHTML = paged.map(r => {
+    const dias = diasHastaVenc(r.venc);
+    const vencHtml = r.venc ? vencPill(r.venc) : '<span style="color:var(--text3)">—</span>';
+    const cantHtml = `<b style="font-family:var(--mono)">${fmt(r.cant,3)}</b> <span style="font-size:9px;color:var(--text3)">${r.um}</span>`;
+    const ubicHtml = r.ubic !== '—'
+      ? `<span style="background:rgba(74,127,212,.12);color:#4a7fd4;border-radius:4px;padding:2px 7px;font-size:10px;font-family:var(--mono)">${r.ubic}</span>`
+      : `<span style="color:var(--text3)">—</span>`;
+    const loteHtml = r.lote !== '—'
+      ? `<span style="font-family:var(--mono);font-size:11px">${r.lote}</span>`
+      : `<span style="color:var(--text3)">—</span>`;
+    const revBtn = r.hasRev
+      ? `<button class="btn btn-sm" onclick="abrirRevalida('${r.cod}',${r.loteIdx})" style="font-size:10px;padding:3px 6px;border-color:#22c55e;color:#22c55e" title="Ver reválida">📎✓</button>`
+      : `<button class="btn btn-sm" onclick="abrirRevalida('${r.cod}',${r.loteIdx})" style="font-size:10px;padding:3px 6px;border-color:var(--text3);color:var(--text3)" title="Adjuntar reválida">📎</button>`;
+    return `<tr style="${r.rowStyle}">
+      <td class="td-code">${r.cod}</td>
+      <td class="td-name">${r.nombre}</td>
+      <td>${loteHtml}</td>
+      <td class="tr">${cantHtml}</td>
+      <td>${vencHtml}</td>
+      <td>${ubicHtml}</td>
+      <td style="display:flex;gap:4px">
+        <button class="btn btn-sm" onclick="abrirTransferir('${r.cod}')" style="font-size:10px;padding:3px 6px;border-color:#4a7fd4;color:#4a7fd4" title="Transferir a sala">↔</button>
+        <button class="btn btn-sm" onclick="abrirAjusteStock('${r.cod}')" style="font-size:10px;padding:3px 6px;border-color:var(--gold);color:var(--gold)" title="Ajustar">✏</button>
+        ${revBtn}
+      </td>
+    </tr>`;
+  }).join('');
+
+  renderPag('pag-stock-dep', rows.length, PER, page, p=>{S.stockDepPage=p; renderStockDeposito();});
 }
 
 function renderStockUbicacion() {
