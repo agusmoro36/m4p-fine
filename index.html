@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260522-106';
+  var VER = '20260522-107';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3927,10 +3927,8 @@ function applyState(st) {
               sala2:    base.ubicaciones.sala2    || 0
             };
             D.stock[k].stock = base.stock;
-            // Limpiar lotes de depósito viejos de Supabase, conservar solo sala
-            const lotesConSala = (D.stock[k].lotes||[]).filter(l => (l.ubicacion||'').includes('Sala P'));
-            const lotesBase = (base.lotes||[]).filter(l => (l.ubicacion||'').includes('Sala P'));
-            D.stock[k].lotes = lotesConSala.length ? lotesConSala : (lotesBase.length ? lotesBase : undefined);
+            // Seed nuevo: usar exactamente los lotes del seed (incluye depósito + sala)
+            D.stock[k].lotes = base.lotes;
           } else {
             // Supabase perdió la distribución de salas → restaurar desde baseline
             const vSala    = (v.ubicaciones?.sala1||0) + (v.ubicaciones?.sala2||0);
