@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260522-103';
+  var VER = '20260522-104';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -7786,6 +7786,8 @@ function renderStock(){
   const maxS=Math.max(...data.map(s=>s.stock))||1;
   const page=paginate(data,S.stockPage,25);
   initAllUbicaciones();
+  // Recalcular stock total desde ubicaciones para evitar desincronía con Supabase
+  page.forEach(s=>{ syncStockTotal(s); });
   const rows=[];
   page.forEach(s=>{
     const lotes=s.lotes||[];
