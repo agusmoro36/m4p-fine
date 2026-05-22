@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260522-104';
+  var VER = '20260522-105';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -3949,8 +3949,10 @@ function applyState(st) {
         }
         if (!v.lotes && lotesExistentes) D.stock[k].lotes = lotesExistentes;
       });
-      // Balancear deposito si stock > suma(ubicaciones) por migraciones que ajustan solo el total
-      _syncUbicaciones();
+      // Recalcular deposito desde lotes de depósito (fuente más confiable que Supabase)
+      _recomputeDepositoFromLotes();
+      // Balancear stock total = deposito + sala1 + sala2
+      Object.values(D.stock).forEach(s => { if(s?.ubicaciones) syncStockTotal(s); });
       // Restaurar lotes desde LS como segunda fuente
       try {
         const ls = JSON.parse(localStorage.getItem(LS_KEY)||'{}');
@@ -7207,6 +7209,19 @@ function getUbic(s) {
 function syncStockTotal(s) {
   const u = s.ubicaciones||{};
   s.stock = Math.round(((u.deposito||0)+(u.sala1||0)+(u.sala2||0))*1000)/1000;
+}
+function _recomputeDepositoFromLotes() {
+  // Recalcular ubicaciones.deposito sumando las cantidades de los lotes de depósito.
+  // Los lotes siempre vienen del seed hardcodeado (Supabase los stripea).
+  // Esto corrige discrepancias cuando Supabase tiene un deposito viejo.
+  Object.values(D.stock).forEach(s => {
+    if (!s || !s.lotes || !s.ubicaciones) return;
+    const depLotes = s.lotes.filter(l => !(l.ubicacion||'').includes('Sala P'));
+    if (depLotes.length === 0) return;
+    s.ubicaciones.deposito = Math.round(
+      depLotes.reduce((sum, l) => sum + (parseFloat(l.cantidad)||0), 0) * 1000
+    ) / 1000;
+  });
 }
 function _syncUbicaciones() {
   // Asegura que suma(deposito+sala1+sala2) == stock para todos los insumos.
