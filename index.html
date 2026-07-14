@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260522-107';
+  var VER = '20260714-119';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -462,6 +462,7 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <div class="nav-group" onclick="toggleNavGroup(this)">Producción</div>
     <div class="nav-item" onclick="go('produccion')"><span class="nav-ico">⚙</span>Producción Real</div>
     <div class="nav-item" onclick="go('bom')"><span class="nav-ico">◎</span>Fórmulas / BOM</div>
+    <div class="nav-item" onclick="go('ordenesfazon')"><span class="nav-ico">📋</span>Órdenes a Fazón<span class="nav-new">NEW</span></div>
     <div class="nav-group" onclick="toggleNavGroup(this)">Compras</div>
     <div class="nav-item" onclick="go('propuestas')"><span class="nav-ico">◈</span>OCs Propuestas<span class="nav-badge" id="nb-propuestas" style="display:none">0</span></div>
     <div class="nav-item" onclick="go('compras')"><span class="nav-ico">◆</span>Órdenes de Compra<span class="nav-badge blue" id="nb-oc">21</span></div>
@@ -1018,6 +1019,61 @@ body.viewer-mode .page-filters select { pointer-events:auto }
       <div style="font-size:16px;font-weight:600;margin-bottom:6px">Sin movimientos registrados</div>
       <div style="font-size:13px">Los movimientos se registran al recibir mercadería desde Recepción Depósito.</div>
     </div>
+  </div>
+
+  <!-- ══ ÓRDENES A FAZÓN ══ -->
+  <div class="page" id="page-ordenesfazon">
+    <div class="sh">
+      <div class="sh-title">Órdenes a Fazón <span style="font-size:13px;color:var(--text3);font-weight:400">· producción en Nutratec</span></div>
+      <div class="sh-actions">
+        <select class="fsel" id="f-of-estado" onchange="renderOrdenesFazon()">
+          <option value="">Todos los estados</option>
+          <option value="borrador">Borrador</option>
+          <option value="despachada">Despachada</option>
+          <option value="produccion">En producción</option>
+          <option value="recibida">Recibida</option>
+        </select>
+        <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-ordenesfazon" placeholder="Buscar producto..." oninput="renderOrdenesFazon()"></div>
+        <button class="btn btn-p btn-sm" onclick="abrirNuevaOrdenFazon()">+ Nueva orden</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap" id="of-kpis"></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr>
+        <th>N° Orden</th>
+        <th>Productos</th>
+        <th class="tr">Unidades</th>
+        <th class="tc">Estado</th>
+        <th class="tc">Despacho</th>
+        <th class="tr">Valor insumos</th>
+        <th class="tc" style="width:220px">Acciones</th>
+      </tr></thead>
+      <tbody id="tbl-ordenesfazon"></tbody>
+    </table></div>
+    <div class="pag" id="pag-ordenesfazon"></div>
+    <div id="of-empty" style="display:none;text-align:center;padding:60px;color:var(--text2)">
+      <div style="font-size:40px;margin-bottom:12px">📋</div>
+      <div style="font-size:16px;font-weight:600;margin-bottom:6px">Sin órdenes a fazón</div>
+      <div style="font-size:13px">Creá una orden con "+ Nueva orden" para enviar insumos a producir a Nutratec.</div>
+    </div>
+
+    <div class="sh" style="margin-top:30px;cursor:pointer" onclick="toggleStockPT()">
+      <div class="sh-title" style="font-size:17px">📦 Inventario de Producto Terminado <span id="of-pt-caret" style="font-size:13px;color:var(--text3)">▾</span></div>
+    </div>
+    <div id="of-pt-wrap" class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>Código</th>
+          <th>Producto</th>
+          <th class="tr">Stock total</th>
+          <th>Lote</th>
+          <th class="tc">Vencimiento</th>
+          <th class="tr">Cantidad lote</th>
+        </tr></thead>
+        <tbody id="tbl-stockpt"></tbody>
+      </table>
+    </div>
+    <div id="of-pt-empty" style="display:none;text-align:center;padding:30px;color:var(--text2);font-size:13px">Sin producto terminado recibido todavía.</div>
   </div>
 
   <!-- ══ CALCULADORA MRP ══ -->
@@ -1602,6 +1658,52 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <div class="modal-footer">
       <button class="btn btn-g" onclick="closeM('m-plan')">Cancelar</button>
       <button class="btn btn-p" onclick="addPlan()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL NUEVA ORDEN A FAZÓN -->
+<div class="overlay" id="m-of-nueva">
+  <div class="modal" style="max-width:720px;width:92vw">
+    <button class="modal-close" onclick="closeM('m-of-nueva')">✕</button>
+    <div class="modal-title">+ Nueva Orden a Fazón</div>
+    <p style="font-size:12px;color:var(--text3);margin:0 0 14px">Agregá todos los productos y cantidades a producir en esta OF. El sistema consolida la cantidad total por insumo desde cada BOM.</p>
+    <div class="fl" style="max-width:240px;margin-bottom:14px"><label>Fazón</label><input type="text" id="of-nueva-fazon" value="Nutratec"></div>
+    <div style="font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin:0 0 8px">Productos a producir</div>
+    <div id="of-nueva-prods"></div>
+    <button class="btn btn-g btn-sm" onclick="agregarFilaProdFazon()" style="margin-top:2px">+ Agregar producto</button>
+    <div id="of-nueva-preview" style="margin-top:16px;max-height:40vh;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn btn-g" onclick="closeM('m-of-nueva')">Cancelar</button>
+      <button class="btn btn-p" onclick="guardarOrdenFazon()">Crear orden</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CONFIRMAR DESPACHO A FAZÓN -->
+<div class="overlay" id="m-of-despacho">
+  <div class="modal" style="max-width:900px;width:95vw">
+    <button class="modal-close" onclick="closeM('m-of-despacho')">✕</button>
+    <div class="modal-title">🚚 Confirmar despacho <span id="of-desp-nro" style="font-size:13px;color:var(--text3)"></span></div>
+    <p style="font-size:12px;color:var(--text3);margin:0 0 14px">Ajustá lo que <b>realmente sale del depósito</b> (podés enviar más que la fórmula, ej: bolsa cerrada). Los lotes se listan por <b>vencimiento más próximo</b> primero (FEFO); podés elegir uno o escribir un <b>lote manual</b> y su vencimiento. El stock se descuenta por la columna <b>A enviar</b>.</p>
+    <div id="of-desp-body" style="max-height:52vh;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn btn-g" onclick="closeM('m-of-despacho')">Cancelar</button>
+      <button class="btn btn-p" onclick="confirmarDespachoFazon()">🚚 Confirmar despacho</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RECEPCIÓN DE PRODUCTO TERMINADO -->
+<div class="overlay" id="m-of-recepcion">
+  <div class="modal" style="max-width:560px">
+    <button class="modal-close" onclick="closeM('m-of-recepcion')">✕</button>
+    <div class="modal-title">📥 Recepción de producto terminado <span id="of-rec-nro" style="font-size:13px;color:var(--text3)"></span></div>
+    <p style="font-size:12px;color:var(--text3);margin:0 0 14px">Cargá lo que devuelve Nutratec por cada producto. El <b>lote lo asigna Nutratec</b>. Cada uno se suma al inventario de Producto Terminado.</p>
+    <div id="of-rec-body" style="max-height:52vh;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn btn-g" onclick="closeM('m-of-recepcion')">Cancelar</button>
+      <button class="btn btn-p" onclick="confirmarRecepcionFazon()">📥 Confirmar recepción</button>
     </div>
   </div>
 </div>
@@ -2260,12 +2362,14 @@ body.viewer-mode .page-filters select { pointer-events:auto }
 
 <datalist id="prov-list"></datalist>
 <datalist id="insumo-list"></datalist>
+<datalist id="insumo-desc-list"></datalist>
 
 <script>
 // ══════════════════════════════════════
 // DATA
 // ══════════════════════════════════════
 const D = {
+  stockPT:{},   // inventario de producto terminado recibido de fazón: {PT-xxxx:{nombre,stock,um,lotes:[]}}
   productos:[
     {codigo:'PT-0003',descripcion:'FINE BEAUTY TROPICAL MIX',subcategory:'Nacional',feb:49,mar:900,abr:0,may:0,jun:0},
     {codigo:'PT-0002',descripcion:'FINE POWER RED SUPER FRUITS',subcategory:'Nacional',feb:2500,mar:1250,abr:0,may:0,jun:0},
@@ -2584,36 +2688,37 @@ const D = {
       'MP-0033':{nombre:'ESENCIA DE ARANDANOS',stock:0.3,um:'kg',ubicaciones:{deposito:0.0,sala1:0.3,sala2:0.0},lotes:[{"lote": "BU00315803", "cantidad": 7.427, "vencimiento": "2026-06-13", "ubicacion": "Sala P.1", "proveedor": "HARMONY", "fecha": "2026-04-20"}]},
       'MP-0030':{nombre:'DEXTROSA',stock:18.0,um:'kg',ubicaciones:{deposito:0.0,sala1:18.0,sala2:0.0},lotes:[{"lote": "XW230421F", "cantidad": 18.21, "vencimiento": "", "ubicacion": "Sala P.1", "proveedor": "EL BAHIENSE", "fecha": "2026-04-20"}]},
     // ── Inventario al 16-04-2026 (depósito) + 20-04-2026 (salas de pesado) ──
-      'INS-0005':{nombre:'Bolsas 50x70',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
+      'INS-0005':{nombre:'Bolsas 50x70',stock:0.0,um:'uni.',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
+      'INS-0006':{nombre:'BOLSAS POLIETILENO CRISTAL 60x90',stock:0.0,um:'uni.',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'INS-0022':{nombre:'stretch film manual transparente',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'MP-0002':{nombre:'ACESULFAME K',stock:37.9,um:'kg',ubicaciones:{deposito:0.0,sala1:37.9,sala2:0.0},lotes:[{"lote": "ACK2411005", "cantidad": 37.57, "vencimiento": "2026-11-18 00:00:00", "ubicacion": "Sala P.1", "proveedor": "INGREDIENTS SOLUTIONS", "fecha": "2026-04-20"}]},
-      'MP-0003':{nombre:'ACIDO CÍTRICO',stock:27.024,um:'kg',ubicaciones:{deposito:0.0,sala1:27.024,sala2:0.0},lotes:[{"lote": "502000320", "cantidad": 18.62, "vencimiento": "2028-02-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "ALMIDAR", "fecha": "2026-04-20"}]},
+      'MP-0003':{nombre:'ACIDO CÍTRICO',stock:202.024,um:'kg',ubicaciones:{deposito:175,sala1:27.024,sala2:0.0},lotes:[{"lote": "A32501023", "cantidad": 175, "vencimiento": "", "ubicacion": "MP60", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "502000320", "cantidad": 18.62, "vencimiento": "2028-02-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "ALMIDAR", "fecha": "2026-04-20"}]},
       'MP-0004':{nombre:'AZUCAR REFINADA',stock:31.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:31.0},lotes:[{"lote": "LTR46161A", "cantidad": 31.0, "vencimiento": "2027-11-11 00:00:00", "ubicacion": "Sala P.2", "proveedor": "EL BAHIENSE", "fecha": "2026-04-20"}]},
-      'MP-0007':{nombre:'BISGLICINATO DE MAGNESIO',stock:45.1,um:'kg',ubicaciones:{deposito:25,sala1:20.1,sala2:0.0},lotes:[{"lote": "3161679", "cantidad": 25, "vencimiento": "2028-08-14", "ubicacion": "MP42", "proveedor": "", "fecha": "2026-05-22"}]},
+      'MP-0007':{nombre:'BISGLICINATO DE MAGNESIO',stock:95.1,um:'kg',ubicaciones:{deposito:75,sala1:20.1,sala2:0.0},lotes:[{"lote": "3161679", "cantidad": 75, "vencimiento": "2028-08-14", "ubicacion": "MP42", "proveedor": "ETILFARMA", "fecha": "2026-05-18"}]},
       'MP-0008':{nombre:'CAFEÍNA ANHIDRA',stock:9.519,um:'kg',ubicaciones:{deposito:0.0,sala1:9.305,sala2:0.214},lotes:[{"lote": "1032309432", "cantidad": 2.26, "vencimiento": "2028-08-31 00:00:00", "ubicacion": "Sala P.1", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}, {"lote": "1032403489", "cantidad": 0.214, "vencimiento": "2029-02-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "MAGEL", "fecha": "2026-04-20"}]},
       'MP-0009':{nombre:'CARBONATO DE CALCIO LIVIANO',stock:27.355,um:'kg',ubicaciones:{deposito:25,sala1:2.355,sala2:0.0},lotes:[{"lote": "318706", "cantidad": 18.4, "vencimiento": "2026-05-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "MAGEL", "fecha": "2026-04-20"}, {"lote": "24031812", "cantidad": 25, "vencimiento": "", "ubicacion": "MP20", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0010':{nombre:'CETONA DE FRAMBUESAS',stock:19.643,um:'kg',ubicaciones:{deposito:0.0,sala1:19.643,sala2:0.0},lotes:[{"lote": "427-C-160326D", "cantidad": 3.064, "vencimiento": "2029-03-16 00:00:00", "ubicacion": "Sala P.1", "proveedor": "LINNEO", "fecha": "2026-04-20"}]},
       'MP-0011':{nombre:'CICLAMATO DE SODIO',stock:24.058,um:'kg',ubicaciones:{deposito:0.0,sala1:24.058,sala2:0.0},lotes:[{"lote": "22310172", "cantidad": 24.228, "vencimiento": "2026-09-16 00:00:00", "ubicacion": "Sala P.1", "proveedor": "BAHIENSE", "fecha": "2026-04-20"}]},
-      'MP-0012':{nombre:'CITRATO DE CALCIO',stock:18.73,um:'kg',ubicaciones:{deposito:0.0,sala1:18.73,sala2:0.0},lotes:[{"lote": "2006148", "cantidad": 18.98, "vencimiento": "2025-12-01", "ubicacion": "Sala P.1", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}]},
-      'MP-0013':{nombre:'CITRATO DE MAGNESIO (HEPTAHIDRATADO)',stock:0.698,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.698},lotes:[{"lote": "406G087", "cantidad": 27.0, "vencimiento": "2026-07-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "ADAMA", "fecha": "2026-04-20"}]},
+      'MP-0012':{nombre:'CITRATO DE CALCIO',stock:38.73,um:'kg',ubicaciones:{deposito:20,sala1:18.73,sala2:0.0},lotes:[{"lote": "2006148", "cantidad": 20, "vencimiento": "", "ubicacion": "MP12", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "2006148", "cantidad": 18.98, "vencimiento": "2025-12-01", "ubicacion": "Sala P.1", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}]},
+      'MP-0013':{nombre:'CITRATO DE MAGNESIO (HEPTAHIDRATADO)',stock:175.698,um:'kg',ubicaciones:{deposito:175,sala1:0.0,sala2:0.698},lotes:[{"lote": "321261", "cantidad": 100, "vencimiento": "", "ubicacion": "", "proveedor": "MAGEL", "fecha": "2026-05-14"}, {"lote": "4076087", "cantidad": 50, "vencimiento": "", "ubicacion": "MP60", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "320659", "cantidad": 25, "vencimiento": "", "ubicacion": "MP60", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "406G087", "cantidad": 27.0, "vencimiento": "2026-07-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "ADAMA", "fecha": "2026-04-20"}]},
       'MP-0014':{nombre:'CITRATO DE POTASIO',stock:57.948,um:'kg',ubicaciones:{deposito:50,sala1:0.0,sala2:7.948},lotes:[{"lote": "504D072", "cantidad": 20.3, "vencimiento": "2026-04-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "ADAMA", "fecha": "2026-04-20"}, {"lote": "03021088", "cantidad": 50, "vencimiento": "", "ubicacion": "MP42", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0015':{nombre:'CITRATO DE SODIO (DIHIDRATADO)',stock:61.801,um:'kg',ubicaciones:{deposito:50,sala1:0.0,sala2:11.801},lotes:[{"lote": "30620166", "cantidad": 12.51, "vencimiento": "2026-06-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "ADAMA", "fecha": "2026-04-20"}, {"lote": "30620166", "cantidad": 50, "vencimiento": "2026-06-01", "ubicacion": "MP4", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0016':{nombre:'CITRULINA',stock:120.6,um:'kg',ubicaciones:{deposito:100,sala1:20.6,sala2:0.0},lotes:[{"lote": "HK012509001", "cantidad": 3.33, "vencimiento": "2027-09-04 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SAPORITI", "fecha": "2026-04-20"}, {"lote": "HK012509001", "cantidad": 50, "vencimiento": "2027-09-04", "ubicacion": "MP18", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "25120301", "cantidad": 50, "vencimiento": "2028-12-01", "ubicacion": "MP18", "proveedor": "", "fecha": "2026-05-22"}]},
-      'MP-0018':{nombre:'CO Q10 (COENZIMA)',stock:10,um:'kg',ubicaciones:{deposito:10,sala1:0.0,sala2:0.0},lotes:[{"lote": "51-2507124", "cantidad": 10, "vencimiento": "", "ubicacion": "MP42", "proveedor": "", "fecha": "2026-05-22"}]},
-      'MP-0020':{nombre:'COLAGENO `ULTRA BD`',stock:22.0,um:'kg',ubicaciones:{deposito:0.0,sala1:22.0,sala2:0.0},lotes:[{"lote": "L000301120", "cantidad": 22.0, "vencimiento": "2028-08-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "PBLEINER", "fecha": "2026-04-20"}]},
+      'MP-0018':{nombre:'CO Q10 (COENZIMA)',stock:14,um:'kg',ubicaciones:{deposito:14,sala1:0.0,sala2:0.0},lotes:[{"lote": "51-2507124", "cantidad": 10, "vencimiento": "", "ubicacion": "MP42", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "U240652", "cantidad": 4, "vencimiento": "", "ubicacion": "MP42", "proveedor": "MAGEL", "fecha": "2026-05-14"}]},
+      'MP-0020':{nombre:'COLAGENO `ULTRA BD`',stock:532,um:'kg',ubicaciones:{deposito:510,sala1:22.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 510, "vencimiento": "2029-04-04", "ubicacion": "", "proveedor": "MCCASSAB", "fecha": "2026-05-18"}, {"lote": "L000301120", "cantidad": 22.0, "vencimiento": "2028-08-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "PBLEINER", "fecha": "2026-04-20"}]},
       'MP-0022':{nombre:'COLINA BITARTRATO',stock:29.834,um:'kg',ubicaciones:{deposito:0.0,sala1:22.834,sala2:7.0},lotes:[{"lote": "CB20230107S", "cantidad": 25.31, "vencimiento": "2026-07-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}, {"lote": "CB20230108S", "cantidad": 7.0, "vencimiento": "2027-01-12 00:00:00", "ubicacion": "Sala P.2", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}]},
       'MP-0023':{nombre:'COLORANTE AZUL BRILLANTE',stock:2.334,um:'kg',ubicaciones:{deposito:0.0,sala1:0.341,sala2:1.993},lotes:[{"lote": "PBB2228", "cantidad": 2.0, "vencimiento": "2030-08-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "C-DIA", "fecha": "2026-04-20"}, {"lote": "PBB1777", "cantidad": 0.435, "vencimiento": "2027-08-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "C-DIA", "fecha": "2026-04-20"}]},
       'MP-0024':{nombre:'SULFATO CONDROITINA',stock:1.349,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:1.349},lotes:[{"lote": "240601", "cantidad": 1.349, "vencimiento": "2026-05-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "MAGEL", "fecha": "2026-04-20"}]},
       'MP-0025':{nombre:'COLORANTE ERITROSINA',stock:1.5,um:'kg',ubicaciones:{deposito:0.0,sala1:0.5,sala2:1.0},lotes:[{"lote": "PERM24897", "cantidad": 1.0, "vencimiento": "2030-07-23 00:00:00", "ubicacion": "Sala P.2", "proveedor": "MAGEL", "fecha": "2026-04-20"}, {"lote": "PERM23548", "cantidad": 0.601, "vencimiento": "2029-10-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "C-DIA", "fecha": "2026-04-20"}]},
       'MP-0026':{nombre:'COLORANTE OCASO',stock:0.73,um:'kg',ubicaciones:{deposito:0.0,sala1:0.73,sala2:0.0},lotes:[{"lote": "PSY3279", "cantidad": 0.888, "vencimiento": "2027-08-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "C-DIA", "fecha": "2026-04-20"}]},
-      'MP-0027':{nombre:'COLORANTE ROJO AMARANTO',stock:0.024,um:'kg',ubicaciones:{deposito:0.0,sala1:0.024,sala2:0.0},lotes:[{"lote": "PAM19348", "cantidad": 0.07, "vencimiento": "2027-08-12 00:00:00", "ubicacion": "Sala P.1", "proveedor": "MAGEL", "fecha": "2026-04-20"}]},
+      'MP-0027':{nombre:'COLORANTE ROJO AMARANTO',stock:1.024,um:'kg',ubicaciones:{deposito:1,sala1:0.024,sala2:0.0},lotes:[{"lote": "pam24576", "cantidad": 1, "vencimiento": "", "ubicacion": "", "proveedor": "MAGEL", "fecha": "2026-05-14"}, {"lote": "PAM19348", "cantidad": 0.07, "vencimiento": "2027-08-12 00:00:00", "ubicacion": "Sala P.1", "proveedor": "MAGEL", "fecha": "2026-04-20"}]},
       'MP-0028':{nombre:'CREATINA',stock:54.8,um:'kg',ubicaciones:{deposito:50,sala1:4.8,sala2:0.0},lotes:[{"lote": "20241105", "cantidad": 5.965, "vencimiento": "2027-11-04 00:00:00", "ubicacion": "Sala P.1", "proveedor": "DROGUERIA LIBERTAD", "fecha": "2026-04-20"}, {"lote": "20261120", "cantidad": 50, "vencimiento": "2026-11-30", "ubicacion": "MP35", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0031':{nombre:'DIOXIDO DE SILICIO',stock:18.02,um:'kg',ubicaciones:{deposito:0.0,sala1:18.02,sala2:0.0},lotes:[{"lote": "BEK08BASE1", "cantidad": 5.19, "vencimiento": "2027-11-08 00:00:00", "ubicacion": "Sala P.1", "proveedor": "EL BAHIENSE", "fecha": "2026-04-20"}]},
       'MP-0032':{nombre:'DIOXIDO DE TITANIO',stock:25.138,um:'kg',ubicaciones:{deposito:25,sala1:0.0,sala2:0.138},lotes:[{"lote": "202110211", "cantidad": 1.98, "vencimiento": "2026-10-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "MAGEL", "fecha": "2026-04-20"}, {"lote": "202207230", "cantidad": 25, "vencimiento": "", "ubicacion": "MP42", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0035':{nombre:'EXT. AÇAI',stock:1.133,um:'kg',ubicaciones:{deposito:0.0,sala1:1.133,sala2:0.0},lotes:[{"lote": "25043010930108", "cantidad": 1.57, "vencimiento": "2028-04-11 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SOALJO", "fecha": "2026-04-20"}]},
       'MP-0036':{nombre:'EXT. ACEROLA 17%',stock:4.67,um:'kg',ubicaciones:{deposito:0.0,sala1:4.67,sala2:0.0},lotes:[{"lote": "HGSS900", "cantidad": 0.79, "vencimiento": "2028-03-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "BASEL", "fecha": "2026-04-20"}]},
       'MP-0037':{nombre:'EXT. ALCACHOFA',stock:4.096,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:4.096},lotes:[{"lote": "25022981430304", "cantidad": 4.096, "vencimiento": "2028-02-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "SOALJO", "fecha": "2026-04-20"}]},
-      'MP-0039':{nombre:'EXT. ARANDANO',stock:12.7,um:'kg',ubicaciones:{deposito:0.0,sala1:12.7,sala2:0.0},lotes:[{"lote": "250302443-30243", "cantidad": 13.402, "vencimiento": "2028-04-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SOALJO", "fecha": "2026-04-20"}]},
+      'MP-0039':{nombre:'EXT. ARANDANO',stock:52.7,um:'kg',ubicaciones:{deposito:40,sala1:12.7,sala2:0.0},lotes:[{"lote": "", "cantidad": 40, "vencimiento": "", "ubicacion": "MP41", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "250302443-30243", "cantidad": 13.402, "vencimiento": "2028-04-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SOALJO", "fecha": "2026-04-20"}]},
       'MP-0040':{nombre:'EXT. BRÓCOLI',stock:706.962,um:'kg',ubicaciones:{deposito:700,sala1:0.0,sala2:6.962},lotes:[{"lote": "25053034630345", "cantidad": 21.377, "vencimiento": "2028-05-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "SOALJO", "fecha": "2026-04-20"}, {"lote": "", "cantidad": 700, "vencimiento": "2026-12-08", "ubicacion": "MP31, MP52, MP44", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0041':{nombre:'EXT. CAFÉ VERDE',stock:0.912,um:'kg',ubicaciones:{deposito:0.0,sala1:0.912,sala2:0.0},lotes:[{"lote": "260232256632255", "cantidad": 4.9, "vencimiento": "2029-02-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SOALJO", "fecha": "2026-04-20"}]},
       'MP-0042':{nombre:'EXT. CARDO MARIANO',stock:1.3,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:1.3},lotes:[{"lote": "241028972-28971", "cantidad": 1.3, "vencimiento": "2027-10-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "SOALJO", "fecha": "2026-04-20"}]},
@@ -2630,8 +2735,8 @@ const D = {
       'MP-0054':{nombre:'EXT. GRANADA',stock:4.92,um:'kg',ubicaciones:{deposito:0.0,sala1:4.92,sala2:0.0},lotes:[{"lote": "24112919129190", "cantidad": 4.89, "vencimiento": "2027-11-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SOALJO", "fecha": "2026-04-20"}]},
       'MP-0055':{nombre:'EXT. GUARANÁ',stock:6.0,um:'kg',ubicaciones:{deposito:0.0,sala1:6.0,sala2:0.0},lotes:[{"lote": "097-C-040326E", "cantidad": 8.99, "vencimiento": "2029-03-04 00:00:00", "ubicacion": "Sala P.1", "proveedor": "LINNEO", "fecha": "2026-04-20"}]},
       'MP-0056':{nombre:'EXT. HIBISCUS',stock:59.842,um:'kg',ubicaciones:{deposito:50,sala1:9.842,sala2:0.0},lotes:[{"lote": "25053039930398", "cantidad": 5.91, "vencimiento": "2028-05-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SOALJO", "fecha": "2026-04-20"}, {"lote": "inicio s/lote", "cantidad": 50, "vencimiento": "2026-12-08", "ubicacion": "MP52", "proveedor": "", "fecha": "2026-05-22"}]},
-      'MP-0057':{nombre:'EXT. JENGIBRE',stock:198.141,um:'kg',ubicaciones:{deposito:190,sala1:0.0,sala2:8.141},lotes:[{"lote": "250530451-30450", "cantidad": 3.281, "vencimiento": "2028-05-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "SOALJO", "fecha": "2026-04-20"}, {"lote": "", "cantidad": 190, "vencimiento": "2026-12-08", "ubicacion": "MP46", "proveedor": "", "fecha": "2026-05-22"}]},
-      'MP-0058':{nombre:'EXT. KALE',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[{"lote": "25053034030339", "cantidad": 2.82, "vencimiento": "2028-05-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SOALJO", "fecha": "2026-04-20"}]},
+      'MP-0057':{nombre:'EXT. JENGIBRE',stock:328.141,um:'kg',ubicaciones:{deposito:320,sala1:0.0,sala2:8.141},lotes:[{"lote": "", "cantidad": 130, "vencimiento": "", "ubicacion": "MP41", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "250530451-30450", "cantidad": 3.281, "vencimiento": "2028-05-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "SOALJO", "fecha": "2026-04-20"}, {"lote": "", "cantidad": 190, "vencimiento": "2026-12-08", "ubicacion": "MP46", "proveedor": "", "fecha": "2026-05-22"}]},
+      'MP-0058':{nombre:'EXT. KALE',stock:70,um:'kg',ubicaciones:{deposito:70,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 70, "vencimiento": "", "ubicacion": "MP41", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "25053034030339", "cantidad": 2.82, "vencimiento": "2028-05-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SOALJO", "fecha": "2026-04-20"}]},
       'MP-0060':{nombre:'EXT. MAQUI',stock:8.729,um:'kg',ubicaciones:{deposito:0.0,sala1:8.729,sala2:0.0},lotes:[{"lote": "TW-150K-40E", "cantidad": 0.14, "vencimiento": "2027-03-31 00:00:00", "ubicacion": "Sala P.1", "proveedor": "BASEL", "fecha": "2026-04-20"}]},
       'MP-0062':{nombre:'EXT. MORINGA',stock:257.527,um:'kg',ubicaciones:{deposito:255,sala1:0.0,sala2:2.527},lotes:[{"lote": "25053045730456", "cantidad": 7.679, "vencimiento": "2028-05-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "SOALJO", "fecha": "2026-04-20"}, {"lote": "inicio s/lote", "cantidad": 255, "vencimiento": "2026-12-08", "ubicacion": "MP51", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0064':{nombre:'EXT. ORTIGA',stock:8.176,um:'kg',ubicaciones:{deposito:0.0,sala1:8.176,sala2:0.0},lotes:[{"lote": "811-C-160425H", "cantidad": 0.35, "vencimiento": "2028-04-10 00:00:00", "ubicacion": "Sala P.1", "proveedor": "LINNEO", "fecha": "2026-04-20"}]},
@@ -2648,9 +2753,9 @@ const D = {
       'MP-0078':{nombre:'GLUCOMANANO',stock:53.727,um:'kg',ubicaciones:{deposito:40,sala1:13.727,sala2:0.0},lotes:[{"lote": "22579", "cantidad": 13.727, "vencimiento": "2025-10-31", "ubicacion": "Sala P.1", "proveedor": "MAGEL", "fecha": "2026-04-20"}, {"lote": "22579-2", "cantidad": 40, "vencimiento": "2027-10-01", "ubicacion": "MP42, MP34", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0079':{nombre:'GLUCONATO DE MAGNESIO',stock:64.836,um:'kg',ubicaciones:{deposito:60,sala1:4.836,sala2:0.0},lotes:[{"lote": "317242", "cantidad": 4.926, "vencimiento": "2029-02-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "MAGEL", "fecha": "2026-04-20"}, {"lote": "317825", "cantidad": 40, "vencimiento": "2029-07-01", "ubicacion": "MP4", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "317242", "cantidad": 20, "vencimiento": "2029-02-01", "ubicacion": "MP4", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0080':{nombre:'GLUCONATO DE ZN',stock:9.3,um:'kg',ubicaciones:{deposito:5,sala1:4.3,sala2:0.0},lotes:[{"lote": "318217", "cantidad": 3.343, "vencimiento": "2027-03-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "MAGEL", "fecha": "2026-04-20"}, {"lote": "20250519120", "cantidad": 5, "vencimiento": "2028-05-18", "ubicacion": "MP34", "proveedor": "", "fecha": "2026-05-22"}]},
-      'MP-0082':{nombre:'GLUTAMINA',stock:25.55,um:'kg',ubicaciones:{deposito:25,sala1:0.0,sala2:0.55},lotes:[{"lote": "GM2412026", "cantidad": 0.55, "vencimiento": "2026-12-18 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PAMPA TRADE", "fecha": "2026-04-20"}, {"lote": "GM2412026", "cantidad": 25, "vencimiento": "2026-12-18", "ubicacion": "MP18", "proveedor": "", "fecha": "2026-05-22"}]},
+      'MP-0082':{nombre:'GLUTAMINA',stock:1000.55,um:'kg',ubicaciones:{deposito:1000,sala1:0.0,sala2:0.55},lotes:[{"lote": "GM2412026", "cantidad": 0.55, "vencimiento": "2026-12-18 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PAMPA TRADE", "fecha": "2026-04-20"}, {"lote": "GM2412026", "cantidad": 25, "vencimiento": "2026-12-18", "ubicacion": "MP18", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "GM2412026", "cantidad": 525, "vencimiento": "2026-12-18", "ubicacion": "MP33", "proveedor": "PAMPA TRADE", "fecha": "2026-05-22"}, {"lote": "GM2505023", "cantidad": 450, "vencimiento": "", "ubicacion": "MP26", "proveedor": "PAMPA TRADE", "fecha": "2026-05-22"}]},
       'MP-0083':{nombre:'GOFOS P95/GL',stock:19.012,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:19.012},lotes:[{"lote": "GOF2504102", "cantidad": 19.012, "vencimiento": "2027-07-24 00:00:00", "ubicacion": "Sala P.2", "proveedor": "CORDIS", "fecha": "2026-04-20"}]},
-      'MP-0084':{nombre:'GOMA XANTICA',stock:12.249,um:'kg',ubicaciones:{deposito:0.0,sala1:12.249,sala2:0.0},lotes:[{"lote": "520240924241", "cantidad": 13.39, "vencimiento": "2026-09-23 00:00:00", "ubicacion": "Sala P.1", "proveedor": "INGREDIENTS SOLUTIONS", "fecha": "2026-04-20"}]},
+      'MP-0084':{nombre:'GOMA XANTICA',stock:87.249,um:'kg',ubicaciones:{deposito:75,sala1:12.249,sala2:0.0},lotes:[{"lote": "520240924241", "cantidad": 13.39, "vencimiento": "2026-09-23 00:00:00", "ubicacion": "Sala P.1", "proveedor": "INGREDIENTS SOLUTIONS", "fecha": "2026-04-20"}, {"lote": "52024092241", "cantidad": 50, "vencimiento": "", "ubicacion": "MP09", "proveedor": "INGREDIENTS SOLUTIONS", "fecha": "2026-05-22"}, {"lote": "36240930", "cantidad": 25, "vencimiento": "", "ubicacion": "MP09", "proveedor": "INGREDIENTS SOLUTIONS", "fecha": "2026-05-22"}]},
       'MP-0085':{nombre:'L-ARGININA',stock:149.43,um:'kg',ubicaciones:{deposito:125,sala1:24.43,sala2:0.0},lotes:[{"lote": "23122101", "cantidad": 25.43, "vencimiento": "2026-12-20 00:00:00", "ubicacion": "Sala P.1", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}, {"lote": "23122101", "cantidad": 125, "vencimiento": "2026-12-31", "ubicacion": "MP18", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0086':{nombre:'L-CARNITINA',stock:31.519,um:'kg',ubicaciones:{deposito:25,sala1:6.519,sala2:0.0},lotes:[{"lote": "LCB240419057", "cantidad": 7.17, "vencimiento": "2027-04-18 00:00:00", "ubicacion": "Sala P.1", "proveedor": "DROGUERIA LIBERTAD", "fecha": "2026-04-20"}, {"lote": "LCB240419057", "cantidad": 25, "vencimiento": "2027-04-18", "ubicacion": "MP18", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0087':{nombre:'L-CISTEÍNA',stock:25.75,um:'kg',ubicaciones:{deposito:25,sala1:0.75,sala2:0.0},lotes:[{"lote": "LIDH240518", "cantidad": 2.899, "vencimiento": "2026-05-17 00:00:00", "ubicacion": "Sala P.1", "proveedor": "EL BAHIENSE", "fecha": "2026-04-20"}, {"lote": "LIDH250602", "cantidad": 25, "vencimiento": "2027-06-01", "ubicacion": "MP18", "proveedor": "", "fecha": "2026-05-22"}]},
@@ -2659,7 +2764,7 @@ const D = {
       'MP-0094':{nombre:'L-TAURINA',stock:13.174,um:'kg',ubicaciones:{deposito:0.0,sala1:13.174,sala2:0.0},lotes:[{"lote": "XP23104682", "cantidad": 13.174, "vencimiento": "2026-10-17 00:00:00", "ubicacion": "Sala P.1", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}]},
       'MP-0096':{nombre:'L-TRIPTOFANO',stock:21.693,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:21.693},lotes:[{"lote": "HGAD24120602", "cantidad": 21.693, "vencimiento": "2027-12-05 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PAMPA TRADE", "fecha": "2026-04-20"}]},
       'MP-0098':{nombre:'LIPOWHEATOIL',stock:40,um:'kg',ubicaciones:{deposito:20,sala1:0.0,sala2:20.0},lotes:[{"lote": "3435343", "cantidad": 20.0, "vencimiento": "2026-05-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "ROBERTET", "fecha": "2026-04-20"}, {"lote": "0003435343", "cantidad": 20, "vencimiento": "2026-05-01", "ubicacion": "MP42", "proveedor": "", "fecha": "2026-05-22"}]},
-      'MP-0099':{nombre:'LUTEINA 5%',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
+      'MP-0099':{nombre:'LUTEINA 5%',stock:125,um:'kg',ubicaciones:{deposito:125,sala1:0.0,sala2:0.0},lotes:[{"lote": "UT23070015", "cantidad": 125, "vencimiento": "", "ubicacion": "MP12", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0100':{nombre:'MALTODEXTRINA (DE MAÍZ)',stock:12.67,um:'kg',ubicaciones:{deposito:0.0,sala1:12.67,sala2:0.0},lotes:[{"lote": "20251119", "cantidad": 15.565, "vencimiento": "2027-11-18 00:00:00", "ubicacion": "Sala P.1", "proveedor": "EL BAHIENSE", "fecha": "2026-04-20"}]},
       'MP-0101':{nombre:'MASKING FLAVOR',stock:28.383,um:'kg',ubicaciones:{deposito:25,sala1:3.383,sala2:0.0},lotes:[{"lote": "1000080064", "cantidad": 10.05, "vencimiento": "2026-09-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "FLAIR", "fecha": "2026-04-20"}, {"lote": "1000084272", "cantidad": 25, "vencimiento": "2027-03-01", "ubicacion": "MP34", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0102':{nombre:'MEZCLA EN POLVO DE VITAMINA A, ZINC Y FOSFORO PARA ALIMENTOS',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
@@ -2676,20 +2781,20 @@ const D = {
       'MP-0117':{nombre:'SABOR ANANÁ',stock:8.3,um:'kg',ubicaciones:{deposito:0.0,sala1:8.3,sala2:0.0},lotes:[{"lote": "150722117", "cantidad": 11.075, "vencimiento": "2026-11-13 00:00:00", "ubicacion": "Sala P.1", "proveedor": "DUAS RODAS", "fecha": "2026-04-20"}]},
       'MP-0118':{nombre:'SABOR AVELLANA',stock:24.275,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:24.275},lotes:[{"lote": "1000077939", "cantidad": 24.275, "vencimiento": "2026-07-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "FLAIR", "fecha": "2026-04-20"}]},
       'MP-0119':{nombre:'SABOR CHOCOLATE',stock:59.594,um:'kg',ubicaciones:{deposito:50,sala1:0.0,sala2:9.594},lotes:[{"lote": "BU00298405", "cantidad": 9.808, "vencimiento": "2026-06-04 00:00:00", "ubicacion": "Sala P.2", "proveedor": "HARMONY", "fecha": "2026-04-20"}, {"lote": "BU00306547", "cantidad": 50, "vencimiento": "2026-10-28", "ubicacion": "MP61", "proveedor": "", "fecha": "2026-05-22"}]},
-      'MP-0120':{nombre:'CHOCOLATE ALCALINO',stock:20.5,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:20.5},lotes:[{"lote": "53229936", "cantidad": 20.702, "vencimiento": "2026-12-03 00:00:00", "ubicacion": "Sala P.2", "proveedor": "HARMONY", "fecha": "2026-04-20"}]},
+      'MP-0120':{nombre:'CHOCOLATE ALCALINO',stock:520.5,um:'kg',ubicaciones:{deposito:500,sala1:0.0,sala2:20.5},lotes:[{"lote": "53229936", "cantidad": 20.702, "vencimiento": "2026-12-03 00:00:00", "ubicacion": "Sala P.2", "proveedor": "HARMONY", "fecha": "2026-04-20"}, {"lote": "0048803992", "cantidad": 500, "vencimiento": "", "ubicacion": "MP25", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0121':{nombre:'SABOR COCO',stock:41.389,um:'kg',ubicaciones:{deposito:25,sala1:16.389,sala2:0.0},lotes:[{"lote": "1000072872", "cantidad": 16.417, "vencimiento": "2026-06-09", "ubicacion": "Sala P.1", "proveedor": "FLAIR", "fecha": "2026-04-20"}, {"lote": "1000072872", "cantidad": 25, "vencimiento": "2025-11-30", "ubicacion": "MP54", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0123':{nombre:'SABOR DURAZNO',stock:67.5,um:'kg',ubicaciones:{deposito:45,sala1:22.5,sala2:0.0},lotes:[{"lote": "1000084000", "cantidad": 7.12, "vencimiento": "2027-03-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "FLAIR", "fecha": "2026-04-20"}, {"lote": "1000084904", "cantidad": 25, "vencimiento": "2027-03-01", "ubicacion": "MP34", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "BU0029681", "cantidad": 20, "vencimiento": "2025-05-07", "ubicacion": "MP54", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0124':{nombre:'SABOR FRUTAS TROPICALES',stock:32.77,um:'kg',ubicaciones:{deposito:25,sala1:0.0,sala2:7.77},lotes:[{"lote": "1000083571", "cantidad": 11.53, "vencimiento": "2027-02-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "FLAIR", "fecha": "2026-04-20"}, {"lote": "1000083654", "cantidad": 25, "vencimiento": "2027-02-01", "ubicacion": "MP34", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0125':{nombre:'SABOR FRUTOS ROJOS',stock:19.11,um:'kg',ubicaciones:{deposito:0.0,sala1:19.11,sala2:0.0},lotes:[{"lote": "1000083572", "cantidad": 19.11, "vencimiento": "2027-02-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "FLAIR", "fecha": "2026-04-20"}]},
-      'MP-0126':{nombre:'SABOR LIMON',stock:32.931,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:32.931},lotes:[{"lote": "1000076794", "cantidad": 4.35, "vencimiento": "2026-05-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "FLAIR", "fecha": "2026-04-20"}, {"lote": "1000077787", "cantidad": 14.05, "vencimiento": "2026-06-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "FLAIR", "fecha": "2026-04-20"}]},
+      'MP-0126':{nombre:'SABOR LIMON',stock:107.931,um:'kg',ubicaciones:{deposito:75,sala1:0.0,sala2:32.931},lotes:[{"lote": "1000076794", "cantidad": 4.35, "vencimiento": "2026-05-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "FLAIR", "fecha": "2026-04-20"}, {"lote": "1000077787", "cantidad": 14.05, "vencimiento": "2026-06-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "FLAIR", "fecha": "2026-04-20"}, {"lote": "1000076794", "cantidad": 50, "vencimiento": "", "ubicacion": "MP09", "proveedor": "FLAIR", "fecha": "2026-05-22"}, {"lote": "1000076049", "cantidad": 25, "vencimiento": "", "ubicacion": "MP09", "proveedor": "FLAIR", "fecha": "2026-05-22"}]},
       'MP-0127':{nombre:'APPLE CRUMBLE FLAVOR XG076W',stock:21.269,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:21.269},lotes:[{"lote": "240829108", "cantidad": 1.156, "vencimiento": "2026-08-22 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PROVA", "fecha": "2026-04-20"}, {"lote": "250625458", "cantidad": 25.0, "vencimiento": "2027-06-23 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PROVA", "fecha": "2026-04-20"}]},
       'MP-0128':{nombre:'SABOR MANZANA',stock:225,um:'kg',ubicaciones:{deposito:225,sala1:0.0,sala2:0.0},lotes:[{"lote": "250625458", "cantidad": 225, "vencimiento": "2027-06-23", "ubicacion": "MP62", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0129':{nombre:'SABOR MARACUYA G',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'MP-0130':{nombre:'SABOR MARACUYÁ',stock:28.3,um:'kg',ubicaciones:{deposito:0.0,sala1:28.3,sala2:0.0},lotes:[{"lote": "1000083573", "cantidad": 13.42, "vencimiento": "2027-02-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "FLAIR", "fecha": "2026-04-20"}]},
       'MP-0132':{nombre:'SABOR VAINILLA',stock:22.452,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:22.452},lotes:[{"lote": "1000077940", "cantidad": 22.452, "vencimiento": "2026-07-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "FLAIR", "fecha": "2026-04-20"}]},
       'MP-0133':{nombre:'SACARINA DE SODIO',stock:48.565,um:'kg',ubicaciones:{deposito:25,sala1:0.0,sala2:23.565},lotes:[{"lote": "20230802", "cantidad": 23.585, "vencimiento": "2026-08-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "ADAMA", "fecha": "2026-04-20"}, {"lote": "2024032901", "cantidad": 25, "vencimiento": "2026-03-20", "ubicacion": "MP20", "proveedor": "", "fecha": "2026-05-22"}]},
-      'MP-0134':{nombre:'SAL - CLORURO DE SODIO',stock:9.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:9.0},lotes:[{"lote": "M291124", "cantidad": 14.33, "vencimiento": "2026-11-29 00:00:00", "ubicacion": "Sala P.2", "proveedor": "EL BAHIENSE", "fecha": "2026-04-20"}]},
-      'MP-0136':{nombre:'STEVIA RA50',stock:8.39,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:8.39},lotes:[{"lote": "20250210", "cantidad": 9.666, "vencimiento": "2027-02-09 00:00:00", "ubicacion": "Sala P.2", "proveedor": "INGREDIENTS SOLUTIONS", "fecha": "2026-04-20"}]},
+      'MP-0134':{nombre:'SAL - CLORURO DE SODIO',stock:134,um:'kg',ubicaciones:{deposito:125,sala1:0.0,sala2:9.0},lotes:[{"lote": "10022026", "cantidad": 125, "vencimiento": "", "ubicacion": "", "proveedor": "MAGEL", "fecha": "2026-05-14"}, {"lote": "M291124", "cantidad": 14.33, "vencimiento": "2026-11-29 00:00:00", "ubicacion": "Sala P.2", "proveedor": "EL BAHIENSE", "fecha": "2026-04-20"}]},
+      'MP-0136':{nombre:'STEVIA RA50',stock:83.39,um:'kg',ubicaciones:{deposito:75,sala1:0.0,sala2:8.39},lotes:[{"lote": "20250210", "cantidad": 9.666, "vencimiento": "2027-02-09 00:00:00", "ubicacion": "Sala P.2", "proveedor": "INGREDIENTS SOLUTIONS", "fecha": "2026-04-20"}, {"lote": "20250210", "cantidad": 50, "vencimiento": "2027-02-09", "ubicacion": "MP09", "proveedor": "INGREDIENTS SOLUTIONS", "fecha": "2026-05-22"}, {"lote": "20230621", "cantidad": 25, "vencimiento": "", "ubicacion": "MP09", "proveedor": "INGREDIENTS SOLUTIONS", "fecha": "2026-05-22"}]},
       'MP-0137':{nombre:'SUCRALOSA',stock:2.213,um:'kg',ubicaciones:{deposito:0.0,sala1:2.213,sala2:0.0},lotes:[{"lote": "S2412007P", "cantidad": 4.49, "vencimiento": "2026-12-16 00:00:00", "ubicacion": "Sala P.1", "proveedor": "INGREDIENTS SOLUTIONS", "fecha": "2026-04-20"}]},
       'MP-0138':{nombre:'SULFATO ZINC MONOHIDRATADO',stock:24.8,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:24.8},lotes:[{"lote": "317022", "cantidad": 41.25, "vencimiento": "2026-10-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "MAGEL", "fecha": "2026-04-20"}]},
       'MP-0139':{nombre:'TRIPICOLINATO DE CROMO -(PICOLINATO)',stock:0.216,um:'kg',ubicaciones:{deposito:0.0,sala1:0.116,sala2:0.1},lotes:[{"lote": "319182", "cantidad": 0.1, "vencimiento": "2029-03-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}, {"lote": "313953", "cantidad": 0.119, "vencimiento": "2026-04-30 00:00:00", "ubicacion": "Sala P.1", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}]},
@@ -2708,7 +2813,7 @@ const D = {
       'MP-0159':{nombre:'GOMA GUAR',stock:68.89,um:'kg',ubicaciones:{deposito:50,sala1:0.0,sala2:18.89},lotes:[{"lote": "VB-2522", "cantidad": 18.89, "vencimiento": "2026-12-16 00:00:00", "ubicacion": "Sala P.2", "proveedor": "EL BAHIENSE", "fecha": "2026-04-20"}, {"lote": "240810V802", "cantidad": 50, "vencimiento": "2026-08-10", "ubicacion": "MP4", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0160':{nombre:'Aroma Durazno TO-292-101-6',stock:10.225,um:'kg',ubicaciones:{deposito:0.0,sala1:10.225,sala2:0.0},lotes:[{"lote": "BU00296881", "cantidad": 10.225, "vencimiento": "2025-05-01", "ubicacion": "Sala P.1", "proveedor": "HARMONY", "fecha": "2026-04-20"}]},
       'MP-0161':{nombre:'Masking GIV SZ-756-278-5',stock:16.887,um:'kg',ubicaciones:{deposito:0.0,sala1:16.887,sala2:0.0},lotes:[{"lote": "BU00302276", "cantidad": 20.987, "vencimiento": "2026-03-29", "ubicacion": "Sala P.1", "proveedor": "GIVAUDAN", "fecha": "2026-04-20"}]},
-      'MP-0162':{nombre:'PROTEINA EMULPROT 90B',stock:720,um:'kg',ubicaciones:{deposito:660,sala1:60.0,sala2:0.0},lotes:[{"lote": "OP-00123251", "cantidad": 60.0, "vencimiento": "2027-03-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SAPORITI", "fecha": "2026-04-20"}, {"lote": "OP-00123251", "cantidad": 660, "vencimiento": "2027-03-31", "ubicacion": "MP23", "proveedor": "", "fecha": "2026-05-22"}]},
+      'MP-0162':{nombre:'PROTEINA EMULPROT 90B',stock:1180,um:'kg',ubicaciones:{deposito:1120,sala1:60.0,sala2:0.0},lotes:[{"lote": "OP-00123251", "cantidad": 60.0, "vencimiento": "2027-03-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SAPORITI", "fecha": "2026-04-20"}, {"lote": "OP-00123251", "cantidad": 660, "vencimiento": "2027-03-31", "ubicacion": "MP23", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "OP-00123251", "cantidad": 460, "vencimiento": "2027-03-31", "ubicacion": "MP17", "proveedor": "SAPORITI", "fecha": "2026-05-22"}]},
       'MP-0163':{nombre:'PROTEÍNA ARVEJA - EMULPROT ARV + 80B',stock:590,um:'kg',ubicaciones:{deposito:570,sala1:20.0,sala2:0.0},lotes:[{"lote": "OP-00121968", "cantidad": 100.0, "vencimiento": "2026-11-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SAPORITI", "fecha": "2026-04-20"}, {"lote": "OP00121968", "cantidad": 500, "vencimiento": "2026-11-30", "ubicacion": "MP29", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "OP-0011968", "cantidad": 70, "vencimiento": "2026-11-30", "ubicacion": "MP35", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0165':{nombre:'INULINA',stock:2080.546,um:'kg',ubicaciones:{deposito:2075,sala1:0.0,sala2:5.546},lotes:[{"lote": "C2049658", "cantidad": 11.974, "vencimiento": "2030-03-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "SAPORITI", "fecha": "2026-04-20"}, {"lote": "L2049536", "cantidad": 2075, "vencimiento": "2030-02-01", "ubicacion": "MP13, MP19, MP53", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0166':{nombre:'EXTRACTO SECO DE PAPAYA',stock:12.88,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:12.88},lotes:[{"lote": "250229773-29772", "cantidad": 12.88, "vencimiento": "2028-02-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "SOALJO", "fecha": "2026-04-20"}]},
@@ -2720,21 +2825,21 @@ const D = {
       'MP-0172':{nombre:'VIMIX 613',stock:2.811,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:2.811},lotes:[{"lote": "P15425", "cantidad": 2.811, "vencimiento": "2026-06-03 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PAMPATRADE", "fecha": "2026-04-20"}]},
       'MP-0173':{nombre:'VIMIX 615',stock:19.195,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:19.195},lotes:[{"lote": "P24025", "cantidad": 19.195, "vencimiento": "2026-08-28 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PAMPATRADE", "fecha": "2026-04-20"}]},
       'MP-0175':{nombre:'STEVIA RA97',stock:7.24,um:'kg',ubicaciones:{deposito:5,sala1:2.24,sala2:0.0},lotes:[{"lote": "20251023", "cantidad": 3.807, "vencimiento": "2027-10-22 00:00:00", "ubicacion": "Sala P.1", "proveedor": "INGREDIENTS SOLUTIONS", "fecha": "2026-04-20"}, {"lote": "20251023", "cantidad": 5, "vencimiento": "2027-10-22", "ubicacion": "MP42", "proveedor": "", "fecha": "2026-05-22"}]},
-      'MP-0179':{nombre:'PROTEINA AISLADA DE LUPINO',stock:802.46,um:'kg',ubicaciones:{deposito:795,sala1:0.0,sala2:7.46},lotes:[{"lote": "PO117659", "cantidad": 7.6, "vencimiento": "2027-04-28 00:00:00", "ubicacion": "Sala P.2", "proveedor": "ELEMENTA", "fecha": "2026-04-20"}, {"lote": "PO117660", "cantidad": 795, "vencimiento": "2027-06-12", "ubicacion": "MP15, MP06", "proveedor": "", "fecha": "2026-05-22"}]},
+      'MP-0179':{nombre:'PROTEINA AISLADA DE LUPINO',stock:1087.46,um:'kg',ubicaciones:{deposito:1080,sala1:0.0,sala2:7.46},lotes:[{"lote": "PO117659", "cantidad": 7.6, "vencimiento": "2027-04-28 00:00:00", "ubicacion": "Sala P.2", "proveedor": "ELEMENTA", "fecha": "2026-04-20"}, {"lote": "PO117660", "cantidad": 795, "vencimiento": "2027-06-12", "ubicacion": "MP15, MP06", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "PO117660", "cantidad": 15, "vencimiento": "2027-06-12", "ubicacion": "MP09", "proveedor": "ELEMENTA", "fecha": "2026-05-22"}, {"lote": "PO117659", "cantidad": 270, "vencimiento": "2027-04-28", "ubicacion": "MP06", "proveedor": "ELEMENTA", "fecha": "2026-05-22"}]},
       'MP-0180':{nombre:'SABOR VAINILLA MT-554-424-3',stock:167.7,um:'kg',ubicaciones:{deposito:150,sala1:0.0,sala2:17.7},lotes:[{"lote": "BUOO323491", "cantidad": 17.7, "vencimiento": "2026-06-19 00:00:00", "ubicacion": "Sala P.2", "proveedor": "HARMONY", "fecha": "2026-04-20"}, {"lote": "BU00323491", "cantidad": 150, "vencimiento": "2026-06-19", "ubicacion": "MP34", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0182':{nombre:'SABOR SWETTNES ZU-648-457',stock:113.1,um:'kg',ubicaciones:{deposito:100,sala1:13.1,sala2:0.0},lotes:[{"lote": "BU00321473", "cantidad": 13.1, "vencimiento": "2026-05-22", "ubicacion": "Sala P.1", "proveedor": "HARMONY", "fecha": "2026-04-20"}, {"lote": "BU00321473", "cantidad": 100, "vencimiento": "2026-05-22", "ubicacion": "MP34, MP61", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0183':{nombre:'SABOR CHOCOLATE LB-632-358-8',stock:234.854,um:'kg',ubicaciones:{deposito:225,sala1:9.854,sala2:0.0},lotes:[{"lote": "BU00312694", "cantidad": 9.854, "vencimiento": "2026-06-13", "ubicacion": "Sala P.1", "proveedor": "HARMONY", "fecha": "2026-04-20"}, {"lote": "BU00322869", "cantidad": 225, "vencimiento": "2026-06-12", "ubicacion": "MP61", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0184':{nombre:'LECHE DE COCO',stock:14.928,um:'kg',ubicaciones:{deposito:0,sala1:0.0,sala2:14.928},lotes:[{"lote": "CMP40R-0824-PIL05", "cantidad": 14.928, "vencimiento": "2026-08-26 00:00:00", "ubicacion": "Sala P.2", "proveedor": "MELAR", "fecha": "2026-04-20"}, {"lote": "CMP40R-1224-PIL164", "cantidad": 0, "vencimiento": "2026-12-08", "ubicacion": "MP43", "proveedor": "", "fecha": "2026-05-22"}]},
-      'MP-0185':{nombre:'PROTEINA PLAN PROT 100',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
+      'MP-0185':{nombre:'PROTEINA PLAN PROT 100',stock:100,um:'kg',ubicaciones:{deposito:100,sala1:0.0,sala2:0.0},lotes:[{"lote": "M10042502", "cantidad": 80, "vencimiento": "", "ubicacion": "MP12", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "M15082502", "cantidad": 20, "vencimiento": "", "ubicacion": "MP12", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0187':{nombre:'Sabor Limón UW-170-467-4',stock:17.575,um:'kg',ubicaciones:{deposito:0.0,sala1:17.575,sala2:0.0},lotes:[{"lote": "BU00305407", "cantidad": 23.61, "vencimiento": "2026-05-13", "ubicacion": "Sala P.1", "proveedor": "HARMONY", "fecha": "2026-04-20"}]},
-      'MP-0188':{nombre:'CONCENTRADO PROTEICO DE ARVEJA 80%',stock:3003.14,um:'kg',ubicaciones:{deposito:3000,sala1:0.0,sala2:3.14},lotes:[{"lote": "3700/15221230784", "cantidad": 8.56, "vencimiento": "2025-11-15", "ubicacion": "Sala P.1", "proveedor": "ELEMENTA", "fecha": "2026-04-20"}, {"lote": "3700/15221240647", "cantidad": 3000, "vencimiento": "2026-12-11", "ubicacion": "MP11, MP21, MP27, MP28, MP30", "proveedor": "", "fecha": "2026-05-22"}]},
+      'MP-0188':{nombre:'CONCENTRADO PROTEICO DE ARVEJA 80%',stock:3013.14,um:'kg',ubicaciones:{deposito:3010,sala1:0.0,sala2:3.14},lotes:[{"lote": "3700/15221230784", "cantidad": 8.56, "vencimiento": "2025-11-15", "ubicacion": "Sala P.1", "proveedor": "ELEMENTA", "fecha": "2026-04-20"}, {"lote": "3700/15221240647", "cantidad": 3000, "vencimiento": "2026-12-11", "ubicacion": "MP11, MP21, MP27, MP28, MP30", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "3700A5221246177", "cantidad": 10, "vencimiento": "", "ubicacion": "MP09", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0189':{nombre:'EXT. MANZANILLA',stock:1.911,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:1.911},lotes:[{"lote": "16858", "cantidad": 1.911, "vencimiento": "2028-06-18 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PROYAR", "fecha": "2026-04-20"}]},
       'MP-0190':{nombre:'EXT. MELISA',stock:4.536,um:'kg',ubicaciones:{deposito:2,sala1:0.0,sala2:2.536},lotes:[{"lote": "16834", "cantidad": 2.536, "vencimiento": "2028-06-03 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PROYAR", "fecha": "2026-04-20"}, {"lote": "", "cantidad": 2, "vencimiento": "2028-06-03", "ubicacion": "MP54", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0191':{nombre:'EXT. VALERIANA',stock:0.533,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.533},lotes:[{"lote": "16861", "cantidad": 0.533, "vencimiento": "2028-06-18 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PROYAR", "fecha": "2026-04-20"}]},
       'MP-0192':{nombre:'EXT. TILO',stock:0.652,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.652},lotes:[{"lote": "16543", "cantidad": 0.652, "vencimiento": "2028-01-16 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PROYAR", "fecha": "2026-04-20"}]},
       'MP-0193':{nombre:'EXT. PASIFLORA',stock:4.6,um:'kg',ubicaciones:{deposito:2,sala1:0.0,sala2:2.6},lotes:[{"lote": "16303", "cantidad": 2.6, "vencimiento": "2027-10-04 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PROYAR", "fecha": "2026-04-20"}, {"lote": "", "cantidad": 2, "vencimiento": "2027-10-04", "ubicacion": "MP54", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0194':{nombre:'01/05/26',stock:1.348,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:1.348},lotes:[{"lote": "240601", "cantidad": 1.348, "vencimiento": "", "ubicacion": "Sala P.2", "proveedor": "", "fecha": "2026-04-20"}]},
-      'MP-0195':{nombre:'EXT. SCHIZANDRA',stock:11.4,um:'kg',ubicaciones:{deposito:10,sala1:1.4,sala2:0.0},lotes:[{"lote": "16519", "cantidad": 3.033, "vencimiento": "2028-01-07 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PROYAR", "fecha": "2026-04-20"}, {"lote": "41898", "cantidad": 10, "vencimiento": "", "ubicacion": "MP42", "proveedor": "", "fecha": "2026-05-22"}]},
+      'MP-0195':{nombre:'EXT. SCHIZANDRA',stock:21.4,um:'kg',ubicaciones:{deposito:20,sala1:1.4,sala2:0.0},lotes:[{"lote": "16519", "cantidad": 3.033, "vencimiento": "2028-01-07 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PROYAR", "fecha": "2026-04-20"}, {"lote": "41898", "cantidad": 10, "vencimiento": "", "ubicacion": "MP42", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "", "cantidad": 10, "vencimiento": "", "ubicacion": "MP60", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0196':{nombre:'EXT. UÑA DE GATO',stock:10.818,um:'kg',ubicaciones:{deposito:5,sala1:0.0,sala2:5.818},lotes:[{"lote": "16701", "cantidad": 5.818, "vencimiento": "2028-04-04 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PROYAR", "fecha": "2026-04-20"}, {"lote": "", "cantidad": 5, "vencimiento": "2028-04-04", "ubicacion": "MP54", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0197':{nombre:'EXT. SALIX ALBA',stock:1.373,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:1.373},lotes:[{"lote": "16555", "cantidad": 1.373, "vencimiento": "2028-02-03 00:00:00", "ubicacion": "Sala P.2", "proveedor": "PROYAR", "fecha": "2026-04-20"}]},
       'MP-0198':{nombre:'METILSULFONILMETANO (MSM)',stock:2.885,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:2.885},lotes:[{"lote": "20240511", "cantidad": 2.885, "vencimiento": "2026-05-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "MAGEL", "fecha": "2026-04-20"}]},
@@ -2751,8 +2856,8 @@ const D = {
       'MP-0214':{nombre:'SABOR MELON 533270',stock:1.09,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:1.09},lotes:[{"lote": "354639", "cantidad": 2.34, "vencimiento": "2026-09-16 00:00:00", "ubicacion": "Sala P.2", "proveedor": "ROBERTET", "fecha": "2026-04-20"}]},
       'MP-0219':{nombre:'LACTOBACILLUS RHAMNOSUS',stock:57.406,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:57.406},lotes:[{"lote": "DBLLR25042025", "cantidad": 63.523, "vencimiento": "2027-04-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "DIAGRAMMA", "fecha": "2026-04-20"}]},
       'MP-0224':{nombre:'SABOR FRAMBUESA 76525-31-1',stock:23.998,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:23.998},lotes:[{"lote": "BU00330003", "cantidad": 23.998, "vencimiento": "2027-09-30 00:00:00", "ubicacion": "Sala P.2", "proveedor": "HARMONY", "fecha": "2026-04-20"}]},
-      'MP-0225':{nombre:'SABOR SANDÍA 508305600030762',stock:8.612,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:8.612},lotes:[{"lote": "150722897", "cantidad": 8.612, "vencimiento": "2026-11-19 00:00:00", "ubicacion": "Sala P.2", "proveedor": "DUAS RODAS", "fecha": "2026-04-20"}]},
-      'MP-0226':{nombre:'EXTRACTO LIMÓN',stock:24.8,um:'kg',ubicaciones:{deposito:20,sala1:4.8,sala2:0.0},lotes:[{"lote": "26023202432023", "cantidad": 5.3, "vencimiento": "2029-02-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SOALJO", "fecha": "2026-04-20"}, {"lote": "41928", "cantidad": 20, "vencimiento": "", "ubicacion": "MP42", "proveedor": "", "fecha": "2026-05-22"}]},
+      'MP-0225':{nombre:'SABOR SANDÍA 508305600030762',stock:28.612,um:'kg',ubicaciones:{deposito:20,sala1:0.0,sala2:8.612},lotes:[{"lote": "", "cantidad": 20, "vencimiento": "", "ubicacion": "", "proveedor": "MATHIESEN ARGENTINA", "fecha": "2026-05-18"}, {"lote": "150722897", "cantidad": 8.612, "vencimiento": "2026-11-19 00:00:00", "ubicacion": "Sala P.2", "proveedor": "DUAS RODAS", "fecha": "2026-04-20"}]},
+      'MP-0226':{nombre:'EXTRACTO LIMÓN',stock:84.8,um:'kg',ubicaciones:{deposito:80,sala1:4.8,sala2:0.0},lotes:[{"lote": "26023202432023", "cantidad": 5.3, "vencimiento": "2029-02-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SOALJO", "fecha": "2026-04-20"}, {"lote": "41928", "cantidad": 20, "vencimiento": "", "ubicacion": "MP42", "proveedor": "", "fecha": "2026-05-22"}, {"lote": "", "cantidad": 60, "vencimiento": "", "ubicacion": "MP60", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0227':{nombre:'EXTRACTO MENTA',stock:9.815,um:'kg',ubicaciones:{deposito:0.0,sala1:9.815,sala2:0.0},lotes:[{"lote": "25113172532027", "cantidad": 9.815, "vencimiento": "2028-11-01 00:00:00", "ubicacion": "Sala P.1", "proveedor": "SOALJO", "fecha": "2026-04-20"}]},
       'MP-0228':{nombre:'AGUA DE COCO',stock:23.292,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:23.292},lotes:[{"lote": "19082508348", "cantidad": 23.579, "vencimiento": "2027-08-19 00:00:00", "ubicacion": "Sala P.2", "proveedor": "TRENDCHEMICAL", "fecha": "2026-04-20"}]},
       'MP-0230':{nombre:'SABOR ARANDANO-LAVANDA 534970',stock:12.346,um:'kg',ubicaciones:{deposito:6,sala1:6.346,sala2:0.0},lotes:[{"lote": "35491", "cantidad": 6, "vencimiento": "2027-02-10", "ubicacion": "MP54", "proveedor": "", "fecha": "2026-05-22"}]},
@@ -2760,19 +2865,21 @@ const D = {
       'MP-0232':{nombre:'L-THEANINA',stock:4.5,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:4.5},lotes:[{"lote": "T654-2506003", "cantidad": 5.0, "vencimiento": "2027-06-01 00:00:00", "ubicacion": "Sala P.2", "proveedor": "MAGEL", "fecha": "2026-04-20"}]},
       'MP-0234':{nombre:'Inositol (como myo-inositol)',stock:30.063,um:'kg',ubicaciones:{deposito:25,sala1:5.063,sala2:0.0},lotes:[{"lote": "N26625", "cantidad": 25, "vencimiento": "2026-09-23", "ubicacion": "MP18", "proveedor": "", "fecha": "2026-05-22"}]},
       'MP-0239':{nombre:'Vitamina K2 1%',stock:1.4,um:'kg',ubicaciones:{deposito:0.0,sala1:1.4,sala2:0.0},lotes:[{"lote": "6221-2505002", "cantidad": 0.9, "vencimiento": "2027-05-19 00:00:00", "ubicacion": "Sala P.1", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}, {"lote": "6221-2505002", "cantidad": 0.829, "vencimiento": "2027-05-19 00:00:00", "ubicacion": "Sala P.1", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}]},
-      'MP-0240':{nombre:'GLICINA',stock:25.88,um:'kg',ubicaciones:{deposito:0.0,sala1:25.88,sala2:0.0},lotes:[{"lote": "2512260764", "cantidad": 16.0, "vencimiento": "", "ubicacion": "Sala P.1", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}, {"lote": "2512260764", "cantidad": 10.588, "vencimiento": "2027-07-29 00:00:00", "ubicacion": "Sala P.1", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}]},
+      'MP-0240':{nombre:'GLICINA',stock:30.88,um:'kg',ubicaciones:{deposito:5,sala1:25.88,sala2:0.0},lotes:[{"lote": "318701", "cantidad": 5, "vencimiento": "", "ubicacion": "", "proveedor": "MAGEL", "fecha": "2026-05-14"}, {"lote": "2512260764", "cantidad": 16.0, "vencimiento": "", "ubicacion": "Sala P.1", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}, {"lote": "2512260764", "cantidad": 10.588, "vencimiento": "2027-07-29 00:00:00", "ubicacion": "Sala P.1", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}]},
       'MP-0241':{nombre:'SELENITO DE SODIO',stock:0.456,um:'kg',ubicaciones:{deposito:0.0,sala1:0.456,sala2:0.0},lotes:[{"lote": "D28825", "cantidad": 0.456, "vencimiento": "2027-10-15 00:00:00", "ubicacion": "Sala P.1", "proveedor": "NUTRALIA", "fecha": "2026-04-20"}]},
+      'MP-0242':{nombre:'PROMOTOR',stock:173.4,um:'kg',ubicaciones:{deposito:173.4,sala1:0.0,sala2:0.0},lotes:[{"lote": "9624391462", "cantidad": 173.4, "vencimiento": "", "ubicacion": "MP26", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0001':{nombre:'BLISTER FILL+',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0002':{nombre:'BOLSA APTO ALIMENTO',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
-      'PK-0007':{nombre:'CAJA N3 300x300x140mm',stock:1375,um:'kg',ubicaciones:{deposito:1375,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1375, "vencimiento": "", "ubicacion": "D49, E15", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0008':{nombre:'CAJA N4 425x325x365mm',stock:1420,um:'kg',ubicaciones:{deposito:1420,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1420, "vencimiento": "", "ubicacion": "D3, MP16, MP48, MP64, E16, E24", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0009':{nombre:'CAJA N5 385x290x185mm',stock:1700,um:'kg',ubicaciones:{deposito:1700,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1700, "vencimiento": "", "ubicacion": "D54, D16, D5", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0007':{nombre:'CAJA N3 300x300x140mm',stock:1375,um:'uni.',ubicaciones:{deposito:1375,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1375, "vencimiento": "", "ubicacion": "D49, E15", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0008':{nombre:'CAJA N4 425x325x365mm',stock:1420,um:'uni.',ubicaciones:{deposito:1420,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1420, "vencimiento": "", "ubicacion": "D3, MP16, MP48, MP64, E16, E24", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0009':{nombre:'CAJA N5 385x290x185mm',stock:1700,um:'uni.',ubicaciones:{deposito:1700,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1700, "vencimiento": "", "ubicacion": "D54, D16, D5", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0010':{nombre:'CAJA N6 300x260x305mm',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0011':{nombre:'CAJA N2 372x280x122mm',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
-      'PK-0018':{nombre:'ETIQUETA SUPERGREEN MANZANA 29.7 cm x 5.5 cm',stock:440,um:'kg',ubicaciones:{deposito:440,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 440, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0014':{nombre:'CUCHARA PLASTICA SUPERGREEN',stock:29160,um:'uni.',ubicaciones:{deposito:29160,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 29160, "vencimiento": "", "ubicacion": "", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0018':{nombre:'ETIQUETA SUPERGREEN MANZANA 29.7 cm x 5.5 cm',stock:440,um:'uni.',ubicaciones:{deposito:440,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 440, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0021':{nombre:'FUNDA TERMOSELLABLE AN APL 150x80 mm',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
-      'PK-0022':{nombre:'FUNDA TERMOSELLADO COLÁGENO  CRISTAL AN APL 196 MM X ALT 200 MM',stock:6000,um:'kg',ubicaciones:{deposito:6000,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 6000, "vencimiento": "", "ubicacion": "E1", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0024':{nombre:'FUNDA TERMOSELLADO PROTEÍNA CRISTAL AN APL 315 MM X ALT 215 MM',stock:10000,um:'kg',ubicaciones:{deposito:10000,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 10000, "vencimiento": "", "ubicacion": "E1", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0022':{nombre:'FUNDA TERMOSELLADO COLÁGENO  CRISTAL AN APL 196 MM X ALT 200 MM',stock:6000,um:'uni.',ubicaciones:{deposito:6000,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 6000, "vencimiento": "", "ubicacion": "E1", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0024':{nombre:'FUNDA TERMOSELLADO PROTEÍNA CRISTAL AN APL 315 MM X ALT 215 MM',stock:10000,um:'uni.',ubicaciones:{deposito:10000,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 10000, "vencimiento": "", "ubicacion": "E1", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0025':{nombre:'LAMINA BEAUTY BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 60',stock:82.6,um:'kg',ubicaciones:{deposito:82.6,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 82.6, "vencimiento": "", "ubicacion": "", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0026':{nombre:'LAMINA FIT BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 80',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0027':{nombre:'LAMINA PEAK BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 60',stock:430.6,um:'kg',ubicaciones:{deposito:430.6,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 430.6, "vencimiento": "", "ubicacion": "D13", "proveedor": "", "fecha": "2026-05-22"}]},
@@ -2780,27 +2887,32 @@ const D = {
       'PK-0029':{nombre:'LAMINA SCULPT BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 80',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0031':{nombre:'LAMINA SMOOTH BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 60',stock:94.8,um:'kg',ubicaciones:{deposito:94.8,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 94.8, "vencimiento": "", "ubicacion": "", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0032':{nombre:'LAMINA STRONG BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 80',stock:100.4,um:'kg',ubicaciones:{deposito:100.4,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 100.4, "vencimiento": "", "ubicacion": "", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0035':{nombre:'LATA FILL+ 200X115X85MM',stock:10634,um:'kg',ubicaciones:{deposito:10634,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 10634, "vencimiento": "", "ubicacion": "E26, E20, E21, E22, E23, E29, E31, E14, E6, E32, D48", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0034':{nombre:'LATA BEAUTY 100X100X170MM',stock:8,um:'uni.',ubicaciones:{deposito:8,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 8, "vencimiento": "", "ubicacion": "", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0035':{nombre:'LATA FILL+ 200X115X85MM',stock:10634,um:'uni.',ubicaciones:{deposito:10634,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 10634, "vencimiento": "", "ubicacion": "E26, E20, E21, E22, E23, E29, E31, E14, E6, E32, D48", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0037':{nombre:'LATA PEAK 100X100X170MM',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0038':{nombre:'LATA POWER 100X100X170MM',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
-      'PK-0039':{nombre:'LATA SCULPT 200X115X170MM',stock:490,um:'kg',ubicaciones:{deposito:490,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 490, "vencimiento": "", "ubicacion": "E17, E18, D39", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0039':{nombre:'LATA SCULPT 200X115X170MM',stock:490,um:'uni.',ubicaciones:{deposito:490,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 490, "vencimiento": "", "ubicacion": "E17, E18, D39", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0040':{nombre:'LATA SMOOTH 100X100X170MM',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0043':{nombre:'POTE PLASTICO  759 BLANCO',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0045':{nombre:'TAPA ALUMINIO FILL+',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
-      'PK-0049':{nombre:'TARJETON FIT D: 11,5X19,5CM 300GR LAMINADO MATE',stock:5000,um:'kg',ubicaciones:{deposito:5000,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 5000, "vencimiento": "", "ubicacion": "E1", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0055':{nombre:'TARJETON STRONG D: 11,5X19,5CM 300GR LAMINADO MATE',stock:2348,um:'kg',ubicaciones:{deposito:2348,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 2348, "vencimiento": "", "ubicacion": "E9", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0049':{nombre:'TARJETON FIT D: 11,5X19,5CM 300GR LAMINADO MATE',stock:5000,um:'uni.',ubicaciones:{deposito:5000,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 5000, "vencimiento": "", "ubicacion": "E1", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0055':{nombre:'TARJETON STRONG D: 11,5X19,5CM 300GR LAMINADO MATE',stock:2348,um:'uni.',ubicaciones:{deposito:2348,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 2348, "vencimiento": "", "ubicacion": "E9", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0063':{nombre:'LAMINA BOBINA PREQUIRURGICO MDT',stock:366.3,um:'kg',ubicaciones:{deposito:366.3,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 366.3, "vencimiento": "", "ubicacion": "D5", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0064':{nombre:'CUNITA PLASTICA PARA BILSTER FILL',stock:1169,um:'kg',ubicaciones:{deposito:1169,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1169, "vencimiento": "", "ubicacion": "E18, E9", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0064':{nombre:'CUNITA PLASTICA PARA BILSTER FILL',stock:1169,um:'uni.',ubicaciones:{deposito:1169,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1169, "vencimiento": "", "ubicacion": "E18, E9", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0080':{nombre:'LAMINA BTY INT BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 60',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0081':{nombre:'LAMINA PWR INT BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 60',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0082':{nombre:'LAMINA PEAK INT BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 60',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0083':{nombre:'POTE PLASTICO BLANCO PEAD 400 CC',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0084':{nombre:'TAPA PLASTICA INDUCCION D.91',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
-      'PK-0086':{nombre:'FUNDA TERMOSELLABLE AN APL 96,5MM X 80MM',stock:15000,um:'kg',ubicaciones:{deposito:15000,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 15000, "vencimiento": "", "ubicacion": "E1", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0066':{nombre:'LATA ESPAÑA PWR 100X100X170MM',stock:60,um:'uni.',ubicaciones:{deposito:60,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 60, "vencimiento": "", "ubicacion": "", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0067':{nombre:'LATA SMOOTH ESPAÑA-BRASIL 100X100X170MM',stock:6150,um:'uni.',ubicaciones:{deposito:6150,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 6150, "vencimiento": "", "ubicacion": "", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0069':{nombre:'LATA BEAUTY BRASIL ESPAÑA 200X115X85MM',stock:4200,um:'uni.',ubicaciones:{deposito:4200,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 4200, "vencimiento": "", "ubicacion": "", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0072':{nombre:'LATA PEAK BRASIL 100X100X170MM',stock:5190,um:'uni.',ubicaciones:{deposito:5190,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 5190, "vencimiento": "", "ubicacion": "", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0086':{nombre:'FUNDA TERMOSELLABLE AN APL 96,5MM X 80MM',stock:15000,um:'uni.',ubicaciones:{deposito:15000,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 15000, "vencimiento": "", "ubicacion": "E1", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0090':{nombre:'LAMINA DIABLA VAINILLA BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 60',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0091':{nombre:'LAMINA DIABLA CACAO BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 60',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
-      'PK-0093':{nombre:'CAJA DIABLA VAINILLA PROTEINA',stock:21375,um:'kg',ubicaciones:{deposito:21375,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 21375, "vencimiento": "", "ubicacion": "D55, D58", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0094':{nombre:'caja estuche diabla prote cacao x 375',stock:39750,um:'kg',ubicaciones:{deposito:39750,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 39750, "vencimiento": "", "ubicacion": "D51, D59, D62", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0093':{nombre:'CAJA DIABLA VAINILLA PROTEINA',stock:21375,um:'uni.',ubicaciones:{deposito:21375,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 21375, "vencimiento": "", "ubicacion": "D55, D58", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0094':{nombre:'caja estuche diabla prote cacao x 375',stock:39750,um:'uni.',ubicaciones:{deposito:39750,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 39750, "vencimiento": "", "ubicacion": "D51, D59, D62", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0096':{nombre:'CAJA CONTENEDORA PROTEINA DIABLA',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0097':{nombre:'LAMINA BOBINA MATTER',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0125':{nombre:'DOYPACK SUPERGREEN CAGNOLI 100X100X170MM',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
@@ -2813,26 +2925,26 @@ const D = {
       'PK-0155':{nombre:'LAMINA CREATINA FINE BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 60',stock:380.8,um:'kg',ubicaciones:{deposito:380.8,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 380.8, "vencimiento": "", "ubicacion": "D18", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0156':{nombre:'LAMINA ELECTROLITOS NQ BOPP MATE 20 + PET METALIZADO 12 + PE CRISTAL 60',stock:410,um:'kg',ubicaciones:{deposito:410,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 410, "vencimiento": "", "ubicacion": "D30", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0157':{nombre:'LAMINA GRANGER BOPP MATE 20 + PET METALIZADO 12 + PE CRISTAL 60',stock:501.9,um:'kg',ubicaciones:{deposito:501.9,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 501.9, "vencimiento": "", "ubicacion": "", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0158':{nombre:'CAJA N7 440x312x277 MM',stock:1127,um:'kg',ubicaciones:{deposito:1127,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1127, "vencimiento": "", "ubicacion": "E18, MP8", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0158':{nombre:'CAJA N7 440x312x277 MM',stock:1127,um:'uni.',ubicaciones:{deposito:1127,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1127, "vencimiento": "", "ubicacion": "E18, MP8", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0159':{nombre:'CAJA N8 435x352x365 MM',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
-      'PK-0161':{nombre:'ESTUCHE GLOD BEAUTY',stock:460,um:'kg',ubicaciones:{deposito:460,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 460, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0161':{nombre:'ESTUCHE GLOD BEAUTY',stock:460,um:'uni.',ubicaciones:{deposito:460,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 460, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0165':{nombre:'LAMINA ONED SANDIA BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 60',stock:159.12,um:'kg',ubicaciones:{deposito:159.12,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 159.12, "vencimiento": "", "ubicacion": "", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0166':{nombre:'LAMINA ONED LIMA LIMON BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 60',stock:182.45,um:'kg',ubicaciones:{deposito:182.45,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 182.45, "vencimiento": "", "ubicacion": "", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0167':{nombre:'LAMINA ONED FRAMBUESA BOPP MATE 20 + PET CRISTAL 12 + PE CRISTAL 60',stock:170.04,um:'kg',ubicaciones:{deposito:170.04,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 170.04, "vencimiento": "", "ubicacion": "", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0168':{nombre:'CAJA ONED LIMA 372x280x122mm',stock:430,um:'kg',ubicaciones:{deposito:430,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 430, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0169':{nombre:'CAJA ONED FRAMBUESA 372x280x122mm',stock:430,um:'kg',ubicaciones:{deposito:430,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 430, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0170':{nombre:'CAJA ONED SANDIA 372x280x122mm',stock:430,um:'kg',ubicaciones:{deposito:430,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 430, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0171':{nombre:'CAPSULAS CAPS 00 AZ/BCA 515/311',stock:300000,um:'kg',ubicaciones:{deposito:300000,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 300000, "vencimiento": "", "ubicacion": "E30", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0168':{nombre:'CAJA ONED LIMA 372x280x122mm',stock:430,um:'uni.',ubicaciones:{deposito:430,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 430, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0169':{nombre:'CAJA ONED FRAMBUESA 372x280x122mm',stock:430,um:'uni.',ubicaciones:{deposito:430,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 430, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0170':{nombre:'CAJA ONED SANDIA 372x280x122mm',stock:430,um:'uni.',ubicaciones:{deposito:430,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 430, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0171':{nombre:'CAPSULAS CAPS 00 AZ/BCA 515/311',stock:300000,um:'uni.',ubicaciones:{deposito:300000,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 300000, "vencimiento": "", "ubicacion": "E30", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0173':{nombre:'LAMINA CALM NAHR',stock:282.5,um:'kg',ubicaciones:{deposito:282.5,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 282.5, "vencimiento": "", "ubicacion": "D21", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0175':{nombre:'LAMINA STICK CREATINA MATTER',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0178':{nombre:'LAMINA MORNING BOOST BOPP MATE 20',stock:787.45,um:'kg',ubicaciones:{deposito:787.45,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 787.45, "vencimiento": "", "ubicacion": "D47, D10", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0179':{nombre:'CUCHARA PLASTICA CR X 5 GRADUADA',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
-      'PK-0181':{nombre:'ESTUCHE BLISSFIT - MOTNING BOOTS - SANNE',stock:1600,um:'kg',ubicaciones:{deposito:1600,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1600, "vencimiento": "", "ubicacion": "E9", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0186':{nombre:'SEPARADORES ESTUCHES MORNING',stock:1200,um:'kg',ubicaciones:{deposito:1200,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1200, "vencimiento": "", "ubicacion": "E9", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0187':{nombre:'ONED ESTUCHES MIX',stock:1290,um:'kg',ubicaciones:{deposito:1290,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1290, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0188':{nombre:'ESTUCHE  ONED CHICO LIMA LIMON',stock:340,um:'kg',ubicaciones:{deposito:340,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 340, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0189':{nombre:'ESTUCHE ONED CHICO FRAMBUESA',stock:340,um:'kg',ubicaciones:{deposito:340,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 340, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
-      'PK-0190':{nombre:'ESTUCHE ONED CHICO SANDIA',stock:470,um:'kg',ubicaciones:{deposito:470,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 470, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0181':{nombre:'ESTUCHE BLISSFIT - MOTNING BOOTS - SANNE',stock:1600,um:'uni.',ubicaciones:{deposito:1600,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1600, "vencimiento": "", "ubicacion": "E9", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0186':{nombre:'SEPARADORES ESTUCHES MORNING',stock:1200,um:'uni.',ubicaciones:{deposito:1200,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1200, "vencimiento": "", "ubicacion": "E9", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0187':{nombre:'ONED ESTUCHES MIX',stock:1290,um:'uni.',ubicaciones:{deposito:1290,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 1290, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0188':{nombre:'ESTUCHE  ONED CHICO LIMA LIMON',stock:340,um:'uni.',ubicaciones:{deposito:340,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 340, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0189':{nombre:'ESTUCHE ONED CHICO FRAMBUESA',stock:340,um:'uni.',ubicaciones:{deposito:340,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 340, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
+      'PK-0190':{nombre:'ESTUCHE ONED CHICO SANDIA',stock:470,um:'uni.',ubicaciones:{deposito:470,sala1:0.0,sala2:0.0},lotes:[{"lote": "", "cantidad": 470, "vencimiento": "", "ubicacion": "E18", "proveedor": "", "fecha": "2026-05-22"}]},
       'PK-0191':{nombre:'CAJA CHICA DIABLA CACAO',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0192':{nombre:'CAJA ECOMMERCE 200x250x150mm',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0193':{nombre:'laminas 310 x 165 blanco codiller products sa',stock:0.0,um:'kg',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
@@ -2860,8 +2972,27 @@ const D = {
       'PK-0070':{nombre:'LATA BRASIL PWR 100X100X170MM',stock:0.0,um:'uni.',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0140':{nombre:'TARJETON FILL+',stock:0.0,um:'uni.',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
       'PK-0160':{nombre:'ETIQUETA BASE LATA FILL',stock:0.0,um:'uni.',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
+      'PK-0196':{nombre:'ETIQUETA POWER FRENTE',stock:0.0,um:'uni.',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
+      'PK-0197':{nombre:'ETIQUETA POWER TABLA NUTRICIONAL',stock:0.0,um:'uni.',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
+      'PK-0198':{nombre:'ETIQUETA POWER MODO DE USO',stock:0.0,um:'uni.',ubicaciones:{deposito:0.0,sala1:0.0,sala2:0.0},lotes:[]},
+      'PK-0199':{nombre:'ETIQUETA PEAK FRENTE',stock:3552,um:'uni.',ubicaciones:{deposito:3552,sala1:0,sala2:0},lotes:[{"lote": "", "cantidad": 3552, "vencimiento": "", "ubicacion": "", "proveedor": "MAXIMILIANO CHIARELLO", "fecha": "2026-05-18"}]},
+      'PK-0200':{nombre:'ETIQUETA PEAK TABLA NUTRICIONAL',stock:3660,um:'uni.',ubicaciones:{deposito:3660,sala1:0,sala2:0},lotes:[{"lote": "", "cantidad": 3660, "vencimiento": "", "ubicacion": "", "proveedor": "MAXIMILIANO CHIARELLO", "fecha": "2026-05-18"}]},
+      'PK-0201':{nombre:'ETIQUETA PEAK MODO DE USO',stock:3660,um:'uni.',ubicaciones:{deposito:3660,sala1:0,sala2:0},lotes:[{"lote": "", "cantidad": 3660, "vencimiento": "", "ubicacion": "", "proveedor": "MAXIMILIANO CHIARELLO", "fecha": "2026-05-18"}]},
+      'PK-0202':{nombre:'ETIQUETA BEAUTY FRENTE',stock:3003,um:'uni.',ubicaciones:{deposito:3003,sala1:0,sala2:0},lotes:[{"lote": "", "cantidad": 3003, "vencimiento": "", "ubicacion": "", "proveedor": "MAXIMILIANO CHIARELLO", "fecha": "2026-05-18"}]},
+      'PK-0203':{nombre:'ETIQUETA BEAUTY TABLA NUTRICIONAL',stock:3003,um:'uni.',ubicaciones:{deposito:3003,sala1:0,sala2:0},lotes:[{"lote": "", "cantidad": 3003, "vencimiento": "", "ubicacion": "", "proveedor": "MAXIMILIANO CHIARELLO", "fecha": "2026-05-18"}]},
+      'PK-0204':{nombre:'ETIQUETA BEAUTY MODO DE USO',stock:3003,um:'uni.',ubicaciones:{deposito:3003,sala1:0,sala2:0},lotes:[{"lote": "", "cantidad": 3003, "vencimiento": "", "ubicacion": "", "proveedor": "MAXIMILIANO CHIARELLO", "fecha": "2026-05-18"}]},
       'PK-0209':{nombre:'PK-0209',stock:0.0,um:'uni.',ubicaciones:{deposito:0,sala1:0,sala2:0},lotes:[{"lote": "empaque-17/04", "cantidad": 472.0, "vencimiento": "", "ubicacion": "empaque", "proveedor": "", "fecha": "2026-04-17"}]}
   }};
+
+// Snapshot inmutable de lotes del seed — capturado una sola vez al cargar.
+// applyState() stripea lotes de Supabase y puede perder los del seed al mezclar.
+// renderStockDeposito() usa este snapshot como fuente de verdad para lotes de depósito.
+const _STOCK_LOTES_SEED = {};
+(function(){
+  Object.entries(D.stock).forEach(([k,v]) => {
+    if(v.lotes && v.lotes.length > 0) _STOCK_LOTES_SEED[k] = v.lotes.map(l=>({...l}));
+  });
+})();
 
 // State
 // Lista base de proveedores (se usa para merge al cargar estado guardado)
@@ -2903,6 +3034,9 @@ const _SEED_COMPRAS = [
   {_sid:'MP-0007-ETILFARMA-50',nro:'OC-0038-2026',codigo:'MP-0007',descripcion:'BISGLICINATO DE MAGNESIO',productos:'',cantidad:50,um:'kg',precio:55,moneda:'USD',proveedor:'ETILFARMA',estado:'Pendiente',pagada:false,entregada:false,fecha:'2026-05-11',condicion_pago:'contado',lead_time:7},
   {_sid:'MP-0225-MATHIESEN-20',nro:'OC-0036-2026',codigo:'MP-0225',descripcion:'SABOR SANDÍA 508305600030762',productos:'',cantidad:20,um:'kg',precio:14.4,moneda:'USD',proveedor:'MATHIESEN ARGENTINA',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-05-08',condicion_pago:'15 días',lead_time:7},
   {_sid:'MP-0018-MAGEL-4',nro:'OC-0037-2026',codigo:'MP-0018',descripcion:'CO Q10 (COENZIMA)',productos:'',cantidad:4,um:'kg',precio:390,moneda:'USD',proveedor:'MAGEL',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-05-08',condicion_pago:'45 días',lead_time:7,items:[{codigo:'MP-0018',descripcion:'CO Q10 (COENZIMA)',cantidad:4,um:'kg',precio:390},{codigo:'MP-0134',descripcion:'SAL - CLORURO DE SODIO',cantidad:100,um:'kg',precio:1.2},{codigo:'MP-0013',descripcion:'CITRATO DE MAGNESIO (HEPTAHIDRATADO)',cantidad:25,um:'kg',precio:9},{codigo:'MP-0240',descripcion:'GLICINA',cantidad:5,um:'kg',precio:5}]},
+  {_sid:'INS-0006-FABPLAST-400',nro:'OC-0035-2026',codigo:'INS-0006',descripcion:'BOLSAS POLIETILENO CRISTAL 60x90',productos:'',cantidad:400,um:'uni.',precio:755,total_ars:450200,moneda:'ARS',tipo_cambio:1420,proveedor:'FABPLAST',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-05-06',condicion_pago:'CONTADO',lead_time:10,items:[{codigo:'INS-0006',descripcion:'BOLSAS POLIETILENO CRISTAL 60x90',cantidad:400,um:'uni.',precio:755},{codigo:'INS-0005',descripcion:'Bolsas 50x70',cantidad:300,um:'uni.',precio:494}]},
+  {_sid:'PK-0196-CHIARELLO-2300',nro:'OC-0018-2026',codigo:'PK-0196',descripcion:'ETIQUETA POWER FRENTE',productos:'',cantidad:2300,um:'uni.',precio:350,total_ars:1338600,moneda:'ARS',tipo_cambio:1380,proveedor:'MAXIMILIANO CHIARELLO',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-04-24',condicion_pago:'contado',lead_time:7,obs:'se pago el 50% y el otro 50% a los 30 dias',items:[{codigo:'PK-0196',descripcion:'ETIQUETA POWER FRENTE',cantidad:2300,um:'uni.',precio:350},{codigo:'PK-0197',descripcion:'ETIQUETA POWER TABLA NUTRICIONAL',cantidad:2300,um:'uni.',precio:116},{codigo:'PK-0198',descripcion:'ETIQUETA POWER MODO DE USO',cantidad:2300,um:'uni.',precio:116}]},
+  {_sid:'MP-0157-ADICOL-2',nro:'OC-0044-2026',codigo:'MP-0157',descripcion:'COLORANTE AZORRUBINA',productos:'',cantidad:2,um:'kg',precio:32,total_usd:90,moneda:'USD',proveedor:'ADICOL',estado:'Confirmada',pagada:false,entregada:false,fecha:'2026-05-21',condicion_pago:'15 días FF',lead_time:3,items:[{codigo:'MP-0157',descripcion:'COLORANTE AZORRUBINA',cantidad:2,um:'kg',precio:32},{codigo:'MP-0026',descripcion:'COLORANTE OCASO',cantidad:2,um:'kg',precio:13}]},
 ];
 
 const S = {
@@ -2958,12 +3092,14 @@ const S = {
   preciosInsumos:{},
   facturasExtra:[],   // facturas agregadas manualmente (no están en FACTURAS_DATA)
   revalidas:{},       // cartas de reválida: {codigo: {nombre,tipo,tamaño,vencimientoRevalida,fecha}}
+  ordenesFazon:[],    // órdenes de producción a fazón (Nutratec)
+  ordenesFazonPage:1,
 };
 
 // ══════════════════════════════════════
 // NAVIGATION
 // ══════════════════════════════════════
-const titles={dashboard:'Dashboard',planificador:'Planificador Inteligente',recepcion:'Recepción de Mercadería',facturas:'Facturas',mrp:'MRP Insumos',plan:'Plan de Producción',produccion:'Producción Real',bom:'Fórmulas / BOM',costos:'Dashboard de Costos',cotizaciones:'Cotizaciones',ppp:'Análisis PPP',maestroprecios:'Maestro de Precios',proyeccion:'Proyección de Stock',compras:'Órdenes de Compra',propuestas:'OCs Propuestas',proveedores:'Gestión de Proveedores',stock:'Stock de Insumos',historial:'Historial de Stock',calculadora:'Calculadora MRP',importar:'Importar Excel',alertas:'Alertas',maestroinsumos:'Maestro de Insumos'};
+const titles={dashboard:'Dashboard',planificador:'Planificador Inteligente',recepcion:'Recepción de Mercadería',facturas:'Facturas',mrp:'MRP Insumos',plan:'Plan de Producción',produccion:'Producción Real',bom:'Fórmulas / BOM',costos:'Dashboard de Costos',cotizaciones:'Cotizaciones',ppp:'Análisis PPP',maestroprecios:'Maestro de Precios',proyeccion:'Proyección de Stock',compras:'Órdenes de Compra',propuestas:'OCs Propuestas',proveedores:'Gestión de Proveedores',stock:'Stock de Insumos',historial:'Historial de Stock',calculadora:'Calculadora MRP',importar:'Importar Excel',alertas:'Alertas',maestroinsumos:'Maestro de Insumos',ordenesfazon:'Órdenes a Fazón'};
 function _saveNavCollapse(){
   const state={};
   document.querySelectorAll('.nav-group').forEach(g=>{
@@ -3012,7 +3148,7 @@ function go(id){
     }
   });
   document.getElementById('tb-title').innerHTML=`${titles[id]||id} <span>· The Fine Company</span>`;
-  const renders={dashboard:renderDashboard,mrp:renderMRP,plan:renderPlan,produccion:renderProduccion,bom:renderBOMPage,costos:renderCostos,cotizaciones:renderCotizaciones,ppp:renderPPP,maestroprecios:renderMaestroPrecios,proyeccion:renderProyeccion,compras:renderCompras,propuestas:renderPropuestas,recepcion:renderRecepcion,proveedores:renderProveedoresEnhanced,stock:renderStock,historial:renderHistorial,alertas:renderAlertas,calculadora:renderCalcPage,planificador:renderPlanificador,facturas:renderFacturas,maestroinsumos:renderMaestroInsumos};
+  const renders={dashboard:renderDashboard,mrp:renderMRP,plan:renderPlan,produccion:renderProduccion,bom:renderBOMPage,costos:renderCostos,cotizaciones:renderCotizaciones,ppp:renderPPP,maestroprecios:renderMaestroPrecios,proyeccion:renderProyeccion,compras:renderCompras,propuestas:renderPropuestas,recepcion:renderRecepcion,proveedores:renderProveedoresEnhanced,stock:renderStock,historial:renderHistorial,alertas:renderAlertas,calculadora:renderCalcPage,planificador:renderPlanificador,facturas:renderFacturas,maestroinsumos:renderMaestroInsumos,ordenesfazon:renderOrdenesFazon};
   closeSidebar();
   if(renders[id]) renders[id]();
 }
@@ -3199,7 +3335,7 @@ function paginate(data,page,per){return data.slice((page-1)*per,page*per);}
 const LS_KEY = 'mrp_fine_v8';
 // Versión del seed de stock hardcodeado. Si la versión en Supabase/LS es distinta,
 // se ignora el stock guardado y se usa el baseline del código (más reciente).
-const STOCK_SEED_VERSION = '20260523';
+const STOCK_SEED_VERSION = '20260528';
 
 // ══════════════════════════════════════
 // SUPABASE — SINCRONIZACIÓN EN LA NUBE
@@ -3563,6 +3699,7 @@ function _loadComprasSnap(incomingTs) {
       if(existing) {
         if(!existing._sid) existing._sid = sc._sid;
         if(!existing.nro && sc.nro) existing.nro = sc.nro;
+        if(sc.items && sc.items.length > 0 && (!existing.items || existing.items.length < sc.items.length)) existing.items = sc.items;
       }
       else S.compras.push({...sc});
     });
@@ -3701,6 +3838,8 @@ function sbSuscribir() {
           ...lsObj,
           movimientos:  S.movimientos,   // post-merge
           producciones: S.producciones,  // post-merge
+          ordenesFazon: S.ordenesFazon,  // post-merge
+          stockPT:      D.stockPT,       // post-merge
           ts: nuevo.ts                   // ts del sync para que lsTs = sbTs en next reload
         }));
       } catch(e) {}
@@ -3743,6 +3882,8 @@ function saveState() {
       : {},
     facturasExtra: S.facturasExtra||[],
     revalidas: S.revalidas||{},
+    ordenesFazon: S.ordenesFazon||[],
+    stockPT: D.stockPT||{},
     stock: D.stock,
     stockSeedVersion: STOCK_SEED_VERSION,
     ts: Date.now()
@@ -3944,6 +4085,12 @@ function applyState(st) {
               };
             }
           }
+        } else if(!base && newSeedIsNewer) {
+          // Item NO está en el seed hardcodeado pero Supabase lo tiene (datos viejos/import erróneo).
+          // Cuando el seed es más nuevo → zerear para limpiar basura de Supabase.
+          D.stock[k].stock = 0;
+          D.stock[k].ubicaciones = {deposito:0, sala1:0, sala2:0};
+          D.stock[k].lotes = [];
         }
         if (!v.lotes && lotesExistentes) D.stock[k].lotes = lotesExistentes;
       });
@@ -3985,6 +4132,7 @@ function applyState(st) {
     if(existing) {
       if(!existing._sid && sc._sid) existing._sid = sc._sid;
       if(!existing.nro  && sc.nro)  existing.nro  = sc.nro; // propagar número real de OC
+      if(sc.items && sc.items.length > 0 && (!existing.items || existing.items.length < sc.items.length)) existing.items = sc.items; // propagar items del seed si el existente tiene menos
     } else {
       S.compras.push({...sc}); // copia, no referencia directa al seed
     }
@@ -4008,6 +4156,27 @@ function applyState(st) {
     S.producciones = [...(S.producciones||[]), ...nuevasDeRemoto]
       .sort((a,b) => new Date(b.fecha||0) - new Date(a.fecha||0))
       .slice(0, 500);
+  }
+  if (st.ordenesFazon) {
+    // MERGE por id: unión de local + remoto (mismo criterio que movimientos/producciones)
+    const localOFIds = new Set((S.ordenesFazon||[]).map(o=>o.id).filter(Boolean));
+    const nuevasDeRemoto = (st.ordenesFazon||[]).filter(o => !localOFIds.has(o.id));
+    // Para órdenes que existen en ambos, prevalece la de fechaModif más reciente (o la remota)
+    const remotaPorId = {}; (st.ordenesFazon||[]).forEach(o=>{ if(o.id) remotaPorId[o.id]=o; });
+    const merged = (S.ordenesFazon||[]).map(o => {
+      const r = remotaPorId[o.id];
+      if(r && (r.fechaModif||0) > (o.fechaModif||0)) return r;
+      return o;
+    });
+    S.ordenesFazon = [...merged, ...nuevasDeRemoto]
+      .sort((a,b) => new Date(b.fechaCreacion||0) - new Date(a.fechaCreacion||0))
+      .slice(0, 500);
+  }
+  if (st.stockPT) {
+    // Merge por clave PT: prevalece el de mayor stock (consistente con el trato de D.stock)
+    Object.entries(st.stockPT).forEach(([k,v]) => {
+      if(!D.stockPT[k] || (v.stock||0) >= (D.stockPT[k].stock||0)) D.stockPT[k] = v;
+    });
   }
   if (st.proveedores) {
     // Merge: el estado guardado prevalece para datos editados por el usuario,
@@ -4150,7 +4319,9 @@ async function loadFromSupabase() {
       if(c.adjunto?.data){ const{data:_d,...s}=c.adjunto; return{...c,adjunto:s}; } return c;
     }),
     movimientos:  S.movimientos,   // post-merge (local + remoto)
-    producciones: S.producciones   // post-merge (local + remoto)
+    producciones: S.producciones,  // post-merge (local + remoto)
+    ordenesFazon: S.ordenesFazon,  // post-merge (local + remoto)
+    stockPT:      D.stockPT        // post-merge (local + remoto)
   };
   try { localStorage.setItem(LS_KEY, JSON.stringify(_lsVal)); } catch(e) {}
 
@@ -4851,7 +5022,7 @@ function correrMRP() {
       _sel: true,
       codigo: ins.codigo,
       descripcion: ins.nombre,
-      productos: '(MRP)',
+      productos: ins.productos && ins.productos.length ? ins.productos.join(', ') : '(MRP)',
       cantidad: Math.ceil(deficitTotal * 100) / 100,
       um: ins.um || 'kg',
       precio: 0,
@@ -4897,7 +5068,7 @@ function generarOCsDesdeMRP() {
       _sel: true,
       codigo: ins.codigo,
       descripcion: ins.nombre,
-      productos: '(MRP)',
+      productos: ins.productos && ins.productos.length ? ins.productos.join(', ') : '(MRP)',
       cantidad: Math.ceil(deficitTotal * 100) / 100,
       um: ins.um || 'kg',
       precio: 0,
@@ -6209,6 +6380,13 @@ function initComprasFilters(){
       vistos.add(cod); return true;
     }).sort((a,b)=>a.cod.localeCompare(b.cod));
     todos.forEach(({cod,desc})=> ilDl.innerHTML += `<option value="${cod}" label="${cod} — ${desc}">`);
+    // Datalist espejo por descripción (elegir insumo por nombre)
+    const dDl = document.getElementById('insumo-desc-list');
+    if(dDl){
+      dDl.innerHTML = '';
+      todos.filter(t=>t.desc).sort((a,b)=>String(a.desc).localeCompare(String(b.desc)))
+        .forEach(({cod,desc})=> dDl.innerHTML += `<option value="${String(desc).replace(/"/g,'&quot;')}" label="${String(desc).replace(/"/g,'&quot;')} — ${cod}">`);
+    }
   }
 }
 
@@ -6803,8 +6981,9 @@ function _mkItemRow(data={}){
         style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 8px;font-family:var(--mono);font-size:11px;color:var(--text);text-transform:uppercase;outline:none">
     </td>
     <td style="padding:5px 6px">
-      <input type="text" class="oc-item-desc" value="${data.descripcion||''}"
-        placeholder="Descripción"
+      <input type="text" class="oc-item-desc" list="insumo-desc-list" value="${data.descripcion||''}"
+        placeholder="Descripción" autocomplete="off"
+        oninput="autocompletarItemPorDesc(this)"
         style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 8px;font-size:13px;color:var(--text);outline:none">
     </td>
     <td style="padding:5px 6px">
@@ -6867,6 +7046,28 @@ function autocompletarItemRow(input){
   // Sugerir proveedor OC si campo vacío
   const provEl = document.getElementById('mc-prov');
   if(provEl && !provEl.value) provEl.value = buscarProveedorParaInsumo(cod, descEl?.value||cod);
+}
+
+// Autocompletar la fila al elegir/escribir por DESCRIPCIÓN: rellena SKU + UM + proveedor
+function autocompletarItemPorDesc(input){
+  const desc = (input.value||'').trim();
+  if(desc.length < 3) return;
+  const tr = input.closest('tr'); if(!tr) return;
+  const codEl = tr.querySelector('.oc-item-cod');
+  const umEl  = tr.querySelector('.oc-item-um');
+  const dl = desc.toLowerCase();
+  let cod = null, um = null;
+  for(const c in D.stock){ if((D.stock[c]?.nombre||'').toLowerCase() === dl){ cod = c; break; } }
+  if(!cod){ const m = D.mrp.find(x=>(x.descripcion||'').toLowerCase() === dl); if(m){ cod = m.codigo; um = m.um; } }
+  else { const m = D.mrp.find(x=>x.codigo === cod); um = m?.um; }
+  if(!cod) return;                       // sin match exacto (todavía tipeando): no toca nada
+  if(codEl) codEl.value = cod;
+  if(umEl && um){
+    const u = String(um).toLowerCase();
+    for(let i=0;i<umEl.options.length;i++){ if(umEl.options[i].value.toLowerCase()===u){ umEl.selectedIndex=i; break; } }
+  }
+  const provEl = document.getElementById('mc-prov');
+  if(provEl && !provEl.value) provEl.value = buscarProveedorParaInsumo(cod, desc);
 }
 
 function recalcItemsOC(){
@@ -7272,8 +7473,11 @@ function renderStockDeposito() {
     totalKgDep += cantDep;
     insumosConDep++;
 
-    // Lotes de depósito: los que no son sala
-    const lotesDep = (s.lotes||[]).filter(l => {
+    // Lotes de depósito: los que no son sala.
+    // Usa _STOCK_LOTES_SEED (snapshot inmutable del seed) para evitar que
+    // applyState/Supabase pierda los lotes de insumos con lotes mixtos (sala+depósito).
+    const _seedLotes = _STOCK_LOTES_SEED[s.codigo] || s.lotes || [];
+    const lotesDep = _seedLotes.filter(l => {
       const ub = (l.ubicacion||'').toLowerCase();
       return !ub.includes('sala p') && (l.cantidad > 0 || l.vencimiento);
     });
@@ -8287,6 +8491,675 @@ function revertirMovimiento(mIdx) {
   toast(`↩ Revertido · ${m.nombre} · Stock: ${fmt(D.stock[cod].stock,3)}`, '↩', 5000);
 }
 
+// ══════════════════════════════════════════════════════════════
+// ÓRDENES A FAZÓN (producción en Nutratec)
+// ══════════════════════════════════════════════════════════════
+let _ofDespId = null;   // orden abierta en modal de despacho
+let _ofRecId  = null;   // orden abierta en modal de recepción
+
+function _ofFind(id){ return (S.ordenesFazon||[]).find(o=>o.id===id); }
+
+function _ofNextNro(){
+  let max = 0;
+  (S.ordenesFazon||[]).forEach(o=>{
+    const n = parseInt(String(o.nro||'').replace(/\D/g,''),10);
+    if(!isNaN(n) && n>max) max = n;
+  });
+  return 'OF-' + String(max+1).padStart(4,'0');
+}
+
+function _precioInsumoUSD(cod){
+  const p = S.preciosInsumos?.[cod];
+  if(p && (p.moneda==='USD' || !p.moneda)) return Number(p.precio)||0;
+  return p ? (Number(p.precio)||0) : 0;
+}
+
+// Explota el BOM de un producto por cantidad de batch (reutiliza la lógica de calcMRP)
+function explotarBOMFazon(prodCod, batchUnidades){
+  const bom = BOM_COMPLETO[prodCod];
+  if(!bom || !bom.insumos || !bom.lote_min) return { loteMin:0, lineas:[] };
+  const factor = batchUnidades / bom.lote_min;
+  const lineas = bom.insumos.filter(i=>i.codigo && i.cantidad).map(ins=>{
+    const requerido = Math.round(ins.cantidad * factor * 1000)/1000;
+    const tipo = String(ins.codigo).startsWith('PK') ? 'PK' : 'MP';
+    return {
+      codigo: ins.codigo, nombre: ins.nombre, tipo, um: ins.um || 'kg',
+      requerido, aEnviar: requerido, lotes: []
+    };
+  });
+  return { loteMin: bom.lote_min, lineas };
+}
+
+// Productos de una OF (soporta modelo nuevo multi-producto y órdenes viejas de 1 producto)
+function _ofProductos(o){
+  if(o.productos && o.productos.length) return o.productos;
+  if(o.productoCod) return [{cod:o.productoCod, nombre:o.productoNombre, cantidad:o.batchUnidades, loteMin:o.loteMin}];
+  return [];
+}
+// Productos que consumen una línea (fallback para órdenes viejas)
+function _ofLineaProds(o,l){
+  if(l.productos && l.productos.length) return l.productos;
+  return _ofProductos(o).map(p=>p.nombre);
+}
+// Explota varios productos y CONSOLIDA la cantidad por insumo, guardando qué productos lo usan
+function _explotarMulti(productos){
+  const map = {};
+  productos.forEach(p=>{
+    const bom = BOM_COMPLETO[p.cod];
+    if(!bom || !bom.insumos || !bom.lote_min) return;
+    const factor = p.cantidad / bom.lote_min;
+    bom.insumos.filter(i=>i.codigo && i.cantidad).forEach(ins=>{
+      if(!map[ins.codigo]){
+        map[ins.codigo] = { codigo:ins.codigo, nombre:ins.nombre,
+          tipo:String(ins.codigo).startsWith('PK')?'PK':'MP', um:ins.um||'kg',
+          requerido:0, aEnviar:0, lotes:[], productos:[] };
+      }
+      const add = Math.round(ins.cantidad*factor*1000)/1000;
+      map[ins.codigo].requerido = Math.round((map[ins.codigo].requerido + add)*1000)/1000;
+      if(!map[ins.codigo].productos.includes(p.nombre)) map[ins.codigo].productos.push(p.nombre);
+    });
+  });
+  return Object.values(map).map(l=>({...l, aEnviar:l.requerido}));
+}
+
+function _ofValorOrden(o){
+  const usarEnviar = (o.estado==='despachada' || o.estado==='produccion' || o.estado==='recibida');
+  return (o.lineas||[]).reduce((s,l)=>{
+    const q = usarEnviar ? (l.aEnviar||0) : (l.requerido||0);
+    return s + q * _precioInsumoUSD(l.codigo);
+  }, 0);
+}
+
+const _OF_ESTADOS = {
+  borrador:   ['var(--text3)', 'Borrador'],
+  despachada: ['var(--gold)',  'Despachada'],
+  produccion: ['var(--blue)',  'En producción'],
+  recibida:   ['var(--green)', 'Recibida'],
+};
+function _ofEstadoPill(estado){
+  const [col,lbl] = _OF_ESTADOS[estado] || ['var(--text2)', estado];
+  return `<span style="display:inline-block;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:700;background:${col}22;color:${col};border:1px solid ${col}55">${lbl}</span>`;
+}
+
+// ───────── NUEVA ORDEN (multi-producto) ─────────
+let _ofProdOptsCache = '';
+function _ofProdOptions(){
+  if(_ofProdOptsCache) return _ofProdOptsCache;
+  let h = '<option value="">— Producto —</option>';
+  Object.entries(BOM_COMPLETO).forEach(([k,v])=>{ if(v && v.lote_min) h += `<option value="${k}">${k} — ${v.nombre}</option>`; });
+  _ofProdOptsCache = h; return h;
+}
+function _ofProdRowHtml(){
+  const st = 'background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:8px 10px;color:var(--text);font-family:var(--font);font-size:14px;outline:none';
+  return `<div class="of-prow" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+    <select class="of-prow-cod" onchange="previewOrdenFazon()" style="${st};flex:1">${_ofProdOptions()}</select>
+    <input type="number" class="of-prow-qty" placeholder="Cantidad" oninput="previewOrdenFazon()" style="${st};width:130px;font-family:var(--mono);font-size:13px">
+    <button class="btn btn-g btn-sm" onclick="this.closest('.of-prow').remove();previewOrdenFazon()" title="Quitar" style="color:var(--red)">✕</button>
+  </div>`;
+}
+function agregarFilaProdFazon(){
+  const c = document.getElementById('of-nueva-prods');
+  if(c) c.insertAdjacentHTML('beforeend', _ofProdRowHtml());
+}
+function abrirNuevaOrdenFazon(){
+  document.getElementById('of-nueva-fazon').value = 'Nutratec';
+  const c = document.getElementById('of-nueva-prods');
+  c.innerHTML = ''; c.insertAdjacentHTML('beforeend', _ofProdRowHtml());
+  document.getElementById('of-nueva-preview').innerHTML = '';
+  openM('m-of-nueva');
+}
+function _ofLeerProductosNueva(){
+  const prods = [];
+  document.querySelectorAll('#of-nueva-prods .of-prow').forEach(row=>{
+    const cod = row.querySelector('.of-prow-cod')?.value || '';
+    const qty = parseFloat(row.querySelector('.of-prow-qty')?.value)||0;
+    if(cod && qty>0){
+      const bom = BOM_COMPLETO[cod];
+      if(bom) prods.push({cod, nombre:bom.nombre, cantidad:qty, loteMin:bom.lote_min});
+    }
+  });
+  return prods;
+}
+function previewOrdenFazon(){
+  const prods = _ofLeerProductosNueva();
+  const box = document.getElementById('of-nueva-preview');
+  if(!prods.length){ box.innerHTML=''; return; }
+  const lineas = _explotarMulti(prods);
+  const mp = lineas.filter(l=>l.tipo==='MP');
+  const pk = lineas.filter(l=>l.tipo==='PK');
+  const tabla = (arr,titulo,ico)=>`
+    <div style="font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin:12px 0 6px">${ico} ${titulo}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="border-bottom:1px solid var(--border)">
+        <th style="text-align:left;padding:4px 6px;color:var(--text3);font-size:10px">Código</th>
+        <th style="text-align:left;padding:4px 6px;color:var(--text3);font-size:10px">Insumo</th>
+        <th style="text-align:right;padding:4px 6px;color:var(--text3);font-size:10px">Cant. total</th>
+        <th style="text-align:left;padding:4px 6px;color:var(--text3);font-size:10px">Productos que lo consumen</th>
+      </tr></thead><tbody>
+      ${arr.map(l=>`<tr style="border-bottom:1px solid var(--bg4)">
+        <td style="padding:4px 6px;font-family:var(--mono);font-size:11px;color:var(--text2)">${l.codigo}</td>
+        <td style="padding:4px 6px">${l.nombre}</td>
+        <td style="padding:4px 6px;text-align:right;font-family:var(--mono)">${fmt(l.requerido,3)} ${l.um}</td>
+        <td style="padding:4px 6px;font-size:11px;color:var(--text2)">${l.productos.join(', ')}</td>
+      </tr>`).join('')}
+      </tbody>
+    </table>`;
+  const resumen = `<div style="font-size:12px;color:var(--text2);margin:4px 0 2px"><b>${prods.length}</b> producto(s): ${prods.map(p=>p.nombre+' ×'+fmtU(p.cantidad)).join(' · ')} — <b>${lineas.length}</b> insumos consolidados</div>`;
+  box.innerHTML = resumen + (mp.length?tabla(mp,'Materias primas · núcleos','🧪'):'') + (pk.length?tabla(pk,'Empaque · packaging','📦'):'');
+}
+
+function guardarOrdenFazon(){
+  const fazon = (document.getElementById('of-nueva-fazon').value||'Nutratec').trim();
+  const prods = _ofLeerProductosNueva();
+  if(!prods.length){ toast('Agregá al menos un producto con cantidad','⚠'); return; }
+  const lineas = _explotarMulti(prods);
+  if(!lineas.length){ toast('Los productos elegidos no tienen BOM cargado','⚠'); return; }
+  const now = new Date().toISOString();
+  S.ordenesFazon.unshift({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,5),
+    nro: _ofNextNro(),
+    fazon, productos: prods,
+    estado: 'borrador',
+    fechaCreacion: now, fechaModif: Date.now(),
+    fechaDespacho: null, fechaRecepcion: null,
+    lineas, recepciones: []
+  });
+  saveState();
+  closeM('m-of-nueva');
+  renderOrdenesFazon();
+  toast('Orden creada · '+S.ordenesFazon[0].nro+' · '+prods.length+' producto(s)', '📋');
+}
+
+// ───────── DESPACHO ─────────
+// Orden FEFO: primero el de vencimiento más próximo; empate → el que ingresó antes
+function _ofFIFO(a,b){
+  const va=_ofISODate(a.vencimiento)||'9999-99-99', vb=_ofISODate(b.vencimiento)||'9999-99-99';
+  if(va!==vb) return va<vb?-1:1;
+  const fa=a.fecha||'', fb=b.fecha||'';
+  if(fa && fb && fa!==fb) return fa<fb?-1:1;
+  return 0;
+}
+// Normaliza una fecha a yyyy-mm-dd (algunos vencimientos vienen con " 00:00:00")
+function _ofISODate(v){ v=String(v||'').trim(); return v.length>=10 ? v.slice(0,10) : v; }
+function _ofFmtVenc(v){ v=_ofISODate(v); return v ? v.split('-').reverse().join('/') : ''; }
+
+function abrirDespachoFazon(id){
+  const o = _ofFind(id); if(!o){ toast('Orden no encontrada','⚠'); return; }
+  _ofDespId = id;
+  document.getElementById('of-desp-nro').textContent = '· '+o.nro+' · '+o.productoNombre+' · batch '+fmtU(o.batchUnidades);
+  const mp = o.lineas.filter(l=>l.tipo==='MP');
+  const pk = o.lineas.filter(l=>l.tipo==='PK');
+
+  const filaMP = (l)=>{
+    const i = o.lineas.indexOf(l);
+    const s = D.stock[l.codigo];
+    let lotes = (s && Array.isArray(s.lotes)) ? s.lotes.filter(x=>(Number(x.cantidad)||0)>0) : [];
+    lotes = lotes.slice().sort(_ofFIFO);   // FEFO: vencimiento más próximo primero
+    const stockAct = s ? (Number(s.stock)||0) : 0;
+    const esc = t => String(t||'').replace(/"/g,'&quot;');
+    const opts = lotes.map((lt)=>{
+      const vf = lt.vencimiento ? _ofFmtVenc(lt.vencimiento) : 's/venc';
+      return `<option value="${esc(lt.lote)}" data-lote="${esc(lt.lote)}" data-venc="${_ofISODate(lt.vencimiento)}">${lt.lote||'(s/lote)'} · vence ${vf} · disp ${fmt(lt.cantidad,2)}</option>`;
+    }).join('');
+    const first = lotes[0] || {};
+    const inpStyle = 'background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:5px 7px;color:var(--text);font-family:var(--mono);font-size:11px';
+    const prodsL = _ofLineaProds(o,l).join(', ');
+    return `<tr style="border-bottom:1px solid var(--bg4)">
+      <td style="padding:6px;font-family:var(--mono);font-size:10px;color:var(--text2)">${l.codigo}</td>
+      <td style="padding:6px">${l.nombre}<div style="font-size:10px;color:var(--text3)">stock actual: ${fmt(stockAct,2)} ${l.um}</div><div style="font-size:10px;color:var(--gold2)">usan: ${prodsL}</div></td>
+      <td style="padding:6px;text-align:right;font-family:var(--mono);color:var(--text3)">${fmt(l.requerido,3)}</td>
+      <td style="padding:6px;text-align:right"><input type="number" id="ofd-env-${i}" value="${l.requerido}" style="width:80px;text-align:right;${inpStyle};font-size:12px"></td>
+      <td style="padding:6px">
+        <select id="ofd-lotesel-${i}" onchange="_ofPickLote(${i})" style="${inpStyle};width:180px;margin-bottom:4px">
+          ${opts || '<option value="__manual__" selected>— sin lotes en stock —</option>'}
+          <option value="__manual__">✎ Lote manual…</option>
+        </select>
+        <input type="text" id="ofd-lote-${i}" value="${esc(first.lote)}" placeholder="Lote (editable)" style="${inpStyle};width:180px">
+      </td>
+      <td style="padding:6px"><input type="date" id="ofd-venc-${i}" value="${_ofISODate(first.vencimiento)}" style="${inpStyle};width:135px"></td>
+    </tr>`;
+  };
+  const filaPK = (l)=>{
+    const i = o.lineas.indexOf(l);
+    const s = D.stock[l.codigo];
+    const stockAct = s ? (Number(s.stock)||0) : 0;
+    const prodsL = _ofLineaProds(o,l).join(', ');
+    return `<tr style="border-bottom:1px solid var(--bg4)">
+      <td style="padding:6px;font-family:var(--mono);font-size:10px;color:var(--text2)">${l.codigo}</td>
+      <td style="padding:6px">${l.nombre}<div style="font-size:10px;color:var(--text3)">stock actual: ${fmtU(stockAct)} ${l.um}</div><div style="font-size:10px;color:var(--gold2)">usan: ${prodsL}</div></td>
+      <td style="padding:6px;text-align:right;font-family:var(--mono);color:var(--text3)">${fmt(l.requerido,3)}</td>
+      <td style="padding:6px;text-align:right"><input type="number" id="ofd-env-${i}" value="${l.requerido}" style="width:80px;text-align:right;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:5px 7px;color:var(--text);font-family:var(--mono);font-size:12px"></td>
+      <td style="padding:6px;color:var(--text3);font-size:11px" colspan="2">— sin lote —</td>
+    </tr>`;
+  };
+  const head = `<thead><tr style="border-bottom:2px solid var(--gold-dim2)">
+    <th style="text-align:left;padding:6px;color:var(--text3);font-size:10px">Código</th>
+    <th style="text-align:left;padding:6px;color:var(--text3);font-size:10px">Insumo</th>
+    <th style="text-align:right;padding:6px;color:var(--text3);font-size:10px">Requerido</th>
+    <th style="text-align:right;padding:6px;color:var(--text3);font-size:10px">A enviar</th>
+    <th style="text-align:left;padding:6px;color:var(--text3);font-size:10px">Lote</th>
+    <th style="text-align:left;padding:6px;color:var(--text3);font-size:10px">Vencimiento</th>
+  </tr></thead>`;
+  let html = '';
+  if(mp.length) html += `<div style="font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin:4px 0 4px">🧪 Materias primas</div><table style="width:100%;border-collapse:collapse;font-size:13px">${head}<tbody>${mp.map(filaMP).join('')}</tbody></table>`;
+  if(pk.length) html += `<div style="font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin:14px 0 4px">📦 Empaque</div><table style="width:100%;border-collapse:collapse;font-size:13px">${head}<tbody>${pk.map(filaPK).join('')}</tbody></table>`;
+  document.getElementById('of-desp-body').innerHTML = html;
+  openM('m-of-despacho');
+}
+
+function _ofPickLote(i){
+  const sel = document.getElementById('ofd-lotesel-'+i);
+  const opt = sel?.selectedOptions?.[0];
+  const loteInp = document.getElementById('ofd-lote-'+i);
+  const vencInp = document.getElementById('ofd-venc-'+i);
+  if(!sel) return;
+  if(sel.value==='__manual__'){
+    if(loteInp){ loteInp.value=''; loteInp.focus(); }
+    if(vencInp) vencInp.value='';
+    return;
+  }
+  if(loteInp) loteInp.value = opt?.getAttribute('data-lote') || sel.value || '';
+  if(vencInp) vencInp.value = opt?.getAttribute('data-venc') || '';
+}
+
+// Consume `cantidad` de un insumo. Si loteStr coincide con un lote en stock, arranca por ese y
+// desborda al resto en orden FIFO. Si loteStr es manual (no está en stock), lo registra tal cual.
+function _consumirStockFazon(cod, cantidad, loteStr, venc){
+  const s = D.stock[cod];
+  const antes = s ? (Number(s.stock)||0) : 0;
+  const usados = [];
+  loteStr = (loteStr||'').trim();
+  if(s){
+    const lotes = Array.isArray(s.lotes) ? s.lotes : [];
+    const match = loteStr ? lotes.find(l=>(l.lote||'')===loteStr) : null;
+    if(match || !loteStr){
+      // FIFO: primero el elegido (si hay), luego el resto por orden FIFO
+      let restante = Math.round(cantidad*1000)/1000;
+      const orden = [];
+      if(match) orden.push(match);
+      lotes.slice().sort(_ofFIFO).forEach(l=>{ if(!orden.includes(l)) orden.push(l); });
+      orden.forEach(l=>{
+        if(restante<=0) return;
+        const disp = Number(l.cantidad)||0;
+        const toma = Math.min(disp, restante);
+        if(toma>0){
+          l.cantidad = Math.round((disp-toma)*1000)/1000;
+          restante = Math.round((restante-toma)*1000)/1000;
+          usados.push({lote:l.lote||'', vencimiento:l.vencimiento||'', cantidad:toma});
+        }
+      });
+    } else {
+      // Lote manual: no está en stock trackeado — registrar tal cual (trazabilidad)
+      usados.push({lote:loteStr, vencimiento:venc||'', cantidad:Math.round(cantidad*1000)/1000, manual:true});
+    }
+    // Descontar de ubicaciones: depósito primero, luego sala1, sala2
+    const u = getUbic(s);
+    let take = Math.round(cantidad*1000)/1000;
+    ['deposito','sala1','sala2'].forEach(k=>{
+      if(take<=0) return;
+      const av = Number(u[k])||0;
+      const t = Math.min(av, take);
+      u[k] = Math.round((av-t)*1000)/1000;
+      take = Math.round((take-t)*1000)/1000;
+    });
+    syncStockTotal(s);
+  } else if(loteStr){
+    usados.push({lote:loteStr, vencimiento:venc||'', cantidad:Math.round(cantidad*1000)/1000, manual:true});
+  }
+  return { antes, despues: s ? (Number(s.stock)||0) : 0, usados };
+}
+
+function confirmarDespachoFazon(){
+  const o = _ofFind(_ofDespId); if(!o){ toast('Orden no encontrada','⚠'); return; }
+  // Leer inputs y validar
+  const lecturas = o.lineas.map((l,i)=>{
+    const env  = parseFloat(document.getElementById('ofd-env-'+i)?.value)||0;
+    const lote = (document.getElementById('ofd-lote-'+i)?.value||'').trim();
+    const venc = (document.getElementById('ofd-venc-'+i)?.value||'').trim();
+    return { l, i, env, lote, venc };
+  });
+  if(lecturas.every(r=>r.env<=0)){ toast('Ingresá cantidades a enviar','⚠'); return; }
+  // Ejecutar descuento
+  lecturas.forEach(({l,env,lote,venc})=>{
+    if(env<=0){ l.aEnviar = 0; l.lotes = []; return; }
+    const r = _consumirStockFazon(l.codigo, env, l.tipo==='MP'?lote:'', l.tipo==='MP'?venc:'');
+    l.aEnviar = env;
+    l.lotes = r.usados;
+    const refLote = r.usados.length ? r.usados.map(u=>(u.lote||'s/l')+(u.manual?'(man)':'')).join('+') : '—';
+    registrarMovimiento(l.codigo, l.nombre, 'salida', env, r.antes, r.despues,
+      'Despacho a Fazón', `${o.nro} · ${o.fazon} · lote ${refLote}`);
+  });
+  o.estado = 'despachada';
+  o.fechaDespacho = new Date().toISOString();
+  o.fechaModif = Date.now();
+  saveState();
+  closeM('m-of-despacho');
+  renderOrdenesFazon();
+  if(typeof renderStock==='function') renderStock();
+  if(typeof renderHistorial==='function') renderHistorial();
+  toast('Despacho confirmado · '+o.nro+' · stock descontado', '🚚', 4000);
+}
+
+// ───────── EN PRODUCCIÓN ─────────
+function marcarEnProduccionFazon(id){
+  const o = _ofFind(id); if(!o) return;
+  o.estado = 'produccion';
+  o.fechaModif = Date.now();
+  saveState();
+  renderOrdenesFazon();
+  toast('Orden en producción · '+o.nro, '⚙');
+}
+
+// ───────── RECEPCIÓN DE PT ─────────
+function abrirRecepcionFazon(id){
+  const o = _ofFind(id); if(!o){ toast('Orden no encontrada','⚠'); return; }
+  _ofRecId = id;
+  document.getElementById('of-rec-nro').textContent = '· '+o.nro;
+  const prods = _ofProductos(o);
+  document.getElementById('of-rec-body').innerHTML = prods.map((p,i)=>`
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+      <div style="font-weight:600;margin-bottom:8px">${p.nombre} <span style="font-family:var(--mono);font-size:11px;color:var(--text3)">${p.cod}</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div class="fl"><label>Cantidad recibida</label><input type="number" id="ofr-cant-${i}" value="${p.cantidad}"></div>
+        <div class="fl"><label>Lote (Nutratec)</label><input type="text" id="ofr-lote-${i}" placeholder="Ej: 11062611"></div>
+        <div class="fl"><label>Vencimiento</label><input type="date" id="ofr-venc-${i}"></div>
+      </div>
+    </div>`).join('');
+  openM('m-of-recepcion');
+}
+
+function confirmarRecepcionFazon(){
+  const o = _ofFind(_ofRecId); if(!o){ toast('Orden no encontrada','⚠'); return; }
+  const prods = _ofProductos(o);
+  const recs = []; let algo = false;
+  prods.forEach((p,i)=>{
+    const cant = parseFloat(document.getElementById('ofr-cant-'+i)?.value)||0;
+    const lote = (document.getElementById('ofr-lote-'+i)?.value||'').trim();
+    const venc = (document.getElementById('ofr-venc-'+i)?.value||'').trim();
+    if(cant<=0) return;
+    algo = true;
+    if(!D.stockPT[p.cod]) D.stockPT[p.cod] = { nombre:p.nombre, stock:0, um:'u', lotes:[] };
+    const pt = D.stockPT[p.cod];
+    const antes = Number(pt.stock)||0;
+    pt.stock = Math.round((antes + cant)*1000)/1000;
+    pt.lotes.unshift({ lote, cantidad:cant, vencimiento:venc, fecha:new Date().toISOString().slice(0,10), ordenId:o.id });
+    registrarMovimiento(p.cod, p.nombre, 'entrada', cant, antes, pt.stock,
+      'Recepción Fazón', `${o.nro} · ${o.fazon} · lote ${lote||'—'}`);
+    recs.push({ cod:p.cod, nombre:p.nombre, cantidad:cant, lote, vencimiento:venc, fecha:new Date().toISOString() });
+  });
+  if(!algo){ toast('Ingresá al menos una cantidad recibida','⚠'); return; }
+  o.estado = 'recibida';
+  o.recepciones = recs;
+  o.fechaRecepcion = new Date().toISOString();
+  o.fechaModif = Date.now();
+  saveState();
+  closeM('m-of-recepcion');
+  renderOrdenesFazon();
+  if(typeof renderHistorial==='function') renderHistorial();
+  const totU = recs.reduce((s,r)=>s+r.cantidad,0);
+  toast('Recibido · '+recs.length+' producto(s) · '+fmtU(totU)+' u', '📥', 4000);
+}
+
+// ───────── REVERTIR DESPACHO ─────────
+function revertirDespachoFazon(id){
+  const o = _ofFind(id); if(!o) return;
+  if(o.estado!=='despachada' && o.estado!=='produccion'){ toast('Solo se revierte una orden despachada','⚠'); return; }
+  if(!confirm(`¿Revertir el despacho de ${o.nro}? Se re-suma el stock al depósito y la orden vuelve a Borrador.`)) return;
+  o.lineas.forEach(l=>{
+    if(!l.aEnviar || l.aEnviar<=0) return;
+    const s = D.stock[l.codigo];
+    const antes = s ? (Number(s.stock)||0) : 0;
+    if(s){
+      // re-sumar a lotes usados (o al primero) y a deposito
+      const u = getUbic(s);
+      u.deposito = Math.round(((u.deposito||0)+l.aEnviar)*1000)/1000;
+      (l.lotes||[]).forEach(us=>{
+        const lt = (s.lotes||[]).find(x=>x.lote===us.lote);
+        if(lt) lt.cantidad = Math.round(((Number(lt.cantidad)||0)+us.cantidad)*1000)/1000;
+        else s.lotes.unshift({lote:us.lote, cantidad:us.cantidad, vencimiento:us.vencimiento||'', fecha:new Date().toISOString().slice(0,10)});
+      });
+      syncStockTotal(s);
+    }
+    registrarMovimiento(l.codigo, l.nombre, 'entrada', l.aEnviar, antes, s?(Number(s.stock)||0):antes,
+      'Despacho Fazón revertido', `${o.nro}`);
+    l.aEnviar = l.requerido; l.lotes = [];
+  });
+  o.estado = 'borrador';
+  o.fechaDespacho = null;
+  o.fechaModif = Date.now();
+  saveState();
+  renderOrdenesFazon();
+  if(typeof renderStock==='function') renderStock();
+  if(typeof renderHistorial==='function') renderHistorial();
+  toast('Despacho revertido · '+o.nro, '↩', 4000);
+}
+
+function eliminarOrdenFazon(id){
+  const o = _ofFind(id); if(!o) return;
+  if(o.estado!=='borrador'){ toast('Solo se eliminan órdenes en Borrador','⚠'); return; }
+  if(!confirm(`¿Eliminar la orden ${o.nro}?`)) return;
+  S.ordenesFazon = S.ordenesFazon.filter(x=>x.id!==id);
+  saveState();
+  renderOrdenesFazon();
+  toast('Orden eliminada','🗑️');
+}
+
+// ───────── ACCIONES POR ESTADO ─────────
+function _ofAcciones(o){
+  const b = (fn,txt,cls,extra='')=>`<button class="btn btn-sm ${cls}" onclick="event.stopPropagation();${fn}" style="padding:3px 8px;font-size:10px;${extra}">${txt}</button>`;
+  const pdf = b(`exportarOFPDF('${o.id}')`,'📄 PDF','btn-g');
+  let acc = '';
+  if(o.estado==='borrador')        acc = b(`abrirDespachoFazon('${o.id}')`,'🚚 Despachar','btn-p') + b(`eliminarOrdenFazon('${o.id}')`,'✕','btn-g','color:var(--red);border-color:var(--red)');
+  else if(o.estado==='despachada') acc = b(`marcarEnProduccionFazon('${o.id}')`,'⚙ En producción','btn-b') + b(`revertirDespachoFazon('${o.id}')`,'↩','btn-g');
+  else if(o.estado==='produccion') acc = b(`abrirRecepcionFazon('${o.id}')`,'📥 Recibir','btn-p') + b(`revertirDespachoFazon('${o.id}')`,'↩','btn-g');
+  else if(o.estado==='recibida'){ const recs=o.recepciones||(o.recepcion?[o.recepcion]:[]); const t=recs.reduce((s,r)=>s+(r.cantidad||0),0); acc = `<span style="font-size:10px;color:var(--text3)">✓ ${recs.length} prod · ${fmtU(t)} u</span>`; }
+  return `<div style="display:flex;gap:5px;justify-content:flex-end;flex-wrap:wrap">${pdf}${acc}</div>`;
+}
+
+// ───────── RENDER PRINCIPAL ─────────
+function renderOrdenesFazon(){
+  const fEstado = document.getElementById('f-of-estado')?.value || '';
+  const fQ = (document.getElementById('s-ordenesfazon')?.value||'').toLowerCase();
+  const PER = 20;
+  let data = (S.ordenesFazon||[]).filter(o=>{
+    if(fEstado && o.estado!==fEstado) return false;
+    if(fQ){
+      const hay = (o.nro||'').toLowerCase().includes(fQ) ||
+        _ofProductos(o).some(p=>(p.nombre||'').toLowerCase().includes(fQ) || (p.cod||'').toLowerCase().includes(fQ));
+      if(!hay) return false;
+    }
+    return true;
+  });
+
+  // KPIs
+  const all = S.ordenesFazon||[];
+  const mesActual = new Date().toISOString().slice(0,7);
+  const activas   = all.filter(o=>o.estado!=='recibida').length;
+  const enNutratec= all.filter(o=>o.estado==='produccion').length;
+  const recibidasMes = all.filter(o=>o.estado==='recibida' && (o.fechaRecepcion||'').slice(0,7)===mesActual).length;
+  const valorTransito = all.filter(o=>o.estado==='despachada'||o.estado==='produccion').reduce((s,o)=>s+_ofValorOrden(o),0);
+  const kpiEl = document.getElementById('of-kpis');
+  if(kpiEl){
+    kpiEl.innerHTML = [
+      ['Órdenes activas', activas, 'var(--gold2)'],
+      ['En Nutratec', enNutratec, 'var(--blue)'],
+      ['Recibidas · mes', recibidasMes, 'var(--green)'],
+      ['Valor en tránsito', 'US$ '+fmt(valorTransito,0), 'var(--gold)'],
+    ].map(([lbl,val,col])=>`
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:10px 18px;min-width:150px">
+        <div style="font-size:11px;color:var(--text2)">${lbl}</div>
+        <div style="font-size:20px;font-weight:700;color:${col}">${val}</div>
+      </div>`).join('');
+  }
+
+  const empty = document.getElementById('of-empty');
+  const tbl = document.getElementById('tbl-ordenesfazon');
+  if(!data.length){
+    if(empty) empty.style.display = 'block';
+    if(tbl) tbl.innerHTML = '';
+    renderPag('pag-ordenesfazon', 0, PER, 1, ()=>{});
+  } else {
+    if(empty) empty.style.display = 'none';
+    const page = S.ordenesFazonPage || 1;
+    const start = (page-1)*PER;
+    const slice = data.slice(start, start+PER);
+    if(tbl) tbl.innerHTML = slice.map(o=>{
+      const desp = o.fechaDespacho ? o.fechaDespacho.slice(0,10).split('-').reverse().slice(0,2).join('/') : '—';
+      const prods = _ofProductos(o);
+      const totU = prods.reduce((s,p)=>s+(p.cantidad||0),0);
+      const label = prods.length===1 ? (prods[0].nombre||'—') : (prods.length+' productos');
+      let sub = prods.map(p=>p.nombre+' ×'+fmtU(p.cantidad)).join(' · ');
+      if(sub.length>64) sub = sub.slice(0,62)+'…';
+      return `<tr>
+        <td style="font-family:var(--mono);font-size:12px;color:var(--gold2);font-weight:600">${o.nro}</td>
+        <td>${label}<div style="font-size:10px;color:var(--text3);font-family:var(--mono)">${sub} · ${o.fazon}</div></td>
+        <td class="tr" style="font-family:var(--mono);font-size:12px">${fmtU(totU)} u</td>
+        <td class="tc">${_ofEstadoPill(o.estado)}</td>
+        <td class="tc" style="font-family:var(--mono);font-size:11px;color:var(--text2)">${desp}</td>
+        <td class="tr" style="font-family:var(--mono);font-size:12px">US$ ${fmt(_ofValorOrden(o),0)}</td>
+        <td>${_ofAcciones(o)}</td>
+      </tr>`;
+    }).join('');
+    renderPag('pag-ordenesfazon', data.length, PER, page, p=>{ S.ordenesFazonPage=p; renderOrdenesFazon(); });
+  }
+
+  // Badge
+  const nb = document.getElementById('nb-ordenesfazon');
+  if(nb){ if(activas>0){ nb.style.display='inline-flex'; nb.textContent=activas; } else nb.style.display='none'; }
+
+  renderStockPT();
+}
+
+function renderStockPT(){
+  const tbl = document.getElementById('tbl-stockpt');
+  const empty = document.getElementById('of-pt-empty');
+  const wrap = document.getElementById('of-pt-wrap');
+  const entries = Object.entries(D.stockPT||{}).filter(([k,v])=>v && (v.lotes?.length || v.stock));
+  if(!entries.length){
+    if(tbl) tbl.innerHTML='';
+    if(wrap) wrap.style.display='none';
+    if(empty) empty.style.display='block';
+    return;
+  }
+  if(empty) empty.style.display='none';
+  if(wrap && wrap.dataset.collapsed!=='1') wrap.style.display='';
+  let rows = '';
+  entries.forEach(([cod,v])=>{
+    const lotes = v.lotes||[];
+    if(!lotes.length){
+      rows += `<tr><td style="font-family:var(--mono);font-size:11px;color:var(--text2)">${cod}</td><td>${v.nombre}</td><td class="tr" style="font-family:var(--mono)">${fmtU(v.stock)} ${v.um||'u'}</td><td>—</td><td class="tc">—</td><td class="tr">—</td></tr>`;
+      return;
+    }
+    lotes.forEach((lt,i)=>{
+      rows += `<tr>
+        ${i===0?`<td style="font-family:var(--mono);font-size:11px;color:var(--text2)" rowspan="${lotes.length}">${cod}</td><td rowspan="${lotes.length}">${v.nombre}</td><td class="tr" style="font-family:var(--mono);font-weight:600" rowspan="${lotes.length}">${fmtU(v.stock)} ${v.um||'u'}</td>`:''}
+        <td style="font-family:var(--mono);font-size:11px">${lt.lote||'—'}</td>
+        <td class="tc" style="font-family:var(--mono);font-size:11px">${lt.vencimiento?lt.vencimiento.split('-').reverse().join('/'):'—'}</td>
+        <td class="tr" style="font-family:var(--mono)">${fmtU(lt.cantidad)}</td>
+      </tr>`;
+    });
+  });
+  if(tbl) tbl.innerHTML = rows;
+}
+
+function toggleStockPT(){
+  const wrap = document.getElementById('of-pt-wrap');
+  const caret = document.getElementById('of-pt-caret');
+  if(!wrap) return;
+  const collapsed = wrap.dataset.collapsed==='1';
+  wrap.dataset.collapsed = collapsed ? '0' : '1';
+  wrap.style.display = collapsed ? '' : 'none';
+  if(caret) caret.textContent = collapsed ? '▾' : '▸';
+}
+
+// ───────── PDF DE LA ORDEN (A4 horizontal) ─────────
+function exportarOFPDF(id){
+  try{
+    const o = _ofFind(id); if(!o){ toast('Orden no encontrada','⚠'); return; }
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({orientation:'landscape', unit:'mm', format:'a4'});
+    const W=297, H=210, ML=14, MR=14, CW=W-ML-MR;
+    let y=14;
+    const usarEnviar = (o.estado!=='borrador');
+    // posiciones de columnas
+    const X = { cod:ML+1, ins:ML+20, cant:ML+78, lote:ML+104, venc:ML+150, prod:ML+176 };
+    const wIns = X.cant - X.ins - 2, wLote = X.venc - X.lote - 2, wProd = ML+CW - X.prod;
+
+    // barra dorada
+    pdf.setFillColor(201,168,76); pdf.rect(ML,y,CW,10,'F');
+    pdf.setTextColor(26,26,26); pdf.setFont('helvetica','bold'); pdf.setFontSize(8);
+    pdf.text('THE FINE COMPANY', ML+3, y+4);
+    pdf.setFontSize(14); pdf.text('ORDEN DE PRODUCCIÓN A FAZÓN', ML+3, y+8.5);
+    y += 15;
+
+    // datos generales
+    pdf.setTextColor(60,60,60); pdf.setFont('helvetica','normal'); pdf.setFontSize(10);
+    const prods = _ofProductos(o);
+    const datos = [
+      ['N° de orden', o.nro],
+      ['Fazón', o.fazon],
+      ['Productos', prods.map(p=>p.nombre+' ×'+fmtU(p.cantidad)+' u').join('   |   ')],
+      ['Estado', (_OF_ESTADOS[o.estado]||['','',])[1]||o.estado],
+      ['Fecha', new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'long',year:'numeric'})],
+    ];
+    datos.forEach(([k,v])=>{
+      pdf.setFont('helvetica','bold'); pdf.text(k+':', ML, y);
+      pdf.setFont('helvetica','normal');
+      const lines = pdf.splitTextToSize(String(v), CW-40);
+      pdf.text(lines, ML+38, y);
+      y += 5.5*lines.length;
+    });
+    y += 2;
+
+    const header = ()=>{
+      pdf.setTextColor(120,120,120); pdf.setFont('helvetica','bold'); pdf.setFontSize(7.5);
+      pdf.text('CÓDIGO', X.cod, y+4); pdf.text('INSUMO', X.ins, y+4);
+      pdf.text('CANT. ENVIADA', X.cant, y+4); pdf.text('LOTE', X.lote, y+4);
+      pdf.text('VENCE', X.venc, y+4); pdf.text('PRODUCTOS QUE LO CONSUMEN', X.prod, y+4);
+      y += 6; pdf.setDrawColor(220,220,220); pdf.line(ML,y,ML+CW,y);
+      pdf.setTextColor(40,40,40); pdf.setFont('helvetica','normal'); pdf.setFontSize(8);
+    };
+    const drawTabla = (titulo, arr)=>{
+      if(!arr.length) return;
+      if(y>176){ pdf.addPage(); y=14; }
+      pdf.setFillColor(77,77,77); pdf.rect(ML,y,CW,7,'F');
+      pdf.setTextColor(255,255,255); pdf.setFont('helvetica','bold'); pdf.setFontSize(9);
+      pdf.text(titulo, ML+2, y+4.8); y += 7;
+      header();
+      arr.forEach(l=>{
+        if(y>190){ pdf.addPage(); y=14; header(); }
+        y += 5;
+        const q = usarEnviar ? l.aEnviar : l.requerido;
+        const lotesArr = (l.lotes&&l.lotes.length) ? l.lotes : [];
+        const loteStr = lotesArr.length ? lotesArr.map(u=>u.lote||'s/l').join(' + ') : '—';
+        const vencStr = lotesArr.length ? (lotesArr.map(u=>_ofFmtVenc(u.vencimiento)).filter(Boolean).join(' / ')||'—') : '—';
+        const prodsStr = _ofLineaProds(o,l).join(', ');
+        pdf.setTextColor(90,90,90); pdf.text(String(l.codigo), X.cod, y);
+        pdf.setTextColor(30,30,30); pdf.text(pdf.splitTextToSize(String(l.nombre),wIns)[0], X.ins, y);
+        pdf.text(fmt(q,3)+' '+l.um, X.cant, y);
+        pdf.text(pdf.splitTextToSize(loteStr,wLote)[0], X.lote, y);
+        pdf.text(pdf.splitTextToSize(vencStr, X.prod - X.venc - 2)[0], X.venc, y);
+        pdf.setTextColor(110,110,110); pdf.text(pdf.splitTextToSize(prodsStr, wProd)[0], X.prod, y);
+      });
+      y += 4;
+    };
+    drawTabla('MATERIAS PRIMAS · NÚCLEOS', o.lineas.filter(l=>l.tipo==='MP'));
+    drawTabla('EMPAQUE · PACKAGING', o.lineas.filter(l=>l.tipo==='PK'));
+
+    // firmas
+    if(y>172){ pdf.addPage(); y=14; }
+    y += 16;
+    pdf.setDrawColor(150,150,150);
+    pdf.line(ML,y,ML+80,y); pdf.line(ML+CW-80,y,ML+CW,y);
+    pdf.setTextColor(70,70,70); pdf.setFont('helvetica','normal'); pdf.setFontSize(9);
+    pdf.text('Despachó — The Fine Company', ML, y+5);
+    pdf.text('Recibió — '+o.fazon, ML+CW-80, y+5);
+
+    pdf.save(o.nro+'.pdf');
+    toast('PDF generado · '+o.nro, '📄');
+  }catch(e){ toast('Error al generar PDF: '+e.message,'⚠',5000); console.error(e); }
+}
+
 function exportHistorialXLSX() {
   if(!S.movimientos.length) { toast('No hay movimientos para exportar', '⚠', 2500); return; }
   const rows = [['Fecha','Código','Insumo','Tipo','Cantidad (delta)','Stock antes','Stock después','Origen','Referencia']];
@@ -9226,6 +10099,25 @@ function actualizarBadgePropuestas() {
   badge.style.display = n > 0 ? '' : 'none';
 }
 
+function productosQueUsanInsumo(codigo) {
+  if(typeof BOM_COMPLETO === 'undefined' || !codigo) return [];
+  const nombres = [];
+  Object.keys(BOM_COMPLETO).forEach(pt => {
+    const bom = BOM_COMPLETO[pt];
+    if(bom && Array.isArray(bom.insumos) && bom.insumos.some(i => i.codigo === codigo)) {
+      nombres.push(bom.nombre || pt);
+    }
+  });
+  return nombres;
+}
+
+function formatProductosOC(oc) {
+  const matches = productosQueUsanInsumo(oc.codigo);
+  if(matches.length) return matches.join(', ');
+  if(oc.productos && oc.productos !== '(MRP)') return oc.productos;
+  return '—';
+}
+
 function renderPropuestas() {
   const data = S.comprasPropuestas;
   const empty = document.getElementById('propuestas-empty');
@@ -9243,7 +10135,7 @@ function renderPropuestas() {
       </td>
       <td class="td-code">${oc.codigo}</td>
       <td class="td-name">${oc.descripcion}</td>
-      <td style="font-size:11px;color:var(--text3)">${oc.productos||'—'}</td>
+      <td style="font-size:11px;color:var(--text3)" title="${formatProductosOC(oc)}">${formatProductosOC(oc)}</td>
       <td class="td-mono tr">${fmt(oc.cantidad)} <span style="font-size:9px;color:var(--text3)">${oc.um||'kg'}</span></td>
       <td style="font-size:12px;color:var(--text2)">${oc.proveedor||'<span style="color:var(--text3);font-style:italic">sin asignar</span>'}</td>
       <td><span class="pill pill-blue" style="font-size:8px">Planificador</span></td>
