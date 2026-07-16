@@ -17,7 +17,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay nueva versión desplegada
 (function(){
-  var VER = '20260714-119';
+  var VER = '20260716-120';
   var url = new URL(window.location.href);
   if(url.searchParams.get('v') !== VER){
     url.searchParams.set('v', VER);
@@ -761,19 +761,19 @@ body.viewer-mode .page-filters select { pointer-events:auto }
     <div class="sh">
       <div class="sh-title">Órdenes de Compra — Abril 2026</div>
       <div class="sh-actions">
-        <select class="fsel" id="f-oc-prov" onchange="renderCompras()"><option value="">Todos los proveedores</option></select>
-        <select class="fsel" id="f-oc-pagada" onchange="renderCompras()">
+        <select class="fsel" id="f-oc-prov" onchange="S.comprasPage=1;renderCompras()"><option value="">Todos los proveedores</option></select>
+        <select class="fsel" id="f-oc-pagada" onchange="S.comprasPage=1;renderCompras()">
           <option value="">💳 Pagada: todas</option>
           <option value="si">💳 Pagada: Sí</option>
           <option value="no">💳 Pagada: No</option>
         </select>
-        <select class="fsel" id="f-oc-entregada" onchange="renderCompras()">
+        <select class="fsel" id="f-oc-entregada" onchange="S.comprasPage=1;renderCompras()">
           <option value="">📦 Estado: todas</option>
           <option value="no">📦 Pendientes de entrega</option>
           <option value="si">📦 Entregadas</option>
           <option value="rec-sin-pagar">⚠️ Recibida sin pagar</option>
         </select>
-        <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-compras" placeholder="Buscar..." oninput="renderCompras()"></div>
+        <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-compras" placeholder="Buscar en todas las OCs..." oninput="S.comprasPage=1;renderCompras()"></div>
         <button class="btn btn-p" onclick="nuevaOC()">+ Nueva OC</button>
         <button class="btn btn-b" onclick="exportarOC()">↓ Exportar OC</button>
       </div>
@@ -6397,7 +6397,13 @@ function filterCompras(){
   const fEnt=document.getElementById('f-oc-entregada')?.value||'';
   return S.compras.filter(c=>{
     if(fp&&c.proveedor!==fp) return false;
-    if(q&&!(c.nro||'').toLowerCase().includes(q)&&!(c.codigo||'').toLowerCase().includes(q)&&!(c.descripcion||'').toLowerCase().includes(q)&&!(c.proveedor||'').toLowerCase().includes(q)) return false;
+    if(q){
+      const enItems = Array.isArray(c.items) && c.items.some(it =>
+        (it.codigo||'').toLowerCase().includes(q) || (it.descripcion||'').toLowerCase().includes(q));
+      const hay = (c.nro||'').toLowerCase().includes(q) || (c.codigo||'').toLowerCase().includes(q)
+        || (c.descripcion||'').toLowerCase().includes(q) || (c.proveedor||'').toLowerCase().includes(q) || enItems;
+      if(!hay) return false;
+    }
     if(fPag==='si'&&!c.pagada) return false;
     if(fPag==='no'&&c.pagada) return false;
     if(fEnt==='si'&&!c.entregada) return false;
