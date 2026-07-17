@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260717-12';
+  var VER = '20260717-13';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260717-12">
+<link rel="stylesheet" href="styles.css?v=20260717-13">
 </head>
 <body>
 <div class="layout">
@@ -256,7 +256,8 @@
               <button class="btn btn-g" id="prop-meses-btn" onclick="togglePanelMeses(event)">🗓 Meses a explosionar ▾</button>
               <div id="prop-meses-panel" style="display:none;position:absolute;top:110%;left:0;z-index:50;background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:10px 14px;box-shadow:0 6px 24px rgba(0,0,0,.15);min-width:180px"></div>
             </div>
-            <button class="btn btn-p" onclick="crearOCsPropuestas()">⚡ Generar OCs por proveedor</button>
+            <button class="btn btn-p" onclick="correrMRP()">▶ Correr MRP</button>
+            <button class="btn btn-g" onclick="crearOCsPropuestas()">⚡ Generar OCs por proveedor</button>
           </div>
         </div>
         <p style="font-size:12px;color:var(--text3);margin:-6px 0 14px">Explota el plan del MPS contra el stock total (incluye Nutratec) y las OCs pendientes de entrega. "Generar OCs" crea borradores agrupados por proveedor sugerido, listos para revisar en Órdenes de Compra.</p>
@@ -270,8 +271,8 @@
           <tbody id="tbl-prop"></tbody>
         </table></div>
         <div class="empty" id="prop-empty" style="display:none">
-          <div class="empty-ico">✓</div><div class="empty-t">Nada que comprar</div>
-          <div class="empty-s">El stock y las OCs pendientes cubren el plan del horizonte elegido.</div>
+          <div class="empty-ico" id="prop-empty-ico">▶</div><div class="empty-t" id="prop-empty-t">MRP sin correr</div>
+          <div class="empty-s" id="prop-empty-s">Elegí los meses a explosionar y tocá "▶ Correr MRP".</div>
         </div>
       </div>
 
@@ -659,8 +660,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js?v=20260717-12"></script>
-<script src="store.js?v=20260717-12"></script>
-<script src="app.js?v=20260717-12"></script>
+<script src="data.js?v=20260717-13"></script>
+<script src="store.js?v=20260717-13"></script>
+<script src="app.js?v=20260717-13"></script>
 </body>
 </html>

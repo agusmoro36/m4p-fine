@@ -1657,20 +1657,44 @@ function _mesesPanelInit() {
       <button class="btn btn-g btn-sm" onclick="_mesesTodos(true)">todos</button>
       <button class="btn btn-g btn-sm" onclick="_mesesTodos(false)">ninguno</button></div>` +
     mesesHorizonte().map(m => `<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13.5px;cursor:pointer">
-      <input type="checkbox" class="prop-mes" value="${m}" checked onchange="renderPropuestas()"> ${mesCorto(m)}</label>`).join('');
+      <input type="checkbox" class="prop-mes" value="${m}" checked onchange="_mesesLabel()"> ${mesCorto(m)}</label>`).join('');
 }
 function _mesesTodos(v) {
   document.querySelectorAll('.prop-mes').forEach(c => c.checked = v);
+  _mesesLabel();
+}
+function _mesesLabel() {
+  const sel = _mesesSel();
+  const btn = document.getElementById('prop-meses-btn');
+  if (btn) btn.textContent = `🗓 Meses (${sel.length}/${mesesHorizonte().length}): ${sel.length ? sel.map(mesCorto).join(', ').slice(0, 34) + (sel.length > 4 ? '…' : '') : 'ninguno'} ▾`;
+}
+let _mrpSel = null; // última corrida
+function correrMRP() {
+  _mrpSel = _mesesSel();
+  if (!_mrpSel.length) { toast('Tildá al menos un mes', '⚠'); return; }
   renderPropuestas();
+  const n = (window._propFilas || []).length;
+  toast(n ? `▶ MRP corrido · ${n} insumo(s) a comprar en ${_mrpSel.length} mes(es)` : '▶ MRP corrido · nada que comprar ✓', '🧮', 4000);
 }
 function _mesesSel() {
   return [...document.querySelectorAll('.prop-mes:checked')].map(c => c.value);
 }
 function renderPropuestas() {
   _mesesPanelInit();
-  const sel = _mesesSel();
-  const btn = document.getElementById('prop-meses-btn');
-  if (btn) btn.textContent = `🗓 Meses (${sel.length}/${mesesHorizonte().length}): ${sel.length ? sel.map(mesCorto).join(', ').slice(0, 34) + (sel.length > 4 ? '…' : '') : 'ninguno'} ▾`;
+  _mesesLabel();
+  if (!_mrpSel) {
+    document.getElementById('tbl-prop').innerHTML = '';
+    document.getElementById('prop-kpis').innerHTML = '';
+    document.getElementById('prop-empty-ico').textContent = '▶';
+    document.getElementById('prop-empty-t').textContent = 'MRP sin correr';
+    document.getElementById('prop-empty-s').textContent = 'Elegí los meses a explosionar y tocá "▶ Correr MRP".';
+    document.getElementById('prop-empty').style.display = 'block';
+    return;
+  }
+  document.getElementById('prop-empty-ico').textContent = '✓';
+  document.getElementById('prop-empty-t').textContent = 'Nada que comprar';
+  document.getElementById('prop-empty-s').textContent = 'El stock y las OCs pendientes cubren el plan de los meses elegidos.';
+  const sel = _mrpSel;
   const { nec } = necesidadesPlan(sel);
   const filas = Object.values(nec).map(n => {
     const stk = stockTotalIns(n.codigo);
