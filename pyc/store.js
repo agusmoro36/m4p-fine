@@ -13,7 +13,9 @@ const DB = {
   insumos: {},      // codigo → {codigo,nombre,um,tipo,precio,moneda,proveedor,fechaPrecio,updatedAt}
   proveedores: {},  // id → {...}
   productos: {},    // codigo PT → {codigo,nombre,loteMin,politicaDias,skuCore,insumos[],updatedAt}
-  config: {},       // singleton-ish: posiciones de depósito, etc.
+  lotes: {},        // id → {id,codigo,lote,cantidad,vencimiento,ubicacion,abierto,proveedor,fecha,revalida?,updatedAt}
+  movimientos: {},  // id → {id,fecha,tipo,codigo,nombre,cantidad,desde,hacia,ref,updatedAt}
+  config: {},       // posiciones → {id:'posiciones', lista:[...]}
 };
 const COLLS = Object.keys(DB);
 
@@ -107,6 +109,12 @@ async function initStore() {
   }
   if (!Object.keys(DB.productos).length && typeof SEED_PRODUCTOS !== 'undefined') {
     SEED_PRODUCTOS.forEach(p => { DB.productos[p.codigo] = { ...p, updatedAt: 1 }; }); seeded = true;
+  }
+  if (!Object.keys(DB.lotes).length && typeof SEED_LOTES !== 'undefined') {
+    SEED_LOTES.forEach(l => { DB.lotes[l.id] = { ...l, updatedAt: 1 }; }); seeded = true;
+  }
+  if (!DB.config.posiciones && typeof SEED_POSICIONES !== 'undefined') {
+    DB.config.posiciones = { id: 'posiciones', lista: SEED_POSICIONES, updatedAt: 1 }; seeded = true;
   }
   if (seeded) { saveLocal(); saveRemote(); }
   setSaveInd('ok');

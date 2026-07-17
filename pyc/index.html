@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260717-2';
+  var VER = '20260717-3';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260717-2">
+<link rel="stylesheet" href="styles.css?v=20260717-3">
 </head>
 <body>
 <div class="layout">
@@ -43,8 +43,8 @@
 
       <div class="nav-group">Producción</div>
       <div class="nav-item soon"><span class="nav-ico">📋</span>Órdenes a Fazón<span class="nav-soon">FASE 4</span></div>
-      <div class="nav-item soon"><span class="nav-ico">📦</span>Stock de Insumos<span class="nav-soon">FASE 2</span></div>
-      <div class="nav-item soon"><span class="nav-ico">⏱</span>Historial Movs.<span class="nav-soon">FASE 2</span></div>
+      <div class="nav-item" data-page="stock" onclick="go('stock')"><span class="nav-ico">📦</span>Stock de Insumos</div>
+      <div class="nav-item" data-page="historial" onclick="go('historial')"><span class="nav-ico">⏱</span>Historial Movs.</div>
 
       <div class="nav-group">Planificación</div>
       <div class="nav-item soon"><span class="nav-ico">📈</span>Forecast<span class="nav-soon">FASE 5</span></div>
@@ -52,7 +52,7 @@
 
       <div class="nav-group">Reportes</div>
       <div class="nav-item soon"><span class="nav-ico">🚦</span>Semáforo Insumos<span class="nav-soon">FASE 5</span></div>
-      <div class="nav-item soon"><span class="nav-ico">🧮</span>Calculadora MRP<span class="nav-soon">FASE 2</span></div>
+      <div class="nav-item" data-page="calculadora" onclick="go('calculadora')"><span class="nav-ico">🧮</span>Calculadora MRP</div>
     </div>
     <div class="sidebar-foot">
       <span class="save-ind" id="save-ind">·</span>
@@ -141,6 +141,95 @@
         </div>
       </div>
 
+      <!-- ══ STOCK DE INSUMOS ══ -->
+      <div class="page" id="page-stock">
+        <div class="sh">
+          <div class="sh-title">Stock de Insumos <small>· por lote, con vencimientos y ubicación</small></div>
+          <div class="sh-actions">
+            <select class="fsel" id="f-stk-ubic" onchange="stkPage=1;renderStock()"><option value="">Todas las ubicaciones</option></select>
+            <select class="fsel" id="f-stk-venc" onchange="stkPage=1;renderStock()">
+              <option value="">Todos los vencimientos</option>
+              <option value="vencido">⛔ Vencidos</option>
+              <option value="90">⚠ Vencen en 90 días</option>
+              <option value="180">Vencen en 180 días</option>
+            </select>
+            <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-stock" placeholder="Buscar insumo, lote o producto…" oninput="stkPage=1;renderStock()"></div>
+            <button class="btn btn-g" onclick="abrirPosiciones()">📍 Posiciones</button>
+            <button class="btn btn-p" onclick="editLote('')">+ Ingreso manual</button>
+          </div>
+        </div>
+        <div class="kpis" id="stk-kpis"></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr>
+            <th>Código</th><th>Insumo</th><th>Productos que lo consumen</th>
+            <th class="tr">Stock total</th><th>Lote</th><th class="tr">Cantidad</th>
+            <th class="tc">Vencimiento</th><th>Ubicación</th><th class="tc">Estado</th><th class="tc"></th>
+          </tr></thead>
+          <tbody id="tbl-stock"></tbody>
+        </table></div>
+        <div class="pag" id="pag-stock"></div>
+        <div class="empty" id="stk-empty" style="display:none">
+          <div class="empty-ico">📦</div><div class="empty-t">Sin resultados</div>
+        </div>
+      </div>
+
+      <!-- ══ HISTORIAL DE MOVIMIENTOS ══ -->
+      <div class="page" id="page-historial">
+        <div class="sh">
+          <div class="sh-title">Historial de Movimientos</div>
+          <div class="sh-actions">
+            <select class="fsel" id="f-hist-tipo" onchange="histPage=1;renderHistorial()">
+              <option value="">Todos los tipos</option>
+              <option value="entrada">↑ Entradas</option>
+              <option value="salida">↓ Salidas</option>
+              <option value="ajuste">⟳ Ajustes</option>
+              <option value="transferencia">↔ Transferencias</option>
+            </select>
+            <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-hist" placeholder="Buscar insumo o referencia…" oninput="histPage=1;renderHistorial()"></div>
+          </div>
+        </div>
+        <div class="kpis" id="hist-kpis"></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr>
+            <th>Fecha</th><th class="tc">Tipo</th><th>Código</th><th>Insumo</th>
+            <th class="tr">Cantidad</th><th>Desde</th><th>Hacia</th><th>Referencia</th>
+          </tr></thead>
+          <tbody id="tbl-hist"></tbody>
+        </table></div>
+        <div class="pag" id="pag-hist"></div>
+        <div class="empty" id="hist-empty" style="display:none">
+          <div class="empty-ico">⏱</div><div class="empty-t">Sin movimientos registrados</div>
+          <div class="empty-s">Se registran al ingresar, ajustar o transferir stock.</div>
+        </div>
+      </div>
+
+      <!-- ══ CALCULADORA MRP ══ -->
+      <div class="page" id="page-calculadora">
+        <div class="sh">
+          <div class="sh-title">Calculadora MRP <small>· ¿alcanza el stock para producir?</small></div>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px">
+          <div class="fl" style="min-width:300px"><label>Producto</label>
+            <select id="calc-prod" class="fsel" onchange="renderCalc()" style="width:100%"><option value="">— Seleccionar —</option></select></div>
+          <div class="fl"><label>Cantidad a producir (u)</label>
+            <input type="number" id="calc-qty" class="fsel" oninput="renderCalc()" placeholder="0" style="width:150px"></div>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);padding-bottom:9px">
+            <input type="checkbox" id="calc-nutratec" checked onchange="renderCalc()"> incluir stock en Nutratec</label>
+        </div>
+        <div class="kpis" id="calc-kpis"></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr>
+            <th>Código</th><th>Insumo</th><th class="tr">Necesario</th><th class="tr">Stock disp.</th>
+            <th class="tr">Diferencia</th><th class="tr">A comprar</th><th class="tr">Costo est.</th>
+          </tr></thead>
+          <tbody id="tbl-calc"></tbody>
+        </table></div>
+        <div class="empty" id="calc-empty">
+          <div class="empty-ico">🧮</div><div class="empty-t">Elegí un producto y una cantidad</div>
+          <div class="empty-s">La calculadora explota la fórmula y compara contra el stock por lote.</div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -211,10 +300,74 @@
   </div>
 </div>
 
+<!-- ══ MODAL LOTE (ingreso manual / edición) ══ -->
+<div class="overlay" id="m-lote">
+  <div class="modal" style="max-width:600px">
+    <button class="modal-close" onclick="closeM('m-lote')">✕</button>
+    <div class="modal-title" id="ml-title">+ Ingreso manual de stock</div>
+    <input type="hidden" id="ml-id">
+    <div class="fg">
+      <div class="fl"><label>Insumo (código)</label><input type="text" id="ml-cod" list="dl-insumos" placeholder="MP-0000" style="font-family:var(--mono);text-transform:uppercase" oninput="mlNombre()"></div>
+      <div class="fl"><label>Nombre</label><input type="text" id="ml-nombre" disabled></div>
+      <div class="fl"><label>Cantidad</label><input type="number" id="ml-cant" step="0.001" min="0"></div>
+      <div class="fl"><label>Lote</label><input type="text" id="ml-lote" style="font-family:var(--mono)"></div>
+      <div class="fl"><label>Vencimiento</label><input type="date" id="ml-venc"></div>
+      <div class="fl"><label>Ubicación</label><input type="text" id="ml-ubic" list="dl-posiciones" placeholder="MP60 / Nutratec…"></div>
+      <div class="fl"><label>Proveedor</label><input type="text" id="ml-prov"></div>
+      <div class="fl" style="justify-content:flex-end"><label style="display:flex;align-items:center;gap:8px;font-size:13px;text-transform:none;letter-spacing:0;font-family:var(--font);color:var(--text2)">
+        <input type="checkbox" id="ml-abierto" style="width:16px;height:16px"> Envase abierto</label></div>
+      <div class="fl fg-full"><label>Motivo / referencia</label><input type="text" id="ml-ref" placeholder="Ej: ajuste de inventario, ingreso inicial…"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-r btn-sm" id="ml-del" onclick="borrarLote()" style="margin-right:auto">🗑 Eliminar lote</button>
+      <button class="btn btn-g" onclick="closeM('m-lote')">Cancelar</button>
+      <button class="btn btn-p" onclick="guardarLote()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL REVÁLIDA ══ -->
+<div class="overlay" id="m-revalida">
+  <div class="modal" style="max-width:520px">
+    <button class="modal-close" onclick="closeM('m-revalida')">✕</button>
+    <div class="modal-title">📄 Reválida <span id="mr-sub" style="font-size:12px;color:var(--text3)"></span></div>
+    <p style="font-size:12px;color:var(--text3);margin:0 0 14px">Subí el PDF de la reválida: el sistema lee el documento y detecta la <b>nueva fecha de vencimiento</b>. Confirmala o corregila antes de guardar.</p>
+    <input type="hidden" id="mr-lote-id">
+    <div class="fl" style="margin-bottom:12px"><label>PDF de la reválida</label>
+      <input type="file" id="mr-file" accept="application/pdf" onchange="procesarRevalidaPDF()"></div>
+    <div id="mr-status" style="font-size:12px;color:var(--text3);margin-bottom:12px"></div>
+    <div class="fg">
+      <div class="fl"><label>Nueva fecha de vencimiento</label><input type="date" id="mr-venc"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-g" onclick="closeM('m-revalida')">Cancelar</button>
+      <button class="btn btn-p" onclick="guardarRevalida()">Guardar reválida</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL POSICIONES ══ -->
+<div class="overlay" id="m-posiciones">
+  <div class="modal" style="max-width:520px">
+    <button class="modal-close" onclick="closeM('m-posiciones')">✕</button>
+    <div class="modal-title">📍 Posiciones del depósito</div>
+    <p style="font-size:12px;color:var(--text3);margin:0 0 12px">Una por línea. Se usan como desplegable de ubicación en los lotes ("Nutratec" siempre disponible).</p>
+    <textarea id="mp-lista" rows="12" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-family:var(--mono);font-size:12px;color:var(--text);outline:none"></textarea>
+    <div class="modal-footer">
+      <button class="btn btn-g" onclick="closeM('m-posiciones')">Cancelar</button>
+      <button class="btn btn-p" onclick="guardarPosiciones()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<datalist id="dl-insumos"></datalist>
+<datalist id="dl-posiciones"></datalist>
+
 <div id="toasts"></div>
 
-<script src="data.js?v=20260717-2"></script>
-<script src="store.js?v=20260717-2"></script>
-<script src="app.js?v=20260717-2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="data.js?v=20260717-3"></script>
+<script src="store.js?v=20260717-3"></script>
+<script src="app.js?v=20260717-3"></script>
 </body>
 </html>
