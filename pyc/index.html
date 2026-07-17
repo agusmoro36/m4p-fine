@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260717-11';
+  var VER = '20260717-12';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260717-11">
+<link rel="stylesheet" href="styles.css?v=20260717-12">
 </head>
 <body>
 <div class="layout">
@@ -252,11 +252,10 @@
         <div class="sh">
           <div class="sh-title">OCs Propuestas <small>· MRP: lo que hay que comprar para cumplir el plan</small></div>
           <div class="sh-actions">
-            <select class="fsel" id="f-prop-hor" onchange="renderPropuestas()">
-              <option value="3">Horizonte 3 meses</option>
-              <option value="6">Horizonte 6 meses</option>
-              <option value="9" selected>Horizonte 9 meses</option>
-            </select>
+            <div style="position:relative">
+              <button class="btn btn-g" id="prop-meses-btn" onclick="togglePanelMeses(event)">🗓 Meses a explosionar ▾</button>
+              <div id="prop-meses-panel" style="display:none;position:absolute;top:110%;left:0;z-index:50;background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:10px 14px;box-shadow:0 6px 24px rgba(0,0,0,.15);min-width:180px"></div>
+            </div>
             <button class="btn btn-p" onclick="crearOCsPropuestas()">⚡ Generar OCs por proveedor</button>
           </div>
         </div>
@@ -660,8 +659,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js?v=20260717-11"></script>
-<script src="store.js?v=20260717-11"></script>
-<script src="app.js?v=20260717-11"></script>
+<script src="data.js?v=20260717-12"></script>
+<script src="store.js?v=20260717-12"></script>
+<script src="app.js?v=20260717-12"></script>
 </body>
 </html>

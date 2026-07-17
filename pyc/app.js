@@ -1598,12 +1598,13 @@ function mpsLimpiarOverrides() {
 }
 
 // ── Necesidades de insumos según el plan (para Propuestas y Semáforo) ──
-function necesidadesPlan(nMeses) {
-  const meses = mesesHorizonte().slice(0, nMeses);
+// Acepta un número (primeros N meses) o un array de meses puntuales ['2026-07',…]
+function necesidadesPlan(sel) {
+  const meses = Array.isArray(sel) ? sel : mesesHorizonte().slice(0, sel);
   const nec = {};   // codigo → {total, porMes:{mes:qty}, nombre, um}
   prodsPlan().forEach(p => {
     const plan = calcMPS(p);
-    plan.slice(0, nMeses).forEach(r => {
+    plan.filter(r => meses.includes(r.mes)).forEach(r => {
       if (!r.prop) return;
       const f = r.prop / (p.loteMin || 1);
       (p.insumos || []).forEach(ins => {
@@ -1639,9 +1640,38 @@ function provSugerido(cod) {
 }
 
 // ── OCS PROPUESTAS ──
+function togglePanelMeses(e) {
+  e?.stopPropagation();
+  const p = document.getElementById('prop-meses-panel');
+  p.style.display = p.style.display === 'none' ? '' : 'none';
+}
+document.addEventListener('click', e => {
+  const p = document.getElementById('prop-meses-panel');
+  if (p && p.style.display !== 'none' && !p.contains(e.target) && e.target.id !== 'prop-meses-btn') p.style.display = 'none';
+});
+function _mesesPanelInit() {
+  const p = document.getElementById('prop-meses-panel');
+  if (!p || p.dataset.ready) return;
+  p.dataset.ready = '1';
+  p.innerHTML = `<div style="display:flex;gap:8px;margin-bottom:8px">
+      <button class="btn btn-g btn-sm" onclick="_mesesTodos(true)">todos</button>
+      <button class="btn btn-g btn-sm" onclick="_mesesTodos(false)">ninguno</button></div>` +
+    mesesHorizonte().map(m => `<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13.5px;cursor:pointer">
+      <input type="checkbox" class="prop-mes" value="${m}" checked onchange="renderPropuestas()"> ${mesCorto(m)}</label>`).join('');
+}
+function _mesesTodos(v) {
+  document.querySelectorAll('.prop-mes').forEach(c => c.checked = v);
+  renderPropuestas();
+}
+function _mesesSel() {
+  return [...document.querySelectorAll('.prop-mes:checked')].map(c => c.value);
+}
 function renderPropuestas() {
-  const nM = parseInt(document.getElementById('f-prop-hor')?.value, 10) || 9;
-  const { nec } = necesidadesPlan(nM);
+  _mesesPanelInit();
+  const sel = _mesesSel();
+  const btn = document.getElementById('prop-meses-btn');
+  if (btn) btn.textContent = `🗓 Meses (${sel.length}/${mesesHorizonte().length}): ${sel.length ? sel.map(mesCorto).join(', ').slice(0, 34) + (sel.length > 4 ? '…' : '') : 'ninguno'} ▾`;
+  const { nec } = necesidadesPlan(sel);
   const filas = Object.values(nec).map(n => {
     const stk = stockTotalIns(n.codigo);
     const pipe = pipelineOC(n.codigo);
