@@ -20,7 +20,7 @@ document.addEventListener('click', e => { if (e.target.classList?.contains('over
 const TITLES = {
   minsumos: 'Maestro de Insumos', mproveedores: 'Maestro de Proveedores', mproductos: 'Maestro de Producto Terminado',
   stock: 'Stock de Insumos', historial: 'Historial de Movimientos', calculadora: 'Calculadora MRP',
-  ocs: 'Órdenes de Compra',
+  ocs: 'Órdenes de Compra', ofs: 'Órdenes a Fazón',
 };
 function go(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -31,7 +31,7 @@ function go(id) {
   document.querySelector(`.nav-item[data-page="${id}"]`)?.classList.add('active');
   document.getElementById('tb-title').innerHTML = `${TITLES[id] || id} <span>· Fine Planificación y Compras</span>`;
   const renders = { minsumos: renderInsumos, mproveedores: renderProveedores, mproductos: renderProductos,
-    stock: renderStock, historial: renderHistorial, calculadora: renderCalc, ocs: renderOCs };
+    stock: renderStock, historial: renderHistorial, calculadora: renderCalc, ocs: renderOCs, ofs: renderOFs };
   renders[id]?.();
 }
 function toggleDark() {
@@ -1011,6 +1011,361 @@ function exportarOCPDF(id) {
     pdf.line(ML, y, ML + 65, y); pdf.line(ML + CW - 65, y, ML + CW, y);
     pdf.setTextColor(70, 70, 70); pdf.setFontSize(9); pdf.setFont('helvetica', 'normal');
     pdf.text('Autorizado por', ML, y + 5); pdf.text('Recibido por proveedor', ML + CW - 65, y + 5);
+    pdf.save(o.nro + '.pdf');
+    toast('PDF generado · ' + o.nro, '📄');
+  } catch (e) { toast('Error al generar PDF: ' + (e.message || e), '⚠', 4500); console.error(e); }
+}
+
+// ═══════════════ ÓRDENES A FAZÓN (Fase 4) ═══════════════
+let ofPage = 1;
+const OF_PER = 20;
+const OF_ESTADOS = {
+  borrador: ['var(--text3)', 'borrador'],
+  despachada: ['var(--gold)', 'despachada'],
+  produccion: ['var(--blue)', 'en producción'],
+  recibida: ['var(--green)', 'recibida'],
+};
+function _ofPill(e) {
+  const [c, l] = OF_ESTADOS[e] || ['var(--text2)', e];
+  return `<span class="pill" style="background:${c}22;color:${c};border:1px solid ${c}55">${l}</span>`;
+}
+function _ofNext() {
+  let max = 0;
+  allRecs('ofs').forEach(o => { const m = /OF-(\d+)/.exec(o.nro || ''); if (m) max = Math.max(max, +m[1]); });
+  return 'OF-' + String(max + 1).padStart(4, '0');
+}
+// Orden de consumo: abiertos primero, después FEFO (vencimiento más próximo), después ingreso
+function _ordenLotes(a, b) {
+  if ((b.abierto ? 1 : 0) !== (a.abierto ? 1 : 0)) return (b.abierto ? 1 : 0) - (a.abierto ? 1 : 0);
+  const va = a.vencimiento || '9999', vb = b.vencimiento || '9999';
+  if (va !== vb) return va < vb ? -1 : 1;
+  return (a.fecha || '').localeCompare(b.fecha || '');
+}
+function _lotesDisponibles(cod) {
+  return lotesVivos().filter(l => l.codigo === cod && !(l.ubicacion || '').includes('Nutratec')).sort(_ordenLotes);
+}
+function _planEnvio(cod, cantidad) {
+  const plan = []; let rest = Math.round(cantidad * 1000) / 1000;
+  for (const l of _lotesDisponibles(cod)) {
+    if (rest <= 0) break;
+    const toma = Math.min(l.cantidad, rest);
+    plan.push({ loteId: l.id, lote: l.lote, vencimiento: l.vencimiento, abierto: l.abierto, ubicacion: l.ubicacion, toma: Math.round(toma * 1000) / 1000 });
+    rest = Math.round((rest - toma) * 1000) / 1000;
+  }
+  return { plan, faltante: rest > 0.0005 ? rest : 0 };
+}
+function _explotarOF(productos) {
+  const uso = {}, map = {};
+  productos.forEach(p => {
+    const prod = DB.productos[p.cod]; if (!prod) return;
+    const f = p.cantidad / (prod.loteMin || 1);
+    (prod.insumos || []).forEach(ins => {
+      if (!ins.codigo || !ins.cantidad) return;
+      if (!map[ins.codigo]) map[ins.codigo] = { codigo: ins.codigo, nombre: ins.nombre,
+        tipo: String(ins.codigo).startsWith('PK') ? 'PK' : 'MP', um: ins.um || 'kg', requerido: 0, productos: [] };
+      map[ins.codigo].requerido = Math.round((map[ins.codigo].requerido + ins.cantidad * f) * 1000) / 1000;
+      if (!map[ins.codigo].productos.includes(prod.nombre)) map[ins.codigo].productos.push(prod.nombre);
+    });
+  });
+  return Object.values(map).map(l => ({ ...l, aEnviar: l.requerido, lotes: [] }));
+}
+
+function renderOFs() {
+  const fe = document.getElementById('f-of-estado')?.value || '';
+  const q = norm(document.getElementById('s-ofs')?.value || '');
+  const data = allRecs('ofs').filter(o => {
+    if (fe && o.estado !== fe) return false;
+    if (q && !(norm(o.nro).includes(q) || (o.productos || []).some(p => norm(p.nombre).includes(q) || norm(p.cod).includes(q)))) return false;
+    return true;
+  }).sort((a, b) => (b.nro || '').localeCompare(a.nro || ''));
+
+  const all = allRecs('ofs');
+  const activas = all.filter(o => o.estado !== 'recibida').length;
+  const enProd = all.filter(o => o.estado === 'produccion').length;
+  const pendIngreso = all.filter(o => o.estado === 'despachada' || o.estado === 'produccion')
+    .reduce((s, o) => s + (o.productos || []).reduce((x, p) => x + (p.cantidad || 0), 0), 0);
+  const enNutraKg = lotesVivos().filter(l => (l.ubicacion || '').includes('Nutratec')).reduce((s, l) => s + l.cantidad, 0);
+  document.getElementById('of-kpis').innerHTML = [
+    ['Órdenes activas', activas, 'var(--gold)'],
+    ['En producción', enProd, 'var(--blue)'],
+    ['Unid. pendiente ingreso', fmt(pendIngreso, 0), 'var(--orange)'],
+    ['Stock en Nutratec', fmt(enNutraKg, 1) + ' kg', 'var(--green)'],
+  ].map(([l, v, c]) => `<div class="kpi"><div class="kpi-acc" style="background:${c}"></div><div class="kpi-l">${l}</div><div class="kpi-v" style="font-size:23px">${v}</div></div>`).join('');
+
+  const start = (ofPage - 1) * OF_PER;
+  document.getElementById('tbl-ofs').innerHTML = data.slice(start, start + OF_PER).map(o => {
+    const prods = o.productos || [];
+    const totU = prods.reduce((s, p) => s + (p.cantidad || 0), 0);
+    let sub = prods.map(p => `${p.nombre} ×${fmt(p.cantidad, 0)}`).join(' · ');
+    if (sub.length > 66) sub = sub.slice(0, 64) + '…';
+    const desp = o.fechaDespacho ? fmtVenc(o.fechaDespacho.slice(0, 10)) : '—';
+    const b = (fn, txt, cls) => `<button class="btn ${cls} btn-sm" onclick="event.stopPropagation();${fn}">${txt}</button>`;
+    let acc = b(`exportarOFPDF('${esc(o.id)}')`, '📄', 'btn-g');
+    if (o.estado === 'borrador') acc += b(`abrirDespachoOF('${esc(o.id)}')`, '🚚 Despachar', 'btn-p') + b(`eliminarOF('${esc(o.id)}')`, '✕', 'btn-r');
+    else if (o.estado === 'despachada') acc += b(`marcarProduccionOF('${esc(o.id)}')`, '⚙ En producción', 'btn-g') + b(`abrirRecepcionOF('${esc(o.id)}')`, '📥 Ingresar PT', 'btn-p');
+    else if (o.estado === 'produccion') acc += b(`abrirRecepcionOF('${esc(o.id)}')`, '📥 Ingresar PT', 'btn-p');
+    else acc += `<span class="mono" style="font-size:10px;color:var(--text3)">✓ ${(o.recepciones || []).length} prod</span>`;
+    return `<tr>
+      <td><span class="mono" style="color:var(--gold2);font-weight:700;font-size:11.5px">${esc(o.nro)}</span><br><span class="mono" style="font-size:9.5px;color:var(--text3)">${esc((o.fechaCreacion || '').slice(0, 10))}</span></td>
+      <td style="max-width:280px">${prods.length === 1 ? esc(prods[0].nombre) : prods.length + ' productos'}<br><span style="font-size:11px;color:var(--text3)">${esc(sub)} · ${esc(o.fazon || 'Nutratec')}</span></td>
+      <td class="num">${fmt(totU, 0)} u</td>
+      <td class="tc">${_ofPill(o.estado)}</td>
+      <td class="tc mono" style="font-size:11px">${desp}</td>
+      <td class="tc" style="white-space:nowrap">${acc}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('of-empty').style.display = data.length ? 'none' : 'block';
+  renderPag('pag-ofs', data.length, OF_PER, ofPage, p => { ofPage = p; renderOFs(); });
+}
+
+// ── Nueva OF ──
+function _ofnRow() {
+  const st = 'background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:8px 10px;color:var(--text);outline:none;font-family:var(--font)';
+  const opts = allRecs('productos').sort((a, b) => a.codigo.localeCompare(b.codigo))
+    .map(p => `<option value="${esc(p.codigo)}">${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('');
+  return `<div class="ofn-row" style="display:flex;gap:8px;margin-bottom:8px">
+    <select class="ofn-cod" onchange="ofnPreview()" style="${st};flex:1"><option value="">— Producto —</option>${opts}</select>
+    <input type="number" class="ofn-qty" placeholder="Cantidad" oninput="ofnPreview()" style="${st};width:120px;font-family:var(--mono)">
+    <button class="btn btn-g btn-sm" onclick="this.closest('.ofn-row').remove();ofnPreview()" style="color:var(--red)">✕</button>
+  </div>`;
+}
+function ofnAddProd() { document.getElementById('ofn-prods').insertAdjacentHTML('beforeend', _ofnRow()); }
+function nuevaOF() {
+  document.getElementById('ofn-fazon').value = 'Nutratec';
+  document.getElementById('ofn-prods').innerHTML = '';
+  ofnAddProd();
+  document.getElementById('ofn-preview').innerHTML = '';
+  openM('m-of-nueva');
+}
+function _ofnLeer() {
+  const prods = [];
+  document.querySelectorAll('#ofn-prods .ofn-row').forEach(r => {
+    const cod = r.querySelector('.ofn-cod').value;
+    const qty = parseFloat(r.querySelector('.ofn-qty').value) || 0;
+    if (cod && qty > 0) prods.push({ cod, nombre: DB.productos[cod]?.nombre || cod, cantidad: qty, loteMin: DB.productos[cod]?.loteMin });
+  });
+  return prods;
+}
+function ofnPreview() {
+  const prods = _ofnLeer();
+  const box = document.getElementById('ofn-preview');
+  if (!prods.length) { box.innerHTML = ''; return; }
+  const lineas = _explotarOF(prods);
+  const filas = lineas.map(l => {
+    const { faltante } = _planEnvio(l.codigo, l.requerido);
+    return `<tr>
+      <td class="mono" style="font-size:10.5px">${esc(l.codigo)}</td><td>${esc(l.nombre)}</td>
+      <td class="num">${fmt(l.requerido, 3)} ${esc(l.um)}</td>
+      <td style="font-size:10.5px;color:var(--gold2)">${esc(l.productos.join(', '))}</td>
+      <td class="tc">${faltante ? `<span class="pill pill-red">faltan ${fmt(faltante, 2)}</span>` : '<span class="pill pill-green">ok</span>'}</td>
+    </tr>`;
+  }).join('');
+  box.innerHTML = `<div style="font-size:12px;color:var(--text2);margin-bottom:6px"><b>${prods.length}</b> producto(s) · <b>${lineas.length}</b> insumos consolidados</div>
+    <div class="tbl-wrap"><table><thead><tr><th>Código</th><th>Insumo</th><th class="tr">Cant. total</th><th>Lo consumen</th><th class="tc">Stock</th></tr></thead><tbody>${filas}</tbody></table></div>`;
+}
+function guardarOF() {
+  const prods = _ofnLeer();
+  if (!prods.length) { toast('Agregá al menos un producto con cantidad', '⚠'); return; }
+  const lineas = _explotarOF(prods);
+  if (!lineas.length) { toast('Esos productos no tienen fórmula', '⚠'); return; }
+  const id = uid();
+  putRec('ofs', id, { id, nro: _ofNext(), fazon: document.getElementById('ofn-fazon').value.trim() || 'Nutratec',
+    productos: prods, lineas, estado: 'borrador', fechaCreacion: new Date().toISOString(),
+    fechaDespacho: null, recepciones: [] });
+  closeM('m-of-nueva'); renderOFs(); toast('Orden creada · ' + DB.ofs[id].nro, '📋');
+}
+function eliminarOF(id) {
+  const o = DB.ofs[id];
+  if (!o || o.estado !== 'borrador') { toast('Solo se eliminan borradores', '⚠'); return; }
+  if (!confirm('¿Eliminar la ' + o.nro + '?')) return;
+  delRec('ofs', id); renderOFs(); toast('Orden eliminada', '🗑');
+}
+
+// ── Despacho: transfiere lotes a "Nutratec" (abiertos → FEFO) ──
+function abrirDespachoOF(id) {
+  const o = DB.ofs[id]; if (!o) return;
+  document.getElementById('ofd-id').value = id;
+  document.getElementById('ofd-sub').textContent = `· ${o.nro} · ${(o.productos || []).map(p => p.nombre).join(', ').slice(0, 60)}`;
+  const st = 'background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:5px 8px;color:var(--text);outline:none;font-family:var(--mono);font-size:12px';
+  const filas = (o.lineas || []).map((l, i) => {
+    const { plan, faltante } = _planEnvio(l.codigo, l.aEnviar || l.requerido);
+    const planHtml = plan.map(p =>
+      `<span class="pill ${p.abierto ? '' : 'pill-ins'}" style="${p.abierto ? 'background:var(--gold-dim);color:var(--gold2);border:1px solid rgba(201,168,76,.4)' : ''};margin:1px" title="${esc(p.ubicacion || '')}">${esc(p.lote || 's/l')} × ${fmt(p.toma, 2)}${p.abierto ? ' 🔓' : ''}${p.vencimiento ? ' · ' + fmtVenc(p.vencimiento) : ''}</span>`).join(' ')
+      + (faltante ? ` <span class="pill pill-red">faltan ${fmt(faltante, 2)}</span>` : '');
+    return `<tr>
+      <td><span class="mono" style="font-size:10px;color:var(--text2)">${esc(l.codigo)}</span><br>${esc(l.nombre)}<br><span style="font-size:10px;color:var(--gold2)">usan: ${esc((l.productos || []).join(', '))}</span></td>
+      <td class="num" style="color:var(--text3)">${fmt(l.requerido, 3)}</td>
+      <td style="padding:5px"><input type="number" id="ofd-env-${i}" value="${l.aEnviar ?? l.requerido}" step="0.001" min="0" style="${st};width:90px;text-align:right" oninput="ofdReplan(${i})"></td>
+      <td id="ofd-plan-${i}" style="font-size:10px;max-width:340px">${planHtml}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('ofd-body').innerHTML = `<table><thead><tr>
+    <th>Insumo</th><th class="tr">Requerido</th><th class="tr">A enviar</th><th>Plan de lotes (abiertos 🔓 → FEFO)</th>
+  </tr></thead><tbody>${filas}</tbody></table>`;
+  openM('m-of-desp');
+}
+function ofdReplan(i) {
+  const id = document.getElementById('ofd-id').value;
+  const o = DB.ofs[id]; if (!o) return;
+  const l = o.lineas[i];
+  const env = parseFloat(document.getElementById('ofd-env-' + i).value) || 0;
+  const { plan, faltante } = _planEnvio(l.codigo, env);
+  const html = plan.map(p =>
+    `<span class="pill ${p.abierto ? '' : 'pill-ins'}" style="${p.abierto ? 'background:var(--gold-dim);color:var(--gold2);border:1px solid rgba(201,168,76,.4)' : ''};margin:1px">${esc(p.lote || 's/l')} × ${fmt(p.toma, 2)}${p.abierto ? ' 🔓' : ''}${p.vencimiento ? ' · ' + fmtVenc(p.vencimiento) : ''}</span>`).join(' ')
+    + (faltante ? ` <span class="pill pill-red">faltan ${fmt(faltante, 2)}</span>` : '');
+  document.getElementById('ofd-plan-' + i).innerHTML = html;
+}
+function confirmarDespachoOF() {
+  const id = document.getElementById('ofd-id').value;
+  const o = DB.ofs[id]; if (!o) return;
+  const lineas = o.lineas.map((l, i) => {
+    const env = parseFloat(document.getElementById('ofd-env-' + i)?.value) || 0;
+    if (env <= 0) return { ...l, aEnviar: 0, lotes: [] };
+    const { plan } = _planEnvio(l.codigo, env);
+    const usados = [];
+    plan.forEach(p => {
+      const src = DB.lotes[p.loteId]; if (!src) return;
+      // restar del lote origen
+      putRec('lotes', p.loteId, { ...src, cantidad: Math.round((src.cantidad - p.toma) * 1000) / 1000 });
+      // crear/acumular lote espejo en Nutratec
+      const nid = uid();
+      putRec('lotes', nid, { id: nid, codigo: l.codigo, lote: src.lote, cantidad: p.toma,
+        vencimiento: src.vencimiento, ubicacion: 'Nutratec', abierto: src.abierto,
+        proveedor: src.proveedor, fecha: hoyISO(), origenLoteId: p.loteId, ofId: id });
+      usados.push({ lote: src.lote, cantidad: p.toma, vencimiento: src.vencimiento });
+      registrarMov('transferencia', l.codigo, p.toma, src.ubicacion || 'Depósito', 'Nutratec', `${o.nro} · lote ${src.lote || '—'}`);
+    });
+    return { ...l, aEnviar: env, lotes: usados };
+  });
+  putRec('ofs', id, { ...o, lineas, estado: 'despachada', fechaDespacho: new Date().toISOString() });
+  closeM('m-of-desp'); renderOFs();
+  toast(`🚚 ${o.nro} despachada — insumos transferidos a Nutratec`, '✓', 4000);
+}
+function marcarProduccionOF(id) {
+  const o = DB.ofs[id]; if (!o) return;
+  putRec('ofs', id, { ...o, estado: 'produccion' });
+  renderOFs(); toast(o.nro + ' en producción', '⚙');
+}
+
+// ── Recepción de PT: consume BOM × producido desde Nutratec ──
+function abrirRecepcionOF(id) {
+  const o = DB.ofs[id]; if (!o) return;
+  document.getElementById('ofr-id').value = id;
+  document.getElementById('ofr-sub').textContent = '· ' + o.nro;
+  const st = 'width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:7px 9px;color:var(--text);outline:none';
+  document.getElementById('ofr-body').innerHTML = (o.productos || []).map((p, i) => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+      <div style="font-weight:600;margin-bottom:8px">${esc(p.nombre)} <span class="mono" style="font-size:10px;color:var(--text3)">${esc(p.cod)} · plan ${fmt(p.cantidad, 0)} u</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <div class="fl"><label>Cantidad producida</label><input type="number" id="ofr-cant-${i}" value="${p.cantidad}" min="0" style="${st};font-family:var(--mono)"></div>
+        <div class="fl"><label>Lote (Nutratec)</label><input type="text" id="ofr-lote-${i}" placeholder="Ej: 11062611" style="${st};font-family:var(--mono)"></div>
+        <div class="fl"><label>Vencimiento</label><input type="date" id="ofr-venc-${i}" style="${st};font-family:var(--mono)"></div>
+      </div>
+    </div>`).join('');
+  openM('m-of-rec');
+}
+function confirmarRecepcionOF() {
+  const id = document.getElementById('ofr-id').value;
+  const o = DB.ofs[id]; if (!o) return;
+  const recs = []; let algo = false;
+  (o.productos || []).forEach((p, i) => {
+    const cant = parseFloat(document.getElementById('ofr-cant-' + i)?.value) || 0;
+    if (cant <= 0) return;
+    algo = true;
+    recs.push({ cod: p.cod, nombre: p.nombre, cantidad: cant,
+      lote: (document.getElementById('ofr-lote-' + i)?.value || '').trim(),
+      vencimiento: document.getElementById('ofr-venc-' + i)?.value || '', fecha: new Date().toISOString() });
+    // consumir de Nutratec: fórmula × cantidad producida, FEFO dentro de Nutratec
+    const prod = DB.productos[p.cod]; if (!prod) return;
+    const f = cant / (prod.loteMin || 1);
+    (prod.insumos || []).forEach(ins => {
+      if (!ins.codigo || !ins.cantidad) return;
+      let rest = Math.round(ins.cantidad * f * 1000) / 1000;
+      const enNutra = lotesVivos().filter(l => l.codigo === ins.codigo && (l.ubicacion || '').includes('Nutratec')).sort(_ordenLotes);
+      let consumido = 0;
+      for (const l of enNutra) {
+        if (rest <= 0) break;
+        const toma = Math.min(l.cantidad, rest);
+        putRec('lotes', l.id, { ...l, cantidad: Math.round((l.cantidad - toma) * 1000) / 1000 });
+        rest = Math.round((rest - toma) * 1000) / 1000;
+        consumido = Math.round((consumido + toma) * 1000) / 1000;
+      }
+      if (consumido > 0)
+        registrarMov('salida', ins.codigo, -consumido, 'Nutratec', '', `${o.nro} · producción ${p.nombre} ×${fmt(cant, 0)}`);
+    });
+  });
+  if (!algo) { toast('Ingresá al menos una cantidad producida', '⚠'); return; }
+  putRec('ofs', id, { ...o, recepciones: [...(o.recepciones || []), ...recs], estado: 'recibida', fechaRecepcion: new Date().toISOString() });
+  closeM('m-of-rec'); renderOFs();
+  const totU = recs.reduce((s, r) => s + r.cantidad, 0);
+  toast(`📥 Ingresadas ${fmt(totU, 0)} u · insumos consumidos de Nutratec`, '✓', 4500);
+}
+
+// ── PDF de la OF (A4 horizontal) ──
+function exportarOFPDF(id) {
+  try {
+    const o = DB.ofs[id]; if (!o) return;
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const ML = 14, CW = 297 - 28;
+    let y = 14;
+    const X = { cod: ML + 1, ins: ML + 20, cant: ML + 80, lote: ML + 108, venc: ML + 158, prod: ML + 184 };
+    pdf.setFillColor(201, 168, 76); pdf.rect(ML, y, CW, 10, 'F');
+    pdf.setTextColor(26, 26, 26); pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(8); pdf.text('THE FINE COMPANY', ML + 3, y + 4);
+    pdf.setFontSize(14); pdf.text('ORDEN DE PRODUCCIÓN A FAZÓN · ' + o.nro, ML + 3, y + 8.5);
+    y += 15;
+    pdf.setTextColor(60, 60, 60); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10);
+    [['Fazón', o.fazon || 'Nutratec'],
+     ['Productos', (o.productos || []).map(p => `${p.nombre} ×${fmt(p.cantidad, 0)} u`).join('   |   ')],
+     ['Estado', (OF_ESTADOS[o.estado] || ['', o.estado])[1]],
+     ['Fecha', new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })],
+    ].forEach(([k, v]) => {
+      pdf.setFont('helvetica', 'bold'); pdf.text(k + ':', ML, y);
+      pdf.setFont('helvetica', 'normal');
+      const lines = pdf.splitTextToSize(String(v), CW - 40);
+      pdf.text(lines, ML + 30, y); y += 5.5 * lines.length;
+    });
+    y += 2;
+    const header = () => {
+      pdf.setTextColor(120, 120, 120); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7.5);
+      pdf.text('CÓDIGO', X.cod, y + 4); pdf.text('INSUMO', X.ins, y + 4);
+      pdf.text('CANT. ENVIADA', X.cant, y + 4); pdf.text('LOTE', X.lote, y + 4);
+      pdf.text('VENCE', X.venc, y + 4); pdf.text('PRODUCTOS QUE LO CONSUMEN', X.prod, y + 4);
+      y += 6; pdf.setDrawColor(220, 220, 220); pdf.line(ML, y, ML + CW, y);
+      pdf.setTextColor(40, 40, 40); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8);
+    };
+    const tabla = (titulo, arr) => {
+      if (!arr.length) return;
+      if (y > 176) { pdf.addPage(); y = 14; }
+      pdf.setFillColor(77, 77, 77); pdf.rect(ML, y, CW, 7, 'F');
+      pdf.setTextColor(255, 255, 255); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9);
+      pdf.text(titulo, ML + 2, y + 4.8); y += 7;
+      header();
+      arr.forEach(l => {
+        if (y > 190) { pdf.addPage(); y = 14; header(); }
+        y += 5;
+        const usar = o.estado !== 'borrador';
+        const loteStr = (l.lotes && l.lotes.length) ? l.lotes.map(u => u.lote || 's/l').join(' + ') : '—';
+        const vencStr = (l.lotes && l.lotes.length) ? (l.lotes.map(u => fmtVenc(u.vencimiento)).filter(v => v !== '—').join(' / ') || '—') : '—';
+        pdf.setTextColor(90, 90, 90); pdf.text(String(l.codigo), X.cod, y);
+        pdf.setTextColor(30, 30, 30); pdf.text(pdf.splitTextToSize(String(l.nombre), X.cant - X.ins - 2)[0], X.ins, y);
+        pdf.text(fmt(usar ? l.aEnviar : l.requerido, 3) + ' ' + (l.um || ''), X.cant, y);
+        pdf.text(pdf.splitTextToSize(loteStr, X.venc - X.lote - 2)[0], X.lote, y);
+        pdf.text(pdf.splitTextToSize(vencStr, X.prod - X.venc - 2)[0], X.venc, y);
+        pdf.setTextColor(110, 110, 110); pdf.text(pdf.splitTextToSize((l.productos || []).join(', '), ML + CW - X.prod)[0], X.prod, y);
+      });
+      y += 4;
+    };
+    tabla('MATERIAS PRIMAS · NÚCLEOS', (o.lineas || []).filter(l => l.tipo === 'MP'));
+    tabla('EMPAQUE · PACKAGING', (o.lineas || []).filter(l => l.tipo === 'PK'));
+    if (y > 172) { pdf.addPage(); y = 14; }
+    y += 16;
+    pdf.setDrawColor(150, 150, 150);
+    pdf.line(ML, y, ML + 80, y); pdf.line(ML + CW - 80, y, ML + CW, y);
+    pdf.setTextColor(70, 70, 70); pdf.setFontSize(9); pdf.setFont('helvetica', 'normal');
+    pdf.text('Despachó — The Fine Company', ML, y + 5);
+    pdf.text('Recibió — ' + (o.fazon || 'Nutratec'), ML + CW - 80, y + 5);
     pdf.save(o.nro + '.pdf');
     toast('PDF generado · ' + o.nro, '📄');
   } catch (e) { toast('Error al generar PDF: ' + (e.message || e), '⚠', 4500); console.error(e); }

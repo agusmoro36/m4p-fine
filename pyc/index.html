@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260717-4';
+  var VER = '20260717-5';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260717-4">
+<link rel="stylesheet" href="styles.css?v=20260717-5">
 </head>
 <body>
 <div class="layout">
@@ -42,7 +42,7 @@
       <div class="nav-item" data-page="mproductos" onclick="go('mproductos')"><span class="nav-ico">◎</span>Producto Terminado</div>
 
       <div class="nav-group">Producción</div>
-      <div class="nav-item soon"><span class="nav-ico">📋</span>Órdenes a Fazón<span class="nav-soon">FASE 4</span></div>
+      <div class="nav-item" data-page="ofs" onclick="go('ofs')"><span class="nav-ico">📋</span>Órdenes a Fazón</div>
       <div class="nav-item" data-page="stock" onclick="go('stock')"><span class="nav-ico">📦</span>Stock de Insumos</div>
       <div class="nav-item" data-page="historial" onclick="go('historial')"><span class="nav-ico">⏱</span>Historial Movs.</div>
 
@@ -175,6 +175,37 @@
         <div class="empty" id="oc-empty" style="display:none">
           <div class="empty-ico">🧾</div><div class="empty-t">Sin órdenes de compra</div>
           <div class="empty-s">Creá la primera con "+ Nueva OC".</div>
+        </div>
+      </div>
+
+      <!-- ══ ÓRDENES A FAZÓN ══ -->
+      <div class="page" id="page-ofs">
+        <div class="sh">
+          <div class="sh-title">Órdenes a Fazón <small>· producción en Nutratec</small></div>
+          <div class="sh-actions">
+            <select class="fsel" id="f-of-estado" onchange="ofPage=1;renderOFs()">
+              <option value="">Todos los estados</option>
+              <option value="borrador">Borrador</option>
+              <option value="despachada">Despachada</option>
+              <option value="produccion">En producción</option>
+              <option value="recibida">Recibida</option>
+            </select>
+            <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-ofs" placeholder="Buscar OF o producto…" oninput="ofPage=1;renderOFs()"></div>
+            <button class="btn btn-p" onclick="nuevaOF()">+ Nueva orden</button>
+          </div>
+        </div>
+        <div class="kpis" id="of-kpis"></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr>
+            <th>N° Orden</th><th>Productos</th><th class="tr">Unidades</th>
+            <th class="tc">Estado</th><th class="tc">Despacho</th><th class="tc" style="width:250px"></th>
+          </tr></thead>
+          <tbody id="tbl-ofs"></tbody>
+        </table></div>
+        <div class="pag" id="pag-ofs"></div>
+        <div class="empty" id="of-empty" style="display:none">
+          <div class="empty-ico">📋</div><div class="empty-t">Sin órdenes a fazón</div>
+          <div class="empty-s">Creá una para enviar insumos a producir a Nutratec.</div>
         </div>
       </div>
 
@@ -421,6 +452,54 @@
 <datalist id="dl-provs"></datalist>
 <datalist id="dl-insumos-desc"></datalist>
 
+<!-- ══ MODAL NUEVA ORDEN A FAZÓN ══ -->
+<div class="overlay" id="m-of-nueva">
+  <div class="modal" style="max-width:780px;width:95vw">
+    <button class="modal-close" onclick="closeM('m-of-nueva')">✕</button>
+    <div class="modal-title">+ Nueva Orden a Fazón</div>
+    <p style="font-size:12px;color:var(--text3);margin:0 0 12px">Agregá todos los productos y cantidades a producir. El sistema consolida la cantidad total por insumo desde cada fórmula.</p>
+    <div class="fl" style="max-width:220px;margin-bottom:12px"><label>Fazón</label><input type="text" id="ofn-fazon" value="Nutratec"></div>
+    <div style="font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:6px">Productos a producir</div>
+    <div id="ofn-prods"></div>
+    <button class="btn btn-g btn-sm" onclick="ofnAddProd()">+ Agregar producto</button>
+    <div id="ofn-preview" style="margin-top:14px;max-height:38vh;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn btn-g" onclick="closeM('m-of-nueva')">Cancelar</button>
+      <button class="btn btn-p" onclick="guardarOF()">Crear orden</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL DESPACHO A FAZÓN ══ -->
+<div class="overlay" id="m-of-desp">
+  <div class="modal" style="max-width:900px;width:96vw">
+    <button class="modal-close" onclick="closeM('m-of-desp')">✕</button>
+    <div class="modal-title">🚚 Despachar a Nutratec <span id="ofd-sub" style="font-size:13px;color:var(--text3)"></span></div>
+    <p style="font-size:12px;color:var(--text3);margin:0 0 12px">Ajustá lo que <b>realmente se envía</b> (podés mandar de más, ej. bolsa cerrada). El plan de lotes prioriza <b>envases abiertos</b> y luego <b>vencimiento más próximo (FEFO)</b>. El stock <b>no se descuenta</b>: se <b>transfiere a la ubicación "Nutratec"</b> y se consume recién al ingresar el producto terminado.</p>
+    <input type="hidden" id="ofd-id">
+    <div id="ofd-body" style="max-height:56vh;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <button class="btn btn-g" onclick="closeM('m-of-desp')">Cancelar</button>
+      <button class="btn btn-p" onclick="confirmarDespachoOF()">🚚 Confirmar despacho</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL RECEPCIÓN PT DE FAZÓN ══ -->
+<div class="overlay" id="m-of-rec">
+  <div class="modal" style="max-width:640px">
+    <button class="modal-close" onclick="closeM('m-of-rec')">✕</button>
+    <div class="modal-title">📥 Ingreso de producto terminado <span id="ofr-sub" style="font-size:13px;color:var(--text3)"></span></div>
+    <p style="font-size:12px;color:var(--text3);margin:0 0 12px">Cargá lo que devuelve Nutratec por producto (el <b>lote lo asigna Nutratec</b>). Al confirmar, el sistema <b>descuenta de la ubicación Nutratec</b> los insumos consumidos (fórmula × cantidad producida); el sobrante queda allá para próximas producciones.</p>
+    <input type="hidden" id="ofr-id">
+    <div id="ofr-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-g" onclick="closeM('m-of-rec')">Cancelar</button>
+      <button class="btn btn-p" onclick="confirmarRecepcionOF()">📥 Confirmar ingreso</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MODAL LOTE (ingreso manual / edición) ══ -->
 <div class="overlay" id="m-lote">
   <div class="modal" style="max-width:600px">
@@ -488,8 +567,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js?v=20260717-4"></script>
-<script src="store.js?v=20260717-4"></script>
-<script src="app.js?v=20260717-4"></script>
+<script src="data.js?v=20260717-5"></script>
+<script src="store.js?v=20260717-5"></script>
+<script src="app.js?v=20260717-5"></script>
 </body>
 </html>

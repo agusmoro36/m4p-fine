@@ -15,6 +15,7 @@ const DB = {
   productos: {},    // codigo PT → {codigo,nombre,loteMin,politicaDias,skuCore,insumos[],updatedAt}
   lotes: {},        // id → {id,codigo,lote,cantidad,vencimiento,ubicacion,abierto,proveedor,fecha,revalida?,updatedAt}
   ocs: {},          // id → {id,nro,proveedor,fecha,moneda,tc,condPago,leadTime,obs,items[],estado,factura?,updatedAt}
+  ofs: {},          // id → órdenes a fazón {id,nro,fazon,productos[],lineas[],estado,recepciones[],updatedAt}
   movimientos: {},  // id → {id,fecha,tipo,codigo,nombre,cantidad,desde,hacia,ref,updatedAt}
   config: {},       // posiciones → {id:'posiciones', lista:[...]}
 };
