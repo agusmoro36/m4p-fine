@@ -52,16 +52,27 @@ function renderPag(elId, total, per, cur, cb) {
 // ═══════════════ MAESTRO DE INSUMOS ═══════════════
 let insPage = 1;
 const INS_PER = 25;
-function insumosFiltrados() {
+// Mapa insumo → productos que lo consumen (calculado en vivo desde las fórmulas)
+function usoInsumos() {
+  const map = {};
+  allRecs('productos').forEach(p => (p.insumos || []).forEach(i => {
+    if (!map[i.codigo]) map[i.codigo] = [];
+    if (!map[i.codigo].includes(p.nombre)) map[i.codigo].push(p.nombre);
+  }));
+  return map;
+}
+function insumosFiltrados(uso) {
   const q = norm(document.getElementById('s-insumos')?.value || '');
   const ft = document.getElementById('f-ins-tipo')?.value || '';
   return allRecs('insumos')
     .filter(i => (!ft || i.tipo === ft) &&
-      (!q || norm(i.codigo).includes(q) || norm(i.nombre).includes(q) || norm(i.proveedor).includes(q)))
+      (!q || norm(i.codigo).includes(q) || norm(i.nombre).includes(q) || norm(i.proveedor).includes(q)
+        || norm((uso[i.codigo] || []).join(' ')).includes(q)))
     .sort((a, b) => a.codigo.localeCompare(b.codigo));
 }
 function renderInsumos() {
-  const data = insumosFiltrados();
+  const uso = usoInsumos();
+  const data = insumosFiltrados(uso);
   const kp = document.getElementById('ins-kpis');
   const all = allRecs('insumos');
   const conPrecio = all.filter(i => i.precio > 0).length;
@@ -73,16 +84,23 @@ function renderInsumos() {
 
   const start = (insPage - 1) * INS_PER;
   const slice = data.slice(start, start + INS_PER);
-  document.getElementById('tbl-insumos').innerHTML = slice.map(i => `
+  document.getElementById('tbl-insumos').innerHTML = slice.map(i => {
+    const prods = uso[i.codigo] || [];
+    const prodsHtml = prods.length
+      ? `<span style="font-size:11px;color:var(--gold2)">${esc(prods.join(', '))}</span>`
+      : '<span style="color:var(--text3)">—</span>';
+    return `
     <tr class="clickable" onclick="editInsumo('${esc(i.codigo)}')">
       <td class="mono">${esc(i.codigo)}</td>
       <td style="font-weight:600">${esc(i.nombre)}</td>
+      <td style="max-width:230px">${prodsHtml}</td>
       <td class="tc"><span class="pill pill-${i.tipo.toLowerCase()}">${i.tipo}</span></td>
       <td class="tc mono">${esc(i.um)}</td>
       <td class="num">${i.precio > 0 ? (i.moneda === 'ARS' ? '$ ' : 'USD ') + fmt(i.precio) : '—'}</td>
       <td>${esc(i.proveedor || '—')}</td>
       <td class="tc mono" style="font-size:10px;color:var(--text3)">${esc((i.fechaPrecio || '').slice(0, 10)) || '—'}</td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   document.getElementById('ins-empty').style.display = data.length ? 'none' : 'block';
   renderPag('pag-insumos', data.length, INS_PER, insPage, p => { insPage = p; renderInsumos(); });
 }
