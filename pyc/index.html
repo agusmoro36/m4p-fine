@@ -88,15 +88,15 @@
         <div class="sh">
           <div class="sh-title">Maestro de Proveedores</div>
           <div class="sh-actions">
-            <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-provs" placeholder="Buscar proveedor…" oninput="provPage=1;renderProveedores()"></div>
+            <div class="search-box" style="min-width:300px"><span class="search-ico">⌕</span><input type="text" id="s-provs" placeholder="Buscar proveedor o insumo (trae precios)…" oninput="provPage=1;renderProveedores()"></div>
             <button class="btn btn-p" onclick="editProv('')">+ Nuevo proveedor</button>
           </div>
         </div>
         <div class="kpis" id="prov-kpis"></div>
         <div class="tbl-wrap"><table>
           <thead><tr>
-            <th>Nombre</th><th>Contacto</th><th>Email</th><th>Teléfono</th><th>Tipo</th>
-            <th class="tc">Lead time</th><th>Cond. pago</th>
+            <th>Proveedor · insumos encontrados</th><th>Contacto</th><th>Email</th><th>Teléfono</th>
+            <th class="tc">Insumos</th><th class="tc">Lead time</th><th>Cond. pago</th><th class="tc"></th>
           </tr></thead>
           <tbody id="tbl-provs"></tbody>
         </table></div>

@@ -127,22 +127,37 @@ let provPage = 1;
 const PROV_PER = 20;
 function renderProveedores() {
   const q = (document.getElementById('s-provs')?.value || '').toLowerCase();
-  const data = allRecs('proveedores')
-    .filter(p => !q || (p.nombre || '').toLowerCase().includes(q) || (p.contacto || '').toLowerCase().includes(q))
-    .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+  // Busca por proveedor O por insumo del catálogo: si matchea un insumo,
+  // muestra el proveedor con los insumos encontrados y su precio.
+  const data = allRecs('proveedores').map(p => {
+    const matchProv = !q || (p.nombre || '').toLowerCase().includes(q) || (p.contacto || '').toLowerCase().includes(q);
+    const matchIns = q ? (p.insumos || []).filter(i => (i.insumo || '').toLowerCase().includes(q)) : [];
+    return (matchProv || matchIns.length) ? { ...p, _match: matchIns } : null;
+  }).filter(Boolean).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
   document.getElementById('prov-kpis').innerHTML =
-    `<div class="kpi"><div class="kpi-acc" style="background:var(--gold)"></div><div class="kpi-l">Proveedores</div><div class="kpi-v">${allRecs('proveedores').length}</div></div>`;
+    `<div class="kpi"><div class="kpi-acc" style="background:var(--gold)"></div><div class="kpi-l">Proveedores</div><div class="kpi-v">${allRecs('proveedores').length}</div></div>` +
+    (q ? `<div class="kpi"><div class="kpi-acc" style="background:var(--blue)"></div><div class="kpi-l">Resultados</div><div class="kpi-v">${data.length}</div></div>` : '');
+
   const start = (provPage - 1) * PROV_PER;
-  document.getElementById('tbl-provs').innerHTML = data.slice(start, start + PROV_PER).map(p => `
+  document.getElementById('tbl-provs').innerHTML = data.slice(start, start + PROV_PER).map(p => {
+    const matches = (p._match || []).slice(0, 6).map(i => {
+      const precio = i.precio > 0 ? ` — <b>${i.moneda === 'ARS' ? '$' : 'USD'} ${fmt(i.precio)}</b>` : ' — s/precio';
+      const pres = i.presentacion ? ` · ${esc(i.presentacion)}` : '';
+      return `<div style="font-size:11.5px;color:var(--gold2);font-family:var(--mono)">🧪 ${esc(i.insumo)}${precio}${pres}</div>`;
+    }).join('');
+    return `
     <tr class="clickable" onclick="editProv('${esc(p.id)}')">
-      <td style="font-weight:600">${esc(p.nombre)}</td>
+      <td><div style="font-weight:600">${esc(p.nombre)}</div>${matches}</td>
       <td>${esc(p.contacto || '—')}</td>
       <td class="mono" style="font-size:11px">${esc(p.email || '—')}</td>
       <td class="mono" style="font-size:11px">${esc(p.telefono || '—')}</td>
-      <td>${esc(p.tipo || '—')}</td>
+      <td class="tc mono" style="color:var(--text3)">${(p.insumos || []).length || '—'}</td>
       <td class="tc mono">${p.leadTime ? p.leadTime + ' d' : '—'}</td>
       <td>${esc(p.condPago || '—')}</td>
-    </tr>`).join('');
+      <td class="tc"><button class="btn btn-g btn-sm" onclick="event.stopPropagation();editProv('${esc(p.id)}')">✏ Editar</button></td>
+    </tr>`;
+  }).join('');
   document.getElementById('prov-empty').style.display = data.length ? 'none' : 'block';
   renderPag('pag-provs', data.length, PROV_PER, provPage, p => { provPage = p; renderProveedores(); });
 }
