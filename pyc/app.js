@@ -1540,12 +1540,13 @@ function renderMPS() {
   let prod3m = 0, bajoCob = 0;
 
   const head1 = `<tr><th class="sticky" rowspan="2" style="min-width:190px;vertical-align:bottom">Producto</th>
-    ${meses.map(m => `<th colspan="5" class="tc mps-mes" style="color:var(--gold2);font-size:9.5px">${mesCorto(m)}</th>`).join('')}</tr>`;
+    ${meses.map(m => `<th colspan="6" class="tc mps-mes" style="color:var(--gold2);font-size:9.5px">${mesCorto(m)}</th>`).join('')}</tr>`;
   const head2 = `<tr>${meses.map(() => `
     <th class="tc mps-mes" title="Cobertura en días al inicio del mes">Cob. ini</th>
     <th class="tr" title="Stock al 1º del mes">Stock 1º</th>
     <th class="tr">Fcst</th>
     <th class="tr" style="color:var(--gold2)">Plan ✏</th>
+    <th class="tc" title="Batches productivos (plan ÷ lote mínimo)">Batches</th>
     <th class="tc" title="Cobertura en días al fin del mes, con el plan ya ingresado">Cob. fin</th>`).join('')}</tr>`;
 
   const filas = conDatos.map(p => {
@@ -1558,6 +1559,7 @@ function renderMPS() {
       <td class="num" style="font-size:11px;color:var(--text2)">${fmt(r.ini, 0)}</td>
       <td class="num" style="font-size:11px">${r.F ? fmt(r.F, 0) : '—'}</td>
       <td class="tr"><input type="number" min="0" step="1" style="${inp};${r.manual ? 'border-color:var(--gold);background:var(--gold-dim);font-weight:700' : ''}" value="${r.prop || ''}" onchange="setMPS('${esc(p.codigo)}','${r.mes}',this.value)" title="${r.prop && p.loteMin ? ((r.prop / p.loteMin === Math.floor(r.prop / p.loteMin)) ? (r.prop / p.loteMin) + ' batch(es) de ' + fmt(p.loteMin, 0) : (r.prop / p.loteMin).toFixed(2) + ' batches') : ''}"></td>
+      <td class="tc mono" style="font-size:11px;color:var(--gold2);font-weight:700">${r.prop > 0 ? ((r.prop / (p.loteMin || 1)) % 1 === 0 ? (r.prop / (p.loteMin || 1)) + '×' : (r.prop / (p.loteMin || 1)).toFixed(2) + '×') : '—'}</td>
       <td class="tc">${_cobPill(r.cobFin, r.pol)}</td>`).join('');
     return `<tr>
       <td class="sticky"><span style="font-weight:600">${esc(p.nombre)}</span> <span class="mono" style="font-size:9px;color:var(--gold2)">${esc(p.sku)}</span><br>
@@ -1566,7 +1568,7 @@ function renderMPS() {
   }).join('');
 
   document.getElementById('mps-body').innerHTML =
-    `<div class="tbl-wrap" style="overflow-x:auto"><table class="mps-tbl" style="min-width:${190 + meses.length * 300}px">
+    `<div class="tbl-wrap" style="overflow-x:auto"><table class="mps-tbl" style="min-width:${190 + meses.length * 345}px">
       <thead>${head1}${head2}</thead><tbody>${filas}</tbody></table></div>
      <div style="font-size:11px;color:var(--text3);margin-top:8px">Cob. = días de cobertura vs política de cada producto: <span class="cob cob-r">rojo &lt; 50%</span> <span class="cob cob-y">amarillo &lt; política</span> <span class="cob cob-g">verde ≥ política</span> · "Cob. fin" ya incluye el plan del mes ingresado.</div>`;
 
