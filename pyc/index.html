@@ -4,9 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Fine Planificación y Compras</title>
+<script>
+// Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
+(function(){
+  var VER = '20260717-2';
+  try {
+    var url = new URL(window.location.href);
+    if (url.searchParams.get('v') !== VER) {
+      url.searchParams.set('v', VER);
+      window.location.replace(url.toString());
+    }
+  } catch(e) {}
+})();
+</script>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=20260717-2">
 </head>
 <body>
 <div class="layout">
@@ -199,8 +213,8 @@
 
 <div id="toasts"></div>
 
-<script src="data.js"></script>
-<script src="store.js"></script>
-<script src="app.js"></script>
+<script src="data.js?v=20260717-2"></script>
+<script src="store.js?v=20260717-2"></script>
+<script src="app.js?v=20260717-2"></script>
 </body>
 </html>
