@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260717-6';
+  var VER = '20260717-7';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260717-6">
+<link rel="stylesheet" href="styles.css?v=20260717-7">
 </head>
 <body>
 <div class="layout">
@@ -32,25 +32,25 @@
       <div class="logo-sub">Planificación y Compras</div>
     </div>
     <div class="nav">
-      <div class="nav-group">Compras</div>
+      <div class="nav-group" onclick="toggleNavGroup(this)">Compras</div>
       <div class="nav-item" data-page="ocs" onclick="go('ocs')"><span class="nav-ico">🧾</span>Órdenes de Compra</div>
       <div class="nav-item" data-page="propuestas" onclick="go('propuestas')"><span class="nav-ico">◈</span>OCs Propuestas</div>
 
-      <div class="nav-group">Maestros</div>
+      <div class="nav-group" onclick="toggleNavGroup(this)">Maestros</div>
       <div class="nav-item" data-page="minsumos" onclick="go('minsumos')"><span class="nav-ico">🧪</span>Insumos</div>
       <div class="nav-item" data-page="mproveedores" onclick="go('mproveedores')"><span class="nav-ico">🏬</span>Proveedores</div>
       <div class="nav-item" data-page="mproductos" onclick="go('mproductos')"><span class="nav-ico">◎</span>Producto Terminado</div>
 
-      <div class="nav-group">Producción</div>
+      <div class="nav-group" onclick="toggleNavGroup(this)">Producción</div>
       <div class="nav-item" data-page="ofs" onclick="go('ofs')"><span class="nav-ico">📋</span>Órdenes a Fazón</div>
       <div class="nav-item" data-page="stock" onclick="go('stock')"><span class="nav-ico">📦</span>Stock de Insumos</div>
       <div class="nav-item" data-page="historial" onclick="go('historial')"><span class="nav-ico">⏱</span>Historial Movs.</div>
 
-      <div class="nav-group">Planificación</div>
+      <div class="nav-group" onclick="toggleNavGroup(this)">Planificación</div>
       <div class="nav-item" data-page="forecast" onclick="go('forecast')"><span class="nav-ico">📈</span>Forecast</div>
       <div class="nav-item" data-page="mps" onclick="go('mps')"><span class="nav-ico">🗓</span>Plan Fazón (MPS)</div>
 
-      <div class="nav-group">Reportes</div>
+      <div class="nav-group" onclick="toggleNavGroup(this)">Reportes</div>
       <div class="nav-item" data-page="semaforo" onclick="go('semaforo')"><span class="nav-ico">🚦</span>Semáforo Insumos</div>
       <div class="nav-item" data-page="calculadora" onclick="go('calculadora')"><span class="nav-ico">🧮</span>Calculadora MRP</div>
     </div>
@@ -660,8 +660,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js?v=20260717-6"></script>
-<script src="store.js?v=20260717-6"></script>
-<script src="app.js?v=20260717-6"></script>
+<script src="data.js?v=20260717-7"></script>
+<script src="store.js?v=20260717-7"></script>
+<script src="app.js?v=20260717-7"></script>
 </body>
 </html>

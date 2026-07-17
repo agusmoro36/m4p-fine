@@ -29,13 +29,41 @@ function go(id) {
   const pg = document.getElementById('page-' + id);
   if (!pg) return;
   pg.classList.add('active');
-  document.querySelector(`.nav-item[data-page="${id}"]`)?.classList.add('active');
+  const _it = document.querySelector(`.nav-item[data-page="${id}"]`);
+  _it?.classList.add('active');
+  _expandirGrupoDe(_it);
   document.getElementById('tb-title').innerHTML = `${TITLES[id] || id} <span>· Fine Planificación y Compras</span>`;
   const renders = { minsumos: renderInsumos, mproveedores: renderProveedores, mproductos: renderProductos,
     stock: renderStock, historial: renderHistorial, calculadora: renderCalc, ocs: renderOCs, ofs: renderOFs,
     forecast: renderForecast, mps: renderMPS, propuestas: renderPropuestas, semaforo: renderSemaforo };
   renders[id]?.();
 }
+// ── Grupos de menú colapsables (▾) con memoria ──
+function _navState() { try { return JSON.parse(localStorage.getItem('pyc_nav_collapse') || '[]'); } catch(e) { return []; } }
+function _navApply(el, collapsed) {
+  el.classList.toggle('collapsed', collapsed);
+  let n = el.nextElementSibling;
+  while (n && !n.classList.contains('nav-group')) {
+    n.classList.toggle('hid', collapsed);
+    n = n.nextElementSibling;
+  }
+}
+function toggleNavGroup(el) {
+  _navApply(el, !el.classList.contains('collapsed'));
+  const st = [...document.querySelectorAll('.nav-group')].filter(g => g.classList.contains('collapsed')).map(g => g.textContent.trim());
+  try { localStorage.setItem('pyc_nav_collapse', JSON.stringify(st)); } catch(e) {}
+}
+function restaurarNav() {
+  const st = _navState();
+  document.querySelectorAll('.nav-group').forEach(g => { if (st.includes(g.textContent.trim())) _navApply(g, true); });
+}
+function _expandirGrupoDe(item) {
+  if (!item) return;
+  let n = item.previousElementSibling;
+  while (n && !n.classList.contains('nav-group')) n = n.previousElementSibling;
+  if (n && n.classList.contains('collapsed')) _navApply(n, false);
+}
+
 function toggleDark() {
   document.documentElement.classList.toggle('dark');
   try { localStorage.setItem('pyc_dark', document.documentElement.classList.contains('dark') ? '1' : '0'); } catch(e) {}
@@ -1722,6 +1750,7 @@ function renderSemaforo() {
 
 // ── Arranque ──
 window.addEventListener('load', async () => {
+  restaurarNav();
   await initStore();
   go('minsumos');
 });
