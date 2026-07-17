@@ -20,6 +20,7 @@ document.addEventListener('click', e => { if (e.target.classList?.contains('over
 const TITLES = {
   minsumos: 'Maestro de Insumos', mproveedores: 'Maestro de Proveedores', mproductos: 'Maestro de Producto Terminado',
   stock: 'Stock de Insumos', historial: 'Historial de Movimientos', calculadora: 'Calculadora MRP',
+  ocs: 'Órdenes de Compra',
 };
 function go(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -30,7 +31,7 @@ function go(id) {
   document.querySelector(`.nav-item[data-page="${id}"]`)?.classList.add('active');
   document.getElementById('tb-title').innerHTML = `${TITLES[id] || id} <span>· Fine Planificación y Compras</span>`;
   const renders = { minsumos: renderInsumos, mproveedores: renderProveedores, mproductos: renderProductos,
-    stock: renderStock, historial: renderHistorial, calculadora: renderCalc };
+    stock: renderStock, historial: renderHistorial, calculadora: renderCalc, ocs: renderOCs };
   renders[id]?.();
 }
 function toggleDark() {
@@ -633,6 +634,386 @@ function renderCalc() {
     ['Faltantes', faltan, faltan ? 'var(--red)' : 'var(--green)'],
     ['Costo faltante', (costoUSD ? 'USD ' + fmt(costoUSD, 0) : '') + (costoUSD && costoARS ? ' + ' : '') + (costoARS ? '$ ' + fmt(costoARS, 0) : '') || '—', 'var(--gold2)'],
   ].map(([l, v, c]) => `<div class="kpi"><div class="kpi-acc" style="background:${c}"></div><div class="kpi-l">${l}</div><div class="kpi-v" style="font-size:22px">${v}</div></div>`).join('');
+}
+
+// ═══════════════ ÓRDENES DE COMPRA (Fase 3) ═══════════════
+let ocPage = 1;
+const OC_PER = 20;
+
+function _ocNextNro() {
+  const y = new Date().getFullYear();
+  let max = 0;
+  allRecs('ocs').forEach(o => {
+    const m = /OC-(\d+)/.exec(o.nro || '');
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  });
+  return `OC-${String(max + 1).padStart(4, '0')}-${y}`;
+}
+function _ocTotal(o) {
+  return (o.items || []).reduce((s, it) => s + (it.cantidad || 0) * (it.precio || 0), 0);
+}
+function _ocPedido(o) { return (o.items || []).reduce((s, it) => s + (it.cantidad || 0), 0); }
+function _ocRecibido(o) { return (o.items || []).reduce((s, it) => s + (it.recibido || 0), 0); }
+const _sym = m => m === 'ARS' ? '$ ' : 'USD ';
+
+function renderOCs() {
+  const q = norm(document.getElementById('s-ocs')?.value || '');
+  const fp = document.getElementById('f-oc-prov')?.value || '';
+  const fe = document.getElementById('f-oc-estado')?.value || '';
+  const fpg = document.getElementById('f-oc-pago')?.value || '';
+  const hoy = hoyISO();
+
+  // poblar filtro proveedores + datalists
+  const provSel = document.getElementById('f-oc-prov');
+  if (provSel && provSel.options.length <= 1)
+    allRecs('proveedores').map(p => p.nombre).sort().forEach(n => provSel.innerHTML += `<option value="${esc(n)}">${esc(n)}</option>`);
+  const dlp = document.getElementById('dl-provs');
+  if (dlp && !dlp.children.length)
+    allRecs('proveedores').map(p => p.nombre).sort().forEach(n => dlp.innerHTML += `<option value="${esc(n)}">`);
+
+  const data = allRecs('ocs').filter(o => {
+    if (fp && o.proveedor !== fp) return false;
+    if (fe && o.estado !== fe) return false;
+    if (fpg === 'pagada' && !o.factura?.pagada) return false;
+    if (fpg === 'impaga' && o.factura?.pagada) return false;
+    if (fpg === 'vencida' && !(o.factura && !o.factura.pagada && o.factura.vencPago && o.factura.vencPago < hoy)) return false;
+    if (q) {
+      const hay = norm(o.nro).includes(q) || norm(o.proveedor).includes(q)
+        || (o.items || []).some(it => norm(it.codigo).includes(q) || norm(it.descripcion).includes(q));
+      if (!hay) return false;
+    }
+    return true;
+  }).sort((a, b) => (b.nro || '').localeCompare(a.nro || ''));
+
+  const all = allRecs('ocs');
+  const pendientes = all.filter(o => o.estado !== 'entregada').length;
+  const porPagar = all.filter(o => o.factura && !o.factura.pagada);
+  const pagoVencido = porPagar.filter(o => o.factura.vencPago && o.factura.vencPago < hoy).length;
+  document.getElementById('oc-kpis').innerHTML = [
+    ['OCs', all.length, 'var(--gold)'],
+    ['Pendientes de entrega', pendientes, 'var(--orange)'],
+    ['Facturas por pagar', porPagar.length, 'var(--blue)'],
+    ['Pago vencido', pagoVencido, pagoVencido ? 'var(--red)' : 'var(--green)'],
+  ].map(([l, v, c]) => `<div class="kpi"><div class="kpi-acc" style="background:${c}"></div><div class="kpi-l">${l}</div><div class="kpi-v">${v}</div></div>`).join('');
+
+  const start = (ocPage - 1) * OC_PER;
+  document.getElementById('tbl-ocs').innerHTML = data.slice(start, start + OC_PER).map(o => {
+    const tot = _ocTotal(o);
+    const ped = _ocPedido(o), rec = _ocRecibido(o);
+    const items = (o.items || []).map(it => it.descripcion || it.codigo).join(', ');
+    const itemsShort = items.length > 58 ? items.slice(0, 56) + '…' : items;
+    const estadoPill = o.estado === 'entregada'
+      ? '<span class="pill pill-green">✓ entregada</span>'
+      : '<span class="pill" style="background:var(--orange-dim);color:var(--orange);border:1px solid rgba(249,115,22,.3)">⏳ pendiente</span>';
+    const recTxt = rec > 0 && o.estado !== 'entregada'
+      ? `<span class="mono" style="font-size:10.5px">${fmt(rec, 1)}/${fmt(ped, 1)}<br><span style="color:var(--orange)">faltan ${fmt(ped - rec, 1)}</span></span>`
+      : (o.estado === 'entregada' ? `<span class="mono" style="font-size:10.5px;color:var(--green)">${fmt(rec, 1)}/${fmt(ped, 1)}</span>` : '<span style="color:var(--text3)">—</span>');
+    let factPill = `<button class="btn btn-g btn-sm" onclick="event.stopPropagation();abrirFactura('${esc(o.id)}')">＋ factura</button>`;
+    if (o.factura) {
+      const vencida = !o.factura.pagada && o.factura.vencPago && o.factura.vencPago < hoy;
+      factPill = o.factura.pagada
+        ? '<span class="pill pill-green">✓ pagada</span>'
+        : `<span class="pill ${vencida ? 'pill-red' : 'pill-mp'}" title="${esc(o.factura.archivo || '')}">${vencida ? '⚠ ' : '💳 '}${fmtVenc(o.factura.vencPago) || 's/fecha'}</span>`;
+      factPill = `<span class="clickable" onclick="event.stopPropagation();abrirFactura('${esc(o.id)}')" style="cursor:pointer">${factPill}</span>`;
+    }
+    const accRec = o.estado !== 'entregada'
+      ? `<button class="btn btn-p btn-sm" onclick="event.stopPropagation();abrirRecepcion('${esc(o.id)}')">📥 Recepcionar</button>` : '';
+    return `<tr class="clickable" onclick="editOC('${esc(o.id)}')">
+      <td><span class="mono" style="color:var(--gold2);font-weight:700;font-size:11.5px">${esc(o.nro)}</span><br><span class="mono" style="font-size:9.5px;color:var(--text3)">${esc(o.fecha || '')}</span></td>
+      <td style="font-weight:600">${esc(o.proveedor)}</td>
+      <td style="font-size:12.5px;max-width:240px">${esc(itemsShort)}<br><span class="mono" style="font-size:9.5px;color:var(--text3)">${(o.items || []).length} ítem(s)</span></td>
+      <td class="num">${tot > 0 ? _sym(o.moneda) + fmt(tot, 2) : '—'}</td>
+      <td class="tc">${recTxt}</td>
+      <td class="tc">${estadoPill}</td>
+      <td class="tc">${factPill}</td>
+      <td class="tc" style="white-space:nowrap">${accRec}
+        <button class="btn btn-g btn-sm" onclick="event.stopPropagation();exportarOCPDF('${esc(o.id)}')" title="Ver / imprimir OC">📄</button>
+      </td>
+    </tr>`;
+  }).join('');
+  document.getElementById('oc-empty').style.display = data.length ? 'none' : 'block';
+  renderPag('pag-ocs', data.length, OC_PER, ocPage, p => { ocPage = p; renderOCs(); });
+}
+
+// ── Alta / edición de OC ──
+function _moItemRow(it = {}) {
+  const st = 'width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:6px 8px;color:var(--text);outline:none';
+  return `<tr>
+    <td style="padding:5px 6px"><input type="text" class="mo-cod" list="dl-insumos" value="${esc(it.codigo || '')}" placeholder="MP-0000" style="${st};font-family:var(--mono);font-size:11px;text-transform:uppercase" oninput="moAutoCod(this)"></td>
+    <td style="padding:5px 6px"><input type="text" class="mo-desc" list="dl-insumos-desc" value="${esc(it.descripcion || '')}" placeholder="o buscá por descripción…" style="${st};font-size:13px" oninput="moAutoDesc(this)"></td>
+    <td style="padding:5px 6px"><input type="number" class="mo-cant" value="${it.cantidad ?? ''}" step="0.001" min="0" style="${st};text-align:right;font-family:var(--mono);font-size:12px" oninput="moRecalc()"></td>
+    <td style="padding:5px 6px"><input type="text" class="mo-um" value="${esc(it.um || 'kg')}" style="${st};text-align:center;font-family:var(--mono);font-size:11px"></td>
+    <td style="padding:5px 6px"><input type="number" class="mo-precio" value="${it.precio ?? ''}" step="0.01" min="0" style="${st};text-align:right;font-family:var(--mono);font-size:12px" oninput="moRecalc()"></td>
+    <td class="num mo-sub" style="padding:5px 8px;color:var(--text2)">—</td>
+    <td style="padding:5px 4px;text-align:center"><button onclick="this.closest('tr').remove();moRecalc()" style="background:none;border:none;color:var(--text3);cursor:pointer">✕</button></td>
+  </tr>`;
+}
+function moAddItem(it) {
+  document.getElementById('mo-items').insertAdjacentHTML('beforeend', _moItemRow(it || {}));
+}
+function moAutoCod(inp) {
+  const cod = inp.value.trim().toUpperCase();
+  const i = DB.insumos[cod]; if (!i) return;
+  const tr = inp.closest('tr');
+  const d = tr.querySelector('.mo-desc'); if (d && !d.value) d.value = i.nombre;
+  const u = tr.querySelector('.mo-um'); if (u) u.value = i.um || 'kg';
+  const p = tr.querySelector('.mo-precio'); if (p && !p.value && i.precio > 0) { p.value = i.precio; moRecalc(); }
+  const prov = document.getElementById('mo-prov'); if (prov && !prov.value && i.proveedor) prov.value = i.proveedor;
+}
+function moAutoDesc(inp) {
+  const d = norm(inp.value);
+  if (d.length < 3) return;
+  const hit = allRecs('insumos').find(i => norm(i.nombre) === d);
+  if (!hit) return;
+  const tr = inp.closest('tr');
+  tr.querySelector('.mo-cod').value = hit.codigo;
+  moAutoCod(tr.querySelector('.mo-cod'));
+}
+function moRecalc() {
+  const mon = document.getElementById('mo-moneda').value;
+  const tc = parseFloat(document.getElementById('mo-tc').value) || 0;
+  let total = 0;
+  document.querySelectorAll('#mo-items tr').forEach(tr => {
+    const c = parseFloat(tr.querySelector('.mo-cant')?.value) || 0;
+    const p = parseFloat(tr.querySelector('.mo-precio')?.value) || 0;
+    const s = c * p; total += s;
+    tr.querySelector('.mo-sub').textContent = s > 0 ? _sym(mon) + fmt(s, 2) : '—';
+  });
+  const el = document.getElementById('mo-total');
+  if (total > 0) {
+    el.style.display = '';
+    let extra = '';
+    if (tc > 0) extra = mon === 'ARS' ? ` <span style="color:var(--text3)">≈ USD ${fmt(total / tc, 2)}</span>` : ` <span style="color:var(--text3)">≈ $ ${fmt(total * tc, 0)} ARS</span>`;
+    el.innerHTML = `<b style="color:var(--gold2)">Total: ${_sym(mon)}${fmt(total, 2)}</b>${extra}`;
+  } else el.style.display = 'none';
+}
+function editOC(id) {
+  const o = id ? DB.ocs[id] : null;
+  document.getElementById('mo-title').textContent = o ? '✏ ' + o.nro : '+ Nueva Orden de Compra';
+  document.getElementById('mo-id').value = o?.id || '';
+  document.getElementById('mo-prov').value = o?.proveedor || '';
+  document.getElementById('mo-fecha').value = o?.fecha || hoyISO();
+  document.getElementById('mo-condpago').value = o?.condPago || '';
+  document.getElementById('mo-moneda').value = o?.moneda || 'USD';
+  document.getElementById('mo-tc').value = o?.tc || '';
+  document.getElementById('mo-lt').value = o?.leadTime || '';
+  document.getElementById('mo-obs').value = o?.obs || '';
+  document.getElementById('mo-del').style.display = o ? '' : 'none';
+  const body = document.getElementById('mo-items');
+  body.innerHTML = '';
+  (o?.items?.length ? o.items : [{}]).forEach(it => moAddItem(it));
+  // datalist de descripciones
+  const dld = document.getElementById('dl-insumos-desc');
+  if (dld && !dld.children.length)
+    allRecs('insumos').filter(i => i.nombre).sort((a, b) => a.nombre.localeCompare(b.nombre))
+      .forEach(i => dld.innerHTML += `<option value="${esc(i.nombre)}" label="${esc(i.nombre)} — ${esc(i.codigo)}">`);
+  moRecalc();
+  openM('m-oc');
+}
+function guardarOC() {
+  const id = document.getElementById('mo-id').value || uid();
+  const prev = DB.ocs[id];
+  const prov = document.getElementById('mo-prov').value.trim();
+  if (!prov) { toast('Falta el proveedor', '⚠'); return; }
+  const items = [];
+  document.querySelectorAll('#mo-items tr').forEach(tr => {
+    const codigo = tr.querySelector('.mo-cod').value.trim().toUpperCase();
+    const descripcion = tr.querySelector('.mo-desc').value.trim();
+    const cantidad = parseFloat(tr.querySelector('.mo-cant').value) || 0;
+    if (!codigo && !descripcion) return;
+    const prevIt = (prev?.items || []).find(x => x.codigo === codigo);
+    items.push({ codigo, descripcion, cantidad,
+      um: tr.querySelector('.mo-um').value.trim() || 'kg',
+      precio: parseFloat(tr.querySelector('.mo-precio').value) || 0,
+      recibido: prevIt?.recibido || 0 });
+  });
+  if (!items.length) { toast('Agregá al menos un insumo', '⚠'); return; }
+  putRec('ocs', id, {
+    ...(prev || {}), id, nro: prev?.nro || _ocNextNro(), proveedor: prov,
+    fecha: document.getElementById('mo-fecha').value || hoyISO(),
+    condPago: document.getElementById('mo-condpago').value.trim(),
+    moneda: document.getElementById('mo-moneda').value,
+    tc: parseFloat(document.getElementById('mo-tc').value) || null,
+    leadTime: parseInt(document.getElementById('mo-lt').value, 10) || null,
+    obs: document.getElementById('mo-obs').value.trim(),
+    items, estado: prev?.estado || 'pendiente', _deleted: false,
+  });
+  closeM('m-oc'); renderOCs(); toast('OC guardada · ' + (prev?.nro || DB.ocs[id].nro));
+}
+function borrarOC() {
+  const id = document.getElementById('mo-id').value;
+  const o = DB.ocs[id];
+  if (!o || !confirm(`¿Eliminar la ${o.nro}?`)) return;
+  delRec('ocs', id);
+  closeM('m-oc'); renderOCs(); toast('OC eliminada', '🗑');
+}
+
+// ── Recepción integrada ──
+function abrirRecepcion(id) {
+  const o = DB.ocs[id]; if (!o) return;
+  document.getElementById('mrx-oc').value = id;
+  document.getElementById('mrx-sub').textContent = `· ${o.nro} · ${o.proveedor}`;
+  const st = 'width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:6px 8px;color:var(--text);outline:none';
+  document.getElementById('mrx-items').innerHTML = (o.items || []).map((it, i) => {
+    const saldo = Math.max(0, (it.cantidad || 0) - (it.recibido || 0));
+    return `<tr>
+      <td><span class="mono" style="font-size:10.5px;color:var(--text2)">${esc(it.codigo)}</span><br>${esc(it.descripcion || '')}</td>
+      <td class="num">${fmt(it.cantidad, 2)} ${esc(it.um)}</td>
+      <td class="num" style="color:${(it.recibido || 0) > 0 ? 'var(--green)' : 'var(--text3)'}">${fmt(it.recibido || 0, 2)}</td>
+      <td style="padding:5px 6px"><input type="number" id="mrx-cant-${i}" value="${saldo > 0 ? saldo : ''}" step="0.001" min="0" style="${st};text-align:right;font-family:var(--mono);font-size:12px;width:90px"></td>
+      <td style="padding:5px 6px"><input type="text" id="mrx-lote-${i}" placeholder="Lote" style="${st};font-family:var(--mono);font-size:11px;width:120px"></td>
+      <td style="padding:5px 6px"><input type="date" id="mrx-venc-${i}" style="${st};font-family:var(--mono);font-size:11px;width:130px"></td>
+      <td style="padding:5px 6px"><input type="text" id="mrx-ubic-${i}" list="dl-posiciones" placeholder="MP60…" style="${st};font-size:12px;width:100px"></td>
+    </tr>`;
+  }).join('');
+  openM('m-recepcion');
+}
+function confirmarRecepcion() {
+  const id = document.getElementById('mrx-oc').value;
+  const o = DB.ocs[id]; if (!o) return;
+  let algo = false;
+  const items = (o.items || []).map((it, i) => {
+    const cant = parseFloat(document.getElementById('mrx-cant-' + i)?.value) || 0;
+    if (cant <= 0) return it;
+    algo = true;
+    const lote = (document.getElementById('mrx-lote-' + i)?.value || '').trim();
+    const venc = document.getElementById('mrx-venc-' + i)?.value || '';
+    const ubic = (document.getElementById('mrx-ubic-' + i)?.value || '').trim();
+    // crear lote de stock
+    const nid = uid();
+    putRec('lotes', nid, { id: nid, codigo: it.codigo, cantidad: Math.round(cant * 1000) / 1000,
+      lote, vencimiento: venc, ubicacion: ubic, abierto: false, proveedor: o.proveedor, fecha: hoyISO() });
+    registrarMov('entrada', it.codigo, cant, o.proveedor, ubic, `${o.nro} · lote ${lote || '—'}`);
+    return { ...it, recibido: Math.round(((it.recibido || 0) + cant) * 1000) / 1000 };
+  });
+  if (!algo) { toast('Ingresá al menos una cantidad', '⚠'); return; }
+  const completa = items.every(it => (it.recibido || 0) >= (it.cantidad || 0) - 0.0005);
+  putRec('ocs', id, { ...o, items, estado: completa ? 'entregada' : 'pendiente' });
+  closeM('m-recepcion'); renderOCs();
+  toast(completa ? `✓ ${o.nro} entregada completa — stock actualizado` : `Recepción parcial registrada · ${o.nro} sigue pendiente`, '📥', 4000);
+}
+
+// ── Factura con vencimiento de pago desde el PDF ──
+function abrirFactura(id) {
+  const o = DB.ocs[id]; if (!o) return;
+  document.getElementById('mf2-oc').value = id;
+  document.getElementById('mf2-sub').textContent = `· ${o.nro} · ${o.proveedor}`;
+  document.getElementById('mf2-file').value = '';
+  document.getElementById('mf2-venc').value = o.factura?.vencPago || '';
+  document.getElementById('mf2-pagada').checked = !!o.factura?.pagada;
+  document.getElementById('mf2-status').textContent = o.factura ? `Factura cargada: ${o.factura.archivo || '—'}` : '';
+  openM('m-factura');
+}
+async function procesarFacturaPDF() {
+  const file = document.getElementById('mf2-file').files[0];
+  const st = document.getElementById('mf2-status');
+  if (!file) return;
+  st.textContent = '⟳ Leyendo la factura…';
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+    let texto = '';
+    for (let p = 1; p <= Math.min(pdf.numPages, 3); p++) {
+      const page = await pdf.getPage(p);
+      const tc = await page.getTextContent();
+      texto += tc.items.map(i => i.str).join(' ') + '\n';
+    }
+    const fechas = _parseFechas(texto);
+    if (!fechas.length) { st.textContent = '⚠ No encontré fechas — cargala a mano.'; return; }
+    const kw = /(vencimiento|vto\.?|venc\.?|fecha de pago|pagar hasta|due date)/gi;
+    const kwPos = []; let k;
+    while ((k = kw.exec(texto))) kwPos.push(k.index);
+    let cand = null;
+    if (kwPos.length) {
+      let best = 1e12;
+      fechas.forEach(f => kwPos.forEach(p => { const d = Math.abs(f.pos - p); if (d < best && d < 160) { best = d; cand = f; } }));
+    }
+    if (!cand) cand = fechas.reduce((a, b) => (b.iso > a.iso ? b : a));
+    document.getElementById('mf2-venc').value = cand.iso;
+    st.innerHTML = `✓ Vencimiento de pago detectado: <b>${fmtVenc(cand.iso)}</b> — confirmá o corregí.`;
+  } catch (e) {
+    console.error(e);
+    st.textContent = '⚠ No pude leer el PDF — cargá la fecha a mano.';
+  }
+}
+function guardarFactura() {
+  const id = document.getElementById('mf2-oc').value;
+  const o = DB.ocs[id]; if (!o) return;
+  const venc = document.getElementById('mf2-venc').value;
+  const file = document.getElementById('mf2-file').files[0];
+  putRec('ocs', id, { ...o, factura: {
+    archivo: file?.name || o.factura?.archivo || '',
+    vencPago: venc || '', pagada: document.getElementById('mf2-pagada').checked,
+    fechaCarga: o.factura?.fechaCarga || hoyISO() } });
+  if (file && SB) {
+    const fr = new FileReader();
+    fr.onload = () => SB.from(PYC_SB_TABLE).upsert({ key: 'pyc_fac_' + id,
+      value: { nombre: file.name, data: fr.result, fecha: hoyISO() },
+      update_at: new Date().toISOString() }, { onConflict: 'key' }).then(() => {});
+    fr.readAsDataURL(file);
+  }
+  closeM('m-factura'); renderOCs();
+  toast(venc ? `Factura guardada · pagar antes del ${fmtVenc(venc)}` : 'Factura guardada', '💳', 3500);
+}
+
+// ── PDF de la OC (jsPDF, barra dorada) ──
+function exportarOCPDF(id) {
+  try {
+    const o = DB.ocs[id]; if (!o) return;
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const ML = 18, CW = 210 - 36;
+    let y = 18;
+    pdf.setFillColor(201, 168, 76); pdf.rect(ML, y, CW, 11, 'F');
+    pdf.setTextColor(26, 26, 26); pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(8); pdf.text('THE FINE COMPANY', ML + 3, y + 4.2);
+    pdf.setFontSize(14); pdf.text('ORDEN DE COMPRA · ' + o.nro, ML + 3, y + 9);
+    y += 18;
+    pdf.setFontSize(10); pdf.setTextColor(60, 60, 60);
+    const datos = [
+      ['Proveedor', o.proveedor], ['Fecha', fmtVenc(o.fecha)],
+      ['Condición de pago', o.condPago || '—'], ['Lead time', o.leadTime ? o.leadTime + ' días' : '—'],
+      ['Estado', o.estado === 'entregada' ? 'Entregada' : 'Pendiente'],
+    ];
+    datos.forEach(([k, v]) => {
+      pdf.setFont('helvetica', 'bold'); pdf.text(k + ':', ML, y);
+      pdf.setFont('helvetica', 'normal'); pdf.text(String(v), ML + 42, y); y += 6;
+    });
+    y += 3;
+    pdf.setFillColor(77, 77, 77); pdf.rect(ML, y, CW, 7, 'F');
+    pdf.setTextColor(255, 255, 255); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9);
+    pdf.text('INSUMOS', ML + 2, y + 4.8); y += 7;
+    pdf.setTextColor(120, 120, 120); pdf.setFontSize(8);
+    pdf.text('CÓDIGO', ML + 2, y + 4); pdf.text('DESCRIPCIÓN', ML + 28, y + 4);
+    pdf.text('CANT.', ML + 110, y + 4); pdf.text('PRECIO', ML + 132, y + 4); pdf.text('SUBTOTAL', ML + 152, y + 4);
+    y += 6; pdf.setDrawColor(220, 220, 220); pdf.line(ML, y, ML + CW, y);
+    pdf.setTextColor(40, 40, 40); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5);
+    (o.items || []).forEach(it => {
+      if (y > 265) { pdf.addPage(); y = 18; }
+      y += 5.4;
+      pdf.text(String(it.codigo || ''), ML + 2, y);
+      pdf.text(pdf.splitTextToSize(String(it.descripcion || ''), 78)[0], ML + 28, y);
+      pdf.text(fmt(it.cantidad, 2) + ' ' + (it.um || ''), ML + 110, y);
+      pdf.text(it.precio > 0 ? fmt(it.precio, 2) : '—', ML + 132, y);
+      pdf.text(it.precio > 0 ? _sym(o.moneda) + fmt((it.cantidad || 0) * it.precio, 2) : '—', ML + 152, y);
+    });
+    y += 8;
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(10);
+    pdf.text('TOTAL: ' + _sym(o.moneda) + fmt(_ocTotal(o), 2), ML + CW - 60, y);
+    if (o.tc) { pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(120, 120, 120);
+      const t = _ocTotal(o);
+      pdf.text(o.moneda === 'ARS' ? `≈ USD ${fmt(t / o.tc, 2)} (TC $${fmt(o.tc, 0)})` : `≈ $ ${fmt(t * o.tc, 0)} ARS (TC $${fmt(o.tc, 0)})`, ML + CW - 60, y + 5); }
+    if (o.obs) { y += 14; pdf.setFontSize(8.5); pdf.setTextColor(90, 90, 90);
+      pdf.text('Observaciones: ' + pdf.splitTextToSize(o.obs, CW - 30)[0], ML, y); }
+    y = Math.max(y + 24, 250);
+    pdf.setDrawColor(150, 150, 150);
+    pdf.line(ML, y, ML + 65, y); pdf.line(ML + CW - 65, y, ML + CW, y);
+    pdf.setTextColor(70, 70, 70); pdf.setFontSize(9); pdf.setFont('helvetica', 'normal');
+    pdf.text('Autorizado por', ML, y + 5); pdf.text('Recibido por proveedor', ML + CW - 65, y + 5);
+    pdf.save(o.nro + '.pdf');
+    toast('PDF generado · ' + o.nro, '📄');
+  } catch (e) { toast('Error al generar PDF: ' + (e.message || e), '⚠', 4500); console.error(e); }
 }
 
 // ── Arranque ──
