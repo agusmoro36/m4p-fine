@@ -1578,8 +1578,13 @@ function renderMPS() {
 }
 function setMPS(cod, mes, val) {
   const v = parseFloat(val);
-  if (isNaN(v)) delRec('mps', `${cod}|${mes}`);
-  else putRec('mps', `${cod}|${mes}`, { id: `${cod}|${mes}`, cod, mes, cantidad: v, manual: true });
+  if (isNaN(v)) { delRec('mps', `${cod}|${mes}`); renderMPS(); return; }
+  // La producción va SIEMPRE en múltiplos del batch mínimo: redondeo hacia arriba
+  const lm = DB.productos[cod]?.loteMin || 1;
+  let snap = v <= 0 ? 0 : Math.ceil(v / lm) * lm;
+  if (snap !== v && snap > 0)
+    toast(`Ajustado a ${snap / lm} batch(es) de ${fmt(lm, 0)} = ${fmt(snap, 0)} u`, '📦', 3200);
+  putRec('mps', `${cod}|${mes}`, { id: `${cod}|${mes}`, cod, mes, cantidad: snap, manual: true });
   renderMPS();
 }
 function mpsLimpiarOverrides() {
