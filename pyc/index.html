@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fine Planificación y Compras</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="layout">
+
+  <!-- ══ SIDEBAR ══ -->
+  <div class="sidebar">
+    <div class="logo">
+      <div class="logo-t">F!NE <span>P&amp;C</span></div>
+      <div class="logo-sub">Planificación y Compras</div>
+    </div>
+    <div class="nav">
+      <div class="nav-group">Compras</div>
+      <div class="nav-item soon"><span class="nav-ico">🧾</span>Órdenes de Compra<span class="nav-soon">FASE 3</span></div>
+      <div class="nav-item soon"><span class="nav-ico">◈</span>OCs Propuestas<span class="nav-soon">FASE 5</span></div>
+
+      <div class="nav-group">Maestros</div>
+      <div class="nav-item" data-page="minsumos" onclick="go('minsumos')"><span class="nav-ico">🧪</span>Insumos</div>
+      <div class="nav-item" data-page="mproveedores" onclick="go('mproveedores')"><span class="nav-ico">🏬</span>Proveedores</div>
+      <div class="nav-item" data-page="mproductos" onclick="go('mproductos')"><span class="nav-ico">◎</span>Producto Terminado</div>
+
+      <div class="nav-group">Producción</div>
+      <div class="nav-item soon"><span class="nav-ico">📋</span>Órdenes a Fazón<span class="nav-soon">FASE 4</span></div>
+      <div class="nav-item soon"><span class="nav-ico">📦</span>Stock de Insumos<span class="nav-soon">FASE 2</span></div>
+      <div class="nav-item soon"><span class="nav-ico">⏱</span>Historial Movs.<span class="nav-soon">FASE 2</span></div>
+
+      <div class="nav-group">Planificación</div>
+      <div class="nav-item soon"><span class="nav-ico">📈</span>Forecast<span class="nav-soon">FASE 5</span></div>
+      <div class="nav-item soon"><span class="nav-ico">🗓</span>Plan Fazón (MPS)<span class="nav-soon">FASE 5</span></div>
+
+      <div class="nav-group">Reportes</div>
+      <div class="nav-item soon"><span class="nav-ico">🚦</span>Semáforo Insumos<span class="nav-soon">FASE 5</span></div>
+      <div class="nav-item soon"><span class="nav-ico">🧮</span>Calculadora MRP<span class="nav-soon">FASE 2</span></div>
+    </div>
+    <div class="sidebar-foot">
+      <span class="save-ind" id="save-ind">·</span>
+      <button class="btn-ico" onclick="toggleDark()" title="Modo oscuro/claro">🌙</button>
+    </div>
+  </div>
+
+  <!-- ══ MAIN ══ -->
+  <div class="main">
+    <div class="topbar">
+      <div class="tb-title" id="tb-title">Maestros</div>
+    </div>
+    <div class="content">
+
+      <!-- ══ MAESTRO INSUMOS ══ -->
+      <div class="page" id="page-minsumos">
+        <div class="sh">
+          <div class="sh-title">Maestro de Insumos <small>· insumos + precios unificados</small></div>
+          <div class="sh-actions">
+            <select class="fsel" id="f-ins-tipo" onchange="insPage=1;renderInsumos()">
+              <option value="">Todos los tipos</option>
+              <option value="MP">MP · Materia prima</option>
+              <option value="PK">PK · Empaque</option>
+              <option value="INS">INS · Insumo general</option>
+            </select>
+            <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-insumos" placeholder="Buscar código, nombre, proveedor…" oninput="insPage=1;renderInsumos()"></div>
+            <button class="btn btn-p" onclick="editInsumo('')">+ Nuevo insumo</button>
+          </div>
+        </div>
+        <div class="kpis" id="ins-kpis"></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr>
+            <th>Código</th><th>Nombre</th><th class="tc">Tipo</th><th class="tc">UM</th>
+            <th class="tr">Precio</th><th>Proveedor</th><th class="tc">Fecha precio</th>
+          </tr></thead>
+          <tbody id="tbl-insumos"></tbody>
+        </table></div>
+        <div class="pag" id="pag-insumos"></div>
+        <div class="empty" id="ins-empty" style="display:none">
+          <div class="empty-ico">🧪</div><div class="empty-t">Sin resultados</div>
+          <div class="empty-s">Probá con otro término de búsqueda.</div>
+        </div>
+      </div>
+
+      <!-- ══ MAESTRO PROVEEDORES ══ -->
+      <div class="page" id="page-mproveedores">
+        <div class="sh">
+          <div class="sh-title">Maestro de Proveedores</div>
+          <div class="sh-actions">
+            <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-provs" placeholder="Buscar proveedor…" oninput="provPage=1;renderProveedores()"></div>
+            <button class="btn btn-p" onclick="editProv('')">+ Nuevo proveedor</button>
+          </div>
+        </div>
+        <div class="kpis" id="prov-kpis"></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr>
+            <th>Nombre</th><th>Contacto</th><th>Email</th><th>Teléfono</th><th>Tipo</th>
+            <th class="tc">Lead time</th><th>Cond. pago</th>
+          </tr></thead>
+          <tbody id="tbl-provs"></tbody>
+        </table></div>
+        <div class="pag" id="pag-provs"></div>
+        <div class="empty" id="prov-empty" style="display:none">
+          <div class="empty-ico">🏬</div><div class="empty-t">Sin resultados</div>
+        </div>
+      </div>
+
+      <!-- ══ MAESTRO PRODUCTO TERMINADO ══ -->
+      <div class="page" id="page-mproductos">
+        <div class="sh">
+          <div class="sh-title">Maestro de Producto Terminado <small>· click en un producto abre su fórmula</small></div>
+          <div class="sh-actions">
+            <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-prods" placeholder="Buscar producto o SKU…" oninput="renderProductos()"></div>
+          </div>
+        </div>
+        <div class="kpis" id="prod-kpis"></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr>
+            <th>Código</th><th>Producto</th><th class="tc">SKU Fine Core</th><th>Cliente</th>
+            <th class="tr">Batch (lote mín.)</th><th class="tr">Política stock</th><th class="tc">Fórmula</th>
+          </tr></thead>
+          <tbody id="tbl-prods"></tbody>
+        </table></div>
+        <div class="empty" id="prod-empty" style="display:none">
+          <div class="empty-ico">◎</div><div class="empty-t">Sin resultados</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL INSUMO ══ -->
+<div class="overlay" id="m-insumo">
+  <div class="modal" style="max-width:560px">
+    <button class="modal-close" onclick="closeM('m-insumo')">✕</button>
+    <div class="modal-title" id="mi-title">+ Nuevo insumo</div>
+    <div class="fg">
+      <div class="fl"><label>Código</label><input type="text" id="mi-cod" placeholder="MP-0000" style="font-family:var(--mono);text-transform:uppercase"></div>
+      <div class="fl"><label>Tipo</label><select id="mi-tipo"><option value="MP">MP · Materia prima</option><option value="PK">PK · Empaque</option><option value="INS">INS · General</option></select></div>
+      <div class="fl fg-full"><label>Nombre</label><input type="text" id="mi-nombre"></div>
+      <div class="fl"><label>Unidad de medida</label><input type="text" id="mi-um" placeholder="kg / uni."></div>
+      <div class="fl"><label>Proveedor habitual</label><input type="text" id="mi-prov"></div>
+      <div class="fl"><label>Precio</label><input type="number" id="mi-precio" step="0.01" min="0"></div>
+      <div class="fl"><label>Moneda</label><select id="mi-moneda"><option>USD</option><option>ARS</option></select></div>
+      <div class="fl"><label>Fecha del precio</label><input type="date" id="mi-fecha"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-r btn-sm" id="mi-del" onclick="borrarInsumo()" style="margin-right:auto">🗑 Eliminar</button>
+      <button class="btn btn-g" onclick="closeM('m-insumo')">Cancelar</button>
+      <button class="btn btn-p" onclick="guardarInsumo()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL PROVEEDOR ══ -->
+<div class="overlay" id="m-prov">
+  <div class="modal" style="max-width:620px">
+    <button class="modal-close" onclick="closeM('m-prov')">✕</button>
+    <div class="modal-title" id="mp-title">+ Nuevo proveedor</div>
+    <input type="hidden" id="mp-id">
+    <div class="fg">
+      <div class="fl fg-full"><label>Nombre</label><input type="text" id="mp-nombre"></div>
+      <div class="fl"><label>Contacto</label><input type="text" id="mp-contacto"></div>
+      <div class="fl"><label>Email</label><input type="text" id="mp-email"></div>
+      <div class="fl"><label>Teléfono</label><input type="text" id="mp-telefono"></div>
+      <div class="fl"><label>CUIT</label><input type="text" id="mp-cuit"></div>
+      <div class="fl fg-full"><label>Dirección</label><input type="text" id="mp-direccion"></div>
+      <div class="fl"><label>Tipo</label><input type="text" id="mp-tipo" placeholder="Insumos / Empaque / Servicio"></div>
+      <div class="fl"><label>Lead time (días)</label><input type="number" id="mp-leadTime" min="0"></div>
+      <div class="fl fg-full"><label>Condición de pago</label><input type="text" id="mp-condPago" placeholder="contado · cta cte 30 días…"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-r btn-sm" id="mp-del" onclick="borrarProv()" style="margin-right:auto">🗑 Eliminar</button>
+      <button class="btn btn-g" onclick="closeM('m-prov')">Cancelar</button>
+      <button class="btn btn-p" onclick="guardarProv()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL FÓRMULA PRODUCTO ══ -->
+<div class="overlay" id="m-formula">
+  <div class="modal" style="max-width:760px;width:94vw">
+    <button class="modal-close" onclick="closeM('m-formula')">✕</button>
+    <div class="modal-title"><span id="mf-title"></span> <span id="mf-cod" style="font-family:var(--mono);font-size:12px;color:var(--text3)"></span></div>
+    <div class="fg" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:6px">
+      <div class="fl"><label>SKU Fine Core</label><input type="text" id="mf-sku" placeholder="ej: BEAUTY" style="font-family:var(--mono)"></div>
+      <div class="fl"><label>Batch · lote mínimo (u)</label><input type="number" id="mf-lote" min="0"></div>
+      <div class="fl"><label>Política stock (días)</label><input type="number" id="mf-dias" min="0" placeholder="30 / 45"></div>
+    </div>
+    <div id="mf-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-g" onclick="closeM('m-formula')">Cerrar</button>
+      <button class="btn btn-p" onclick="guardarProducto()">Guardar cambios</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script src="data.js"></script>
+<script src="store.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
