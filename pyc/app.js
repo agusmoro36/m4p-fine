@@ -21,6 +21,7 @@ const TITLES = {
   minsumos: 'Maestro de Insumos', mproveedores: 'Maestro de Proveedores', mproductos: 'Maestro de Producto Terminado',
   stock: 'Stock de Insumos', historial: 'Historial de Movimientos', calculadora: 'Calculadora MRP',
   ocs: 'Órdenes de Compra', ofs: 'Órdenes a Fazón',
+  forecast: 'Forecast', mps: 'Plan de Producción Fazón (MPS)', propuestas: 'OCs Propuestas', semaforo: 'Semáforo de Insumos',
 };
 function go(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -31,7 +32,8 @@ function go(id) {
   document.querySelector(`.nav-item[data-page="${id}"]`)?.classList.add('active');
   document.getElementById('tb-title').innerHTML = `${TITLES[id] || id} <span>· Fine Planificación y Compras</span>`;
   const renders = { minsumos: renderInsumos, mproveedores: renderProveedores, mproductos: renderProductos,
-    stock: renderStock, historial: renderHistorial, calculadora: renderCalc, ocs: renderOCs, ofs: renderOFs };
+    stock: renderStock, historial: renderHistorial, calculadora: renderCalc, ocs: renderOCs, ofs: renderOFs,
+    forecast: renderForecast, mps: renderMPS, propuestas: renderPropuestas, semaforo: renderSemaforo };
   renders[id]?.();
 }
 function toggleDark() {
@@ -1369,6 +1371,353 @@ function exportarOFPDF(id) {
     pdf.save(o.nro + '.pdf');
     toast('PDF generado · ' + o.nro, '📄');
   } catch (e) { toast('Error al generar PDF: ' + (e.message || e), '⚠', 4500); console.error(e); }
+}
+
+// ═══════════════ PLANIFICACIÓN (Fase 5) ═══════════════
+const MPS_H = 9;
+function mesesHorizonte(n = MPS_H) {
+  const out = []; const d = new Date();
+  for (let i = 0; i < n; i++) {
+    const m = new Date(d.getFullYear(), d.getMonth() + i, 1);
+    out.push(`${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}`);
+  }
+  return out;
+}
+const mesCorto = m => {
+  const N = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  return N[parseInt(m.slice(5), 10) - 1] + ' ' + m.slice(2, 4);
+};
+function prodsPlan() {
+  return allRecs('productos').map(p => ({ ...p, sku: p.skuCore || p.codigo }))
+    .sort((a, b) => a.codigo.localeCompare(b.codigo));
+}
+const F = (sku, mes) => DB.forecast[`${sku}|${mes}`]?.unidades || 0;
+const stockPT = sku => DB.stockpt[sku]?.unidades || 0;
+function pendIngresoPT(cod) {
+  return allRecs('ofs').filter(o => o.estado === 'despachada' || o.estado === 'produccion')
+    .reduce((s, o) => s + (o.productos || []).filter(p => p.cod === cod).reduce((x, p) => x + (p.cantidad || 0), 0), 0);
+}
+// Plan por producto: 9 meses de {mes,F,ini,prop,fin,obj,manual}
+function calcMPS(p) {
+  const meses = mesesHorizonte();
+  const pol = p.politicaDias || 45;
+  const lm = p.loteMin || 1;
+  let ini = stockPT(p.sku) + pendIngresoPT(p.codigo);
+  return meses.map((mes, i) => {
+    const dem = F(p.sku, mes);
+    const demSig = F(p.sku, meses[i + 1] || mes) || dem;
+    const obj = Math.round((demSig / 30) * pol);
+    const ov = DB.mps[`${p.codigo}|${mes}`];
+    let prop;
+    if (ov && !ov._deleted) prop = ov.cantidad;
+    else {
+      const necesito = Math.max(0, obj + dem - ini);
+      prop = necesito > 0 ? Math.ceil(necesito / lm) * lm : 0;
+    }
+    const fin = Math.round(ini + prop - dem);
+    const row = { mes, F: dem, ini: Math.round(ini), prop, fin, obj, manual: !!(ov && !ov._deleted) };
+    ini = fin;
+    return row;
+  });
+}
+
+// ── FORECAST ──
+function renderForecast() {
+  const prods = prodsPlan();
+  const meses = mesesHorizonte();
+  document.getElementById('fc-head').innerHTML = `<tr><th>Producto</th><th class="tc" style="background:var(--gold-dim)">Stock PT hoy</th>${meses.map(m => `<th class="tc">${mesCorto(m)}</th>`).join('')}</tr>`;
+  const inp = 'width:64px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:4px 5px;color:var(--text);font-family:var(--mono);font-size:11px;text-align:right;outline:none';
+  document.getElementById('tbl-forecast').innerHTML = prods.map(p => `
+    <tr>
+      <td><span style="font-weight:600">${esc(p.nombre)}</span><br><span class="mono" style="font-size:9.5px;color:var(--gold2)">${esc(p.sku)}</span></td>
+      <td class="tc" style="background:var(--gold-dim)"><input type="number" min="0" style="${inp}" value="${stockPT(p.sku) || ''}" onchange="setStockPT('${esc(p.sku)}',this.value)"></td>
+      ${meses.map(m => `<td class="tc"><input type="number" min="0" style="${inp}" value="${F(p.sku, m) || ''}" onchange="setForecast('${esc(p.sku)}','${m}',this.value)"></td>`).join('')}
+    </tr>`).join('');
+  const totF = prods.reduce((s, p) => s + meses.reduce((x, m) => x + F(p.sku, m), 0), 0);
+  const totPT = prods.reduce((s, p) => s + stockPT(p.sku), 0);
+  document.getElementById('fc-kpis').innerHTML = [
+    ['Productos', prods.length, 'var(--gold)'],
+    ['Forecast total (9m)', fmt(totF, 0) + ' u', 'var(--blue)'],
+    ['Stock PT actual', fmt(totPT, 0) + ' u', 'var(--green)'],
+  ].map(([l, v, c]) => `<div class="kpi"><div class="kpi-acc" style="background:${c}"></div><div class="kpi-l">${l}</div><div class="kpi-v" style="font-size:23px">${v}</div></div>`).join('');
+  document.getElementById('fc-empty').style.display = prods.length ? 'none' : 'block';
+}
+function setForecast(sku, mes, val) {
+  const u = parseFloat(val) || 0;
+  putRec('forecast', `${sku}|${mes}`, { id: `${sku}|${mes}`, sku, mes, unidades: u });
+  renderForecast();
+}
+function setStockPT(sku, val) {
+  putRec('stockpt', sku, { id: sku, sku, unidades: parseFloat(val) || 0, fecha: hoyISO() });
+  renderForecast();
+}
+function importarForecastCSV() {
+  const file = document.getElementById('fc-file').files[0];
+  if (!file) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    try {
+      const sep = fr.result.includes(';') && !fr.result.includes(',') ? ';' : ',';
+      const rows = fr.result.split(/\r?\n/).map(r => r.split(sep).map(c => c.trim().replace(/^"|"$/g, ''))).filter(r => r.length > 1);
+      if (!rows.length) { toast('CSV vacío', '⚠'); return; }
+      const head = rows[0].map(h => norm(h));
+      let n = 0;
+      const mesDe = s => { const m = /(\d{4})[-\/](\d{1,2})/.exec(s); return m ? `${m[1]}-${String(+m[2]).padStart(2, '0')}` : null; };
+      const esMesHead = head.map(h => mesDe(h));
+      if (esMesHead.filter(Boolean).length >= 2) {
+        // formato ancho: sku, mes1, mes2…
+        rows.slice(1).forEach(r => {
+          const sku = (r[0] || '').toUpperCase(); if (!sku) return;
+          head.forEach((h, ci) => {
+            const mes = esMesHead[ci]; if (!mes) return;
+            const u = parseFloat(r[ci]) || 0;
+            putRec('forecast', `${sku}|${mes}`, { id: `${sku}|${mes}`, sku, mes, unidades: u }); n++;
+          });
+        });
+      } else {
+        // formato largo: sku, mes, unidades (con o sin encabezado)
+        rows.forEach(r => {
+          const sku = (r[0] || '').toUpperCase();
+          const mes = mesDe(r[1] || '');
+          if (!sku || !mes) return;
+          const u = parseFloat(r[2]) || 0;
+          putRec('forecast', `${sku}|${mes}`, { id: `${sku}|${mes}`, sku, mes, unidades: u }); n++;
+        });
+      }
+      renderForecast(); toast(`Forecast importado · ${n} celdas`, '📥', 3500);
+    } catch (e) { toast('No pude leer el CSV: ' + (e.message || e), '⚠', 4000); }
+  };
+  fr.readAsText(file);
+}
+
+// ── MPS ──
+function renderMPS() {
+  const prods = prodsPlan();
+  const meses = mesesHorizonte();
+  const conDatos = prods.filter(p => meses.some(m => F(p.sku, m) > 0) || stockPT(p.sku) > 0);
+  document.getElementById('mps-empty').style.display = conDatos.length ? 'none' : 'block';
+  const inp = 'width:62px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:3px 5px;color:var(--text);font-family:var(--mono);font-size:11px;text-align:right;outline:none';
+  let prod3m = 0, bajoCob = 0;
+  document.getElementById('mps-body').innerHTML = conDatos.map(p => {
+    const plan = calcMPS(p);
+    prod3m += plan.slice(0, 3).reduce((s, r) => s + r.prop, 0);
+    if (plan[0] && plan[0].fin < plan[0].obj) bajoCob++;
+    const pend = pendIngresoPT(p.codigo);
+    return `<div class="tbl-wrap" style="margin-bottom:14px;overflow-x:auto"><table style="min-width:980px">
+      <thead><tr>
+        <th style="min-width:170px">${esc(p.nombre)} <span class="mono" style="font-size:9px;color:var(--gold2)">${esc(p.sku)}</span><br>
+          <span class="mono" style="font-size:9px;color:var(--text3)">batch ${fmt(p.loteMin, 0)} · pol. ${p.politicaDias || 45}d · PT hoy ${fmt(stockPT(p.sku), 0)}${pend ? ' · +' + fmt(pend, 0) + ' en fazón' : ''}</span></th>
+        ${plan.map(r => `<th class="tc">${mesCorto(r.mes)}</th>`).join('')}
+      </tr></thead>
+      <tbody>
+        <tr><td style="font-size:11px;color:var(--text3)">Forecast</td>
+          ${plan.map(r => `<td class="tc mono" style="font-size:11px;color:var(--text2)">${r.F ? fmt(r.F, 0) : '—'}</td>`).join('')}</tr>
+        <tr><td style="font-size:11px;color:var(--gold2);font-weight:700">Producir ✏</td>
+          ${plan.map(r => `<td class="tc"><input type="number" min="0" step="1" style="${inp};${r.manual ? 'border-color:var(--gold);background:var(--gold-dim);font-weight:700' : ''}" value="${r.prop || ''}" onchange="setMPS('${esc(p.codigo)}','${r.mes}',this.value)" title="${r.prop && p.loteMin ? (r.prop / p.loteMin === Math.floor(r.prop / p.loteMin) ? (r.prop / p.loteMin) + ' batch(es)' : (r.prop / p.loteMin).toFixed(2) + ' batches') : ''}">${''}</td>`).join('')}</tr>
+        <tr><td style="font-size:11px;color:var(--text3)">Stock proyectado</td>
+          ${plan.map(r => `<td class="tc mono" style="font-size:11px;font-weight:700;color:${r.fin < 0 ? 'var(--red)' : (r.fin < r.obj ? 'var(--orange)' : 'var(--green)')}" title="objetivo ${fmt(r.obj, 0)}">${fmt(r.fin, 0)}</td>`).join('')}</tr>
+      </tbody>
+    </table></div>`;
+  }).join('');
+  document.getElementById('mps-kpis').innerHTML = [
+    ['Productos planificados', conDatos.length, 'var(--gold)'],
+    ['A producir próx. 3 meses', fmt(prod3m, 0) + ' u', 'var(--blue)'],
+    ['Bajo cobertura este mes', bajoCob, bajoCob ? 'var(--red)' : 'var(--green)'],
+  ].map(([l, v, c]) => `<div class="kpi"><div class="kpi-acc" style="background:${c}"></div><div class="kpi-l">${l}</div><div class="kpi-v" style="font-size:23px">${v}</div></div>`).join('');
+}
+function setMPS(cod, mes, val) {
+  const v = parseFloat(val);
+  if (isNaN(v)) delRec('mps', `${cod}|${mes}`);
+  else putRec('mps', `${cod}|${mes}`, { id: `${cod}|${mes}`, cod, mes, cantidad: v, manual: true });
+  renderMPS();
+}
+function mpsLimpiarOverrides() {
+  if (!confirm('¿Volver todas las celdas a la propuesta automática?')) return;
+  allRecs('mps').forEach(r => delRec('mps', r.id));
+  renderMPS(); toast('Plan recalculado', '↺');
+}
+
+// ── Necesidades de insumos según el plan (para Propuestas y Semáforo) ──
+function necesidadesPlan(nMeses) {
+  const meses = mesesHorizonte().slice(0, nMeses);
+  const nec = {};   // codigo → {total, porMes:{mes:qty}, nombre, um}
+  prodsPlan().forEach(p => {
+    const plan = calcMPS(p);
+    plan.slice(0, nMeses).forEach(r => {
+      if (!r.prop) return;
+      const f = r.prop / (p.loteMin || 1);
+      (p.insumos || []).forEach(ins => {
+        if (!ins.codigo || !ins.cantidad) return;
+        if (!nec[ins.codigo]) nec[ins.codigo] = { codigo: ins.codigo, nombre: ins.nombre, um: ins.um || 'kg', total: 0, porMes: {} };
+        const q = ins.cantidad * f;
+        nec[ins.codigo].total += q;
+        nec[ins.codigo].porMes[r.mes] = (nec[ins.codigo].porMes[r.mes] || 0) + q;
+      });
+    });
+  });
+  Object.values(nec).forEach(n => { n.total = Math.round(n.total * 1000) / 1000; });
+  return { nec, meses };
+}
+function pipelineOC(cod) {
+  return allRecs('ocs').filter(o => o.estado !== 'entregada')
+    .reduce((s, o) => s + (o.items || []).filter(it => it.codigo === cod)
+      .reduce((x, it) => x + Math.max(0, (it.cantidad || 0) - (it.recibido || 0)), 0), 0);
+}
+function stockTotalIns(cod) {
+  return lotesVivos().filter(l => l.codigo === cod).reduce((s, l) => s + l.cantidad, 0);
+}
+function provSugerido(cod) {
+  const ins = DB.insumos[cod];
+  if (ins?.proveedor) return { nombre: ins.proveedor, precio: ins.precio, moneda: ins.moneda };
+  // buscar en catálogos el más barato
+  let mejor = null;
+  allRecs('proveedores').forEach(p => (p.insumos || []).forEach(i => {
+    if (norm(i.insumo) === norm(ins?.nombre || '') && i.precio > 0)
+      if (!mejor || i.precio < mejor.precio) mejor = { nombre: p.nombre, precio: i.precio, moneda: i.moneda || 'USD' };
+  }));
+  return mejor || { nombre: '', precio: null, moneda: 'USD' };
+}
+
+// ── OCS PROPUESTAS ──
+function renderPropuestas() {
+  const nM = parseInt(document.getElementById('f-prop-hor')?.value, 10) || 9;
+  const { nec } = necesidadesPlan(nM);
+  const filas = Object.values(nec).map(n => {
+    const stk = stockTotalIns(n.codigo);
+    const pipe = pipelineOC(n.codigo);
+    const falt = Math.round(Math.max(0, n.total - stk - pipe) * 1000) / 1000;
+    // mes crítico: primer mes donde acumulado supera stock+pipe
+    let acum = 0, mesCrit = '';
+    for (const [mes, q] of Object.entries(n.porMes).sort()) {
+      acum += q;
+      if (acum > stk + pipe + 0.0005) { mesCrit = mes; break; }
+    }
+    return { ...n, stk, pipe, falt, mesCrit };
+  }).filter(f => f.falt > 0.0005).sort((a, b) => (a.mesCrit || '9999').localeCompare(b.mesCrit || '9999'));
+
+  let costoUSD = 0, costoARS = 0;
+  const html = filas.map(f => {
+    const sug = provSugerido(f.codigo);
+    let costo = '—';
+    if (sug.precio > 0) {
+      const c = f.falt * sug.precio;
+      if ((sug.moneda || 'USD') === 'ARS') { costoARS += c; costo = '$ ' + fmt(c, 0); }
+      else { costoUSD += c; costo = 'USD ' + fmt(c, 0); }
+    }
+    return `<tr>
+      <td class="mono">${esc(f.codigo)}</td>
+      <td style="font-weight:600">${esc(f.nombre)}</td>
+      <td class="num">${fmt(f.total, 2)} ${esc(f.um)}</td>
+      <td class="num">${fmt(f.stk, 2)}</td>
+      <td class="num" style="color:${f.pipe > 0 ? 'var(--blue)' : 'var(--text3)'}">${f.pipe > 0 ? fmt(f.pipe, 2) : '—'}</td>
+      <td class="num" style="color:var(--red);font-weight:700">${fmt(f.falt, 2)}</td>
+      <td class="tc mono" style="font-size:10.5px">${f.mesCrit ? mesCorto(f.mesCrit) : '—'}</td>
+      <td style="font-size:12.5px">${esc(sug.nombre || '—')}</td>
+      <td class="num">${costo}</td>
+      <td class="tc"><button class="btn btn-p btn-sm" onclick="crearOCDesdeProp('${esc(f.codigo)}',${f.falt})">+ OC</button></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('tbl-prop').innerHTML = html;
+  document.getElementById('prop-empty').style.display = filas.length ? 'none' : 'block';
+  document.getElementById('prop-kpis').innerHTML = [
+    ['Insumos a comprar', filas.length, filas.length ? 'var(--red)' : 'var(--green)'],
+    ['Costo estimado', ((costoUSD ? 'USD ' + fmt(costoUSD, 0) : '') + (costoUSD && costoARS ? ' + ' : '') + (costoARS ? '$ ' + fmt(costoARS, 0) : '')) || '—', 'var(--gold2)'],
+    ['Con proveedor sugerido', filas.filter(f => provSugerido(f.codigo).nombre).length + '/' + filas.length, 'var(--blue)'],
+  ].map(([l, v, c]) => `<div class="kpi"><div class="kpi-acc" style="background:${c}"></div><div class="kpi-l">${l}</div><div class="kpi-v" style="font-size:22px">${v}</div></div>`).join('');
+  window._propFilas = filas;
+}
+function crearOCDesdeProp(cod, falt) {
+  const ins = DB.insumos[cod];
+  const sug = provSugerido(cod);
+  editOC('');
+  document.getElementById('mo-prov').value = sug.nombre || '';
+  document.getElementById('mo-moneda').value = sug.moneda || ins?.moneda || 'USD';
+  const tr = document.querySelector('#mo-items tr');
+  tr.querySelector('.mo-cod').value = cod;
+  tr.querySelector('.mo-desc').value = ins?.nombre || '';
+  tr.querySelector('.mo-um').value = ins?.um || 'kg';
+  tr.querySelector('.mo-cant').value = Math.ceil(falt);
+  if (sug.precio > 0) tr.querySelector('.mo-precio').value = sug.precio;
+  moRecalc();
+}
+function crearOCsPropuestas() {
+  const filas = window._propFilas || [];
+  if (!filas.length) { toast('No hay faltantes en el horizonte', '✓'); return; }
+  // agrupar por proveedor sugerido
+  const grupos = {};
+  filas.forEach(f => {
+    const sug = provSugerido(f.codigo);
+    const k = sug.nombre || '(sin proveedor)';
+    (grupos[k] ||= { moneda: sug.moneda || 'USD', items: [] }).items.push({ f, sug });
+  });
+  if (!confirm(`Se crearán ${Object.keys(grupos).length} OC(s) en estado Pendiente, agrupadas por proveedor. ¿Continuar?`)) return;
+  let n = 0;
+  Object.entries(grupos).forEach(([prov, g]) => {
+    const id = uid();
+    putRec('ocs', id, { id, nro: _ocNextNro(), proveedor: prov, fecha: hoyISO(),
+      condPago: '', moneda: g.moneda, tc: null, leadTime: null,
+      obs: 'Generada desde OCs Propuestas (MRP)',
+      items: g.items.map(({ f, sug }) => ({ codigo: f.codigo, descripcion: f.nombre, um: f.um,
+        cantidad: Math.ceil(f.falt), precio: sug.precio || 0, recibido: 0 })),
+      estado: 'pendiente' });
+    n++;
+  });
+  renderPropuestas(); toast(`⚡ ${n} OC(s) creadas — revisalas en Órdenes de Compra`, '✓', 4500);
+}
+
+// ── SEMÁFORO ──
+function _semPill(dias) {
+  if (dias == null) return '<span class="pill pill-ins">⚪ s/dem</span>';
+  if (dias < 15) return `<span class="pill pill-red">🔴 ${dias < 0 ? 'sin stock' : Math.round(dias) + 'd'}</span>`;
+  if (dias <= 45) return `<span class="pill" style="background:var(--yellow-dim);color:var(--yellow);border:1px solid rgba(184,150,12,.35)">🟡 ${Math.round(dias)}d</span>`;
+  return `<span class="pill pill-green">🟢 ${dias > 365 ? '+1a' : Math.round(dias) + 'd'}</span>`;
+}
+let semPage = 1;
+function renderSemaforo() {
+  const q = norm(document.getElementById('s-sem')?.value || '');
+  const soloCrit = document.getElementById('sem-criticos')?.checked;
+  const { nec, meses } = necesidadesPlan(4);
+  ['sem-m1', 'sem-m2', 'sem-m3'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (el && meses[i + 1]) el.textContent = mesCorto(meses[i + 1]);
+  });
+  const filas = Object.values(nec).map(n => {
+    const stk = stockTotalIns(n.codigo);
+    const pipe = pipelineOC(n.codigo);
+    // simulación: stock corre mes a mes contra necesidades (pipe entra en m0)
+    let s = stk + pipe;
+    const dias = meses.map((mes, i) => {
+      const need = n.porMes[mes] || 0;
+      const demandaDiaria = (n.porMes[meses[i]] || n.porMes[meses[i + 1]] || 0) / 30;
+      const d = demandaDiaria > 0 ? s / demandaDiaria : null;
+      s = s - need;
+      return d;
+    });
+    const critico = dias.some(d => d != null && d < 15);
+    return { ...n, stk, pipe, dias, critico };
+  }).filter(f => (!q || norm(f.codigo).includes(q) || norm(f.nombre).includes(q)) && (!soloCrit || f.critico))
+    .sort((a, b) => {
+      const da = a.dias.find(d => d != null) ?? 1e9, db = b.dias.find(d => d != null) ?? 1e9;
+      return da - db;
+    });
+  const all = Object.values(nec);
+  const criticos = filas.filter(f => f.critico).length;
+  document.getElementById('sem-kpis').innerHTML = [
+    ['Insumos con demanda', all.length, 'var(--gold)'],
+    ['Críticos (<15 días)', criticos, criticos ? 'var(--red)' : 'var(--green)'],
+  ].map(([l, v, c]) => `<div class="kpi"><div class="kpi-acc" style="background:${c}"></div><div class="kpi-l">${l}</div><div class="kpi-v">${v}</div></div>`).join('');
+  const PER = 30;
+  const start = (semPage - 1) * PER;
+  document.getElementById('tbl-sem').innerHTML = filas.slice(start, start + PER).map(f => `
+    <tr>
+      <td class="mono">${esc(f.codigo)}</td>
+      <td style="font-weight:600">${esc(f.nombre)}</td>
+      <td class="num">${fmt(f.stk, 2)} ${esc(f.um)}</td>
+      <td class="num" style="color:${f.pipe > 0 ? 'var(--blue)' : 'var(--text3)'}">${f.pipe > 0 ? fmt(f.pipe, 2) : '—'}</td>
+      ${f.dias.map(d => `<td class="tc">${_semPill(d)}</td>`).join('')}
+    </tr>`).join('');
+  document.getElementById('sem-empty').style.display = filas.length ? 'none' : 'block';
+  renderPag('pag-sem', filas.length, PER, semPage, p => { semPage = p; renderSemaforo(); });
 }
 
 // ── Arranque ──

@@ -16,6 +16,9 @@ const DB = {
   lotes: {},        // id → {id,codigo,lote,cantidad,vencimiento,ubicacion,abierto,proveedor,fecha,revalida?,updatedAt}
   ocs: {},          // id → {id,nro,proveedor,fecha,moneda,tc,condPago,leadTime,obs,items[],estado,factura?,updatedAt}
   ofs: {},          // id → órdenes a fazón {id,nro,fazon,productos[],lineas[],estado,recepciones[],updatedAt}
+  forecast: {},     // id `SKU|aaaa-mm` → {id,sku,mes,unidades,updatedAt}
+  stockpt: {},      // id SKU → {id,sku,unidades,fecha,updatedAt}  (stock PT actual de Fine Core)
+  mps: {},          // id `PT-xxxx|aaaa-mm` → {id,cod,mes,cantidad,manual:true} overrides del plan
   movimientos: {},  // id → {id,fecha,tipo,codigo,nombre,cantidad,desde,hacia,ref,updatedAt}
   config: {},       // posiciones → {id:'posiciones', lista:[...]}
 };
