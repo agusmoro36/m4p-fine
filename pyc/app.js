@@ -1425,7 +1425,7 @@ function pendIngresoPT(cod) {
   return allRecs('ofs').filter(o => o.estado === 'despachada' || o.estado === 'produccion')
     .reduce((s, o) => s + (o.productos || []).filter(p => p.cod === cod).reduce((x, p) => x + (p.cantidad || 0), 0), 0);
 }
-// Plan por producto: 9 meses de {mes,F,ini,prop,fin,obj,manual}
+// Plan por producto: 9 meses de {mes,F,ini,prop,fin,obj,cobIni,cobFin,manual}
 function calcMPS(p) {
   const meses = mesesHorizonte();
   const pol = p.politicaDias || 45;
@@ -1443,10 +1443,22 @@ function calcMPS(p) {
       prop = necesito > 0 ? Math.ceil(necesito / lm) * lm : 0;
     }
     const fin = Math.round(ini + prop - dem);
-    const row = { mes, F: dem, ini: Math.round(ini), prop, fin, obj, manual: !!(ov && !ov._deleted) };
+    // cobertura en días: al inicio (vs demanda del mes) y al fin (vs demanda del mes siguiente),
+    // después de que llega lo planificado
+    const cobIni = dem > 0 ? Math.round(ini / (dem / 30)) : null;
+    const cobFin = demSig > 0 ? Math.round(fin / (demSig / 30)) : null;
+    const row = { mes, F: dem, ini: Math.round(ini), prop, fin, obj, cobIni, cobFin, manual: !!(ov && !ov._deleted), pol };
     ini = fin;
     return row;
   });
+}
+// Pill de cobertura vs política del producto
+function _cobPill(dias, pol) {
+  if (dias == null) return '<span class="cob cob-n">—</span>';
+  const txt = dias > 360 ? '+360d' : (dias < 0 ? '0d' : dias + 'd');
+  if (dias < pol * 0.5) return `<span class="cob cob-r">${txt}</span>`;
+  if (dias < pol) return `<span class="cob cob-y">${txt}</span>`;
+  return `<span class="cob cob-g">${txt}</span>`;
 }
 
 // ── FORECAST ──
@@ -1518,39 +1530,50 @@ function importarForecastCSV() {
   fr.readAsText(file);
 }
 
-// ── MPS ──
+// ── MPS · matriz estilo Excel: filas = productos, bloques de columnas por mes ──
 function renderMPS() {
   const prods = prodsPlan();
   const meses = mesesHorizonte();
   const conDatos = prods.filter(p => meses.some(m => F(p.sku, m) > 0) || stockPT(p.sku) > 0);
   document.getElementById('mps-empty').style.display = conDatos.length ? 'none' : 'block';
-  const inp = 'width:62px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:3px 5px;color:var(--text);font-family:var(--mono);font-size:11px;text-align:right;outline:none';
+  const inp = 'width:58px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:3px 4px;color:var(--text);font-family:var(--mono);font-size:11px;text-align:right;outline:none';
   let prod3m = 0, bajoCob = 0;
-  document.getElementById('mps-body').innerHTML = conDatos.map(p => {
+
+  const head1 = `<tr><th class="sticky" rowspan="2" style="min-width:190px;vertical-align:bottom">Producto</th>
+    ${meses.map(m => `<th colspan="5" class="tc mps-mes" style="color:var(--gold2);font-size:9.5px">${mesCorto(m)}</th>`).join('')}</tr>`;
+  const head2 = `<tr>${meses.map(() => `
+    <th class="tc mps-mes" title="Cobertura en días al inicio del mes">Cob. ini</th>
+    <th class="tr" title="Stock al 1º del mes">Stock 1º</th>
+    <th class="tr">Fcst</th>
+    <th class="tr" style="color:var(--gold2)">Plan ✏</th>
+    <th class="tc" title="Cobertura en días al fin del mes, con el plan ya ingresado">Cob. fin</th>`).join('')}</tr>`;
+
+  const filas = conDatos.map(p => {
     const plan = calcMPS(p);
     prod3m += plan.slice(0, 3).reduce((s, r) => s + r.prop, 0);
-    if (plan[0] && plan[0].fin < plan[0].obj) bajoCob++;
+    if (plan[0] && plan[0].cobFin != null && plan[0].cobFin < (p.politicaDias || 45)) bajoCob++;
     const pend = pendIngresoPT(p.codigo);
-    return `<div class="tbl-wrap" style="margin-bottom:14px;overflow-x:auto"><table style="min-width:980px">
-      <thead><tr>
-        <th style="min-width:170px">${esc(p.nombre)} <span class="mono" style="font-size:9px;color:var(--gold2)">${esc(p.sku)}</span><br>
-          <span class="mono" style="font-size:9px;color:var(--text3)">batch ${fmt(p.loteMin, 0)} · pol. ${p.politicaDias || 45}d · PT hoy ${fmt(stockPT(p.sku), 0)}${pend ? ' · +' + fmt(pend, 0) + ' en fazón' : ''}</span></th>
-        ${plan.map(r => `<th class="tc">${mesCorto(r.mes)}</th>`).join('')}
-      </tr></thead>
-      <tbody>
-        <tr><td style="font-size:11px;color:var(--text3)">Forecast</td>
-          ${plan.map(r => `<td class="tc mono" style="font-size:11px;color:var(--text2)">${r.F ? fmt(r.F, 0) : '—'}</td>`).join('')}</tr>
-        <tr><td style="font-size:11px;color:var(--gold2);font-weight:700">Producir ✏</td>
-          ${plan.map(r => `<td class="tc"><input type="number" min="0" step="1" style="${inp};${r.manual ? 'border-color:var(--gold);background:var(--gold-dim);font-weight:700' : ''}" value="${r.prop || ''}" onchange="setMPS('${esc(p.codigo)}','${r.mes}',this.value)" title="${r.prop && p.loteMin ? (r.prop / p.loteMin === Math.floor(r.prop / p.loteMin) ? (r.prop / p.loteMin) + ' batch(es)' : (r.prop / p.loteMin).toFixed(2) + ' batches') : ''}">${''}</td>`).join('')}</tr>
-        <tr><td style="font-size:11px;color:var(--text3)">Stock proyectado</td>
-          ${plan.map(r => `<td class="tc mono" style="font-size:11px;font-weight:700;color:${r.fin < 0 ? 'var(--red)' : (r.fin < r.obj ? 'var(--orange)' : 'var(--green)')}" title="objetivo ${fmt(r.obj, 0)}">${fmt(r.fin, 0)}</td>`).join('')}</tr>
-      </tbody>
-    </table></div>`;
+    const celdas = plan.map(r => `
+      <td class="tc mps-mes">${_cobPill(r.cobIni, r.pol)}</td>
+      <td class="num" style="font-size:11px;color:var(--text2)">${fmt(r.ini, 0)}</td>
+      <td class="num" style="font-size:11px">${r.F ? fmt(r.F, 0) : '—'}</td>
+      <td class="tr"><input type="number" min="0" step="1" style="${inp};${r.manual ? 'border-color:var(--gold);background:var(--gold-dim);font-weight:700' : ''}" value="${r.prop || ''}" onchange="setMPS('${esc(p.codigo)}','${r.mes}',this.value)" title="${r.prop && p.loteMin ? ((r.prop / p.loteMin === Math.floor(r.prop / p.loteMin)) ? (r.prop / p.loteMin) + ' batch(es) de ' + fmt(p.loteMin, 0) : (r.prop / p.loteMin).toFixed(2) + ' batches') : ''}"></td>
+      <td class="tc">${_cobPill(r.cobFin, r.pol)}</td>`).join('');
+    return `<tr>
+      <td class="sticky"><span style="font-weight:600">${esc(p.nombre)}</span> <span class="mono" style="font-size:9px;color:var(--gold2)">${esc(p.sku)}</span><br>
+        <span class="mono" style="font-size:9px;color:var(--text3)">batch ${fmt(p.loteMin, 0)} · pol. ${p.politicaDias || 45}d${pend ? ' · +' + fmt(pend, 0) + ' en fazón' : ''}</span></td>
+      ${celdas}</tr>`;
   }).join('');
+
+  document.getElementById('mps-body').innerHTML =
+    `<div class="tbl-wrap" style="overflow-x:auto"><table class="mps-tbl" style="min-width:${190 + meses.length * 300}px">
+      <thead>${head1}${head2}</thead><tbody>${filas}</tbody></table></div>
+     <div style="font-size:11px;color:var(--text3);margin-top:8px">Cob. = días de cobertura vs política de cada producto: <span class="cob cob-r">rojo &lt; 50%</span> <span class="cob cob-y">amarillo &lt; política</span> <span class="cob cob-g">verde ≥ política</span> · "Cob. fin" ya incluye el plan del mes ingresado.</div>`;
+
   document.getElementById('mps-kpis').innerHTML = [
     ['Productos planificados', conDatos.length, 'var(--gold)'],
     ['A producir próx. 3 meses', fmt(prod3m, 0) + ' u', 'var(--blue)'],
-    ['Bajo cobertura este mes', bajoCob, bajoCob ? 'var(--red)' : 'var(--green)'],
+    ['Bajo política a fin de mes', bajoCob, bajoCob ? 'var(--red)' : 'var(--green)'],
   ].map(([l, v, c]) => `<div class="kpi"><div class="kpi-acc" style="background:${c}"></div><div class="kpi-l">${l}</div><div class="kpi-v" style="font-size:23px">${v}</div></div>`).join('');
 }
 function setMPS(cod, mes, val) {

@@ -156,3 +156,13 @@ td.num{font-family:var(--mono);font-size:12.5px;text-align:right}
 .form-head{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px}
 .form-chip{background:var(--gold-dim);border:1px solid rgba(201,168,76,.3);border-radius:20px;padding:3px 12px;font-family:var(--mono);font-size:10px;color:var(--gold2);font-weight:700}
 .form-sec{font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin:14px 0 6px}
+
+/* ── MPS matriz ── */
+.mps-tbl th.sticky, .mps-tbl td.sticky{position:sticky;left:0;background:var(--bg2);z-index:2;box-shadow:2px 0 4px rgba(0,0,0,.04)}
+.mps-tbl thead th{white-space:nowrap}
+.mps-mes{border-left:2px solid var(--gold-dim2)!important}
+.cob{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:10px;display:inline-block}
+.cob-r{background:var(--red-dim);color:var(--red)}
+.cob-y{background:var(--yellow-dim);color:var(--yellow)}
+.cob-g{background:var(--green-dim);color:var(--green)}
+.cob-n{color:var(--text3)}
