@@ -1579,13 +1579,15 @@ function renderMPS() {
   ].map(([l, v, c]) => `<div class="kpi"><div class="kpi-acc" style="background:${c}"></div><div class="kpi-l">${l}</div><div class="kpi-v" style="font-size:23px">${v}</div></div>`).join('');
 }
 function setMPS(cod, mes, val) {
+  // Lo que edita la usuaria QUEDA — borrar la celda = 0 (sin producción ese mes).
+  // Para volver a la propuesta automática: botón "↺ Recalcular todo".
   const v = parseFloat(val);
-  if (isNaN(v)) { delRec('mps', `${cod}|${mes}`); renderMPS(); return; }
-  // La producción va SIEMPRE en múltiplos del batch mínimo: redondeo hacia arriba
   const lm = DB.productos[cod]?.loteMin || 1;
-  let snap = v <= 0 ? 0 : Math.ceil(v / lm) * lm;
-  if (snap !== v && snap > 0)
+  let snap = (isNaN(v) || v <= 0) ? 0 : Math.ceil(v / lm) * lm;
+  if (!isNaN(v) && snap !== v && snap > 0)
     toast(`Ajustado a ${snap / lm} batch(es) de ${fmt(lm, 0)} = ${fmt(snap, 0)} u`, '📦', 3200);
+  if (snap === 0)
+    toast('Plan en 0 para ese mes — "↺ Recalcular todo" vuelve a la propuesta automática', '✏', 3500);
   putRec('mps', `${cod}|${mes}`, { id: `${cod}|${mes}`, cod, mes, cantidad: snap, manual: true });
   renderMPS();
 }
