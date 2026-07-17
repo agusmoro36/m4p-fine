@@ -2,6 +2,8 @@
 
 // ── Helpers ──
 const fmt = (n, dec = 2) => (n == null || isNaN(n)) ? '—' : Number(n).toLocaleString('es-AR', { maximumFractionDigits: dec });
+// Normaliza para búsqueda: minúsculas y sin acentos ("citrico" encuentra "Cítrico")
+const norm = s => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 function toast(msg, icon = '✓', dur = 2800) {
   const box = document.getElementById('toasts');
@@ -51,11 +53,11 @@ function renderPag(elId, total, per, cur, cb) {
 let insPage = 1;
 const INS_PER = 25;
 function insumosFiltrados() {
-  const q = (document.getElementById('s-insumos')?.value || '').toLowerCase();
+  const q = norm(document.getElementById('s-insumos')?.value || '');
   const ft = document.getElementById('f-ins-tipo')?.value || '';
   return allRecs('insumos')
     .filter(i => (!ft || i.tipo === ft) &&
-      (!q || i.codigo.toLowerCase().includes(q) || (i.nombre || '').toLowerCase().includes(q) || (i.proveedor || '').toLowerCase().includes(q)))
+      (!q || norm(i.codigo).includes(q) || norm(i.nombre).includes(q) || norm(i.proveedor).includes(q)))
     .sort((a, b) => a.codigo.localeCompare(b.codigo));
 }
 function renderInsumos() {
@@ -126,12 +128,12 @@ function borrarInsumo() {
 let provPage = 1;
 const PROV_PER = 20;
 function renderProveedores() {
-  const q = (document.getElementById('s-provs')?.value || '').toLowerCase();
+  const q = norm(document.getElementById('s-provs')?.value || '');
   // Busca por proveedor O por insumo del catálogo: si matchea un insumo,
   // muestra el proveedor con los insumos encontrados y su precio.
   const data = allRecs('proveedores').map(p => {
-    const matchProv = !q || (p.nombre || '').toLowerCase().includes(q) || (p.contacto || '').toLowerCase().includes(q);
-    const matchIns = q ? (p.insumos || []).filter(i => (i.insumo || '').toLowerCase().includes(q)) : [];
+    const matchProv = !q || norm(p.nombre).includes(q) || norm(p.contacto).includes(q);
+    const matchIns = q ? (p.insumos || []).filter(i => norm(i.insumo).includes(q)) : [];
     return (matchProv || matchIns.length) ? { ...p, _match: matchIns } : null;
   }).filter(Boolean).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
 
@@ -191,9 +193,9 @@ function borrarProv() {
 
 // ═══════════════ MAESTRO DE PRODUCTO TERMINADO ═══════════════
 function renderProductos() {
-  const q = (document.getElementById('s-prods')?.value || '').toLowerCase();
+  const q = norm(document.getElementById('s-prods')?.value || '');
   const data = allRecs('productos')
-    .filter(p => !q || p.codigo.toLowerCase().includes(q) || (p.nombre || '').toLowerCase().includes(q) || (p.skuCore || '').toLowerCase().includes(q))
+    .filter(p => !q || norm(p.codigo).includes(q) || norm(p.nombre).includes(q) || norm(p.skuCore).includes(q))
     .sort((a, b) => a.codigo.localeCompare(b.codigo));
   const all = allRecs('productos');
   document.getElementById('prod-kpis').innerHTML = [
