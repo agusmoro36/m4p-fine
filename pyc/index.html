@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260717-16';
+  var VER = '20260717-17';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260717-16">
+<link rel="stylesheet" href="styles.css?v=20260717-17">
 </head>
 <body>
 <div class="layout">
@@ -148,8 +148,8 @@
           <div class="sh-actions">
             <select class="fsel" id="f-oc-prov" onchange="ocPage=1;renderOCs()"><option value="">Todos los proveedores</option></select>
             <select class="fsel" id="f-oc-estado" onchange="ocPage=1;renderOCs()">
-              <option value="">Todos los estados</option>
-              <option value="borrador">📝 Borradores</option>
+              <option value="">En firme (pend. + entregadas)</option>
+              <option value="borrador">📝 Borradores (en Propuestas)</option>
               <option value="pendiente">⏳ Pendientes</option>
               <option value="entregada">✓ Entregadas</option>
             </select>
@@ -261,7 +261,7 @@
             <button class="btn btn-g" onclick="crearOCsPropuestas()">⚡ Generar OCs por proveedor</button>
           </div>
         </div>
-        <p style="font-size:12px;color:var(--text3);margin:-6px 0 14px">Explota el plan del MPS contra el stock total (incluye Nutratec) y las OCs pendientes de entrega. "Generar OCs" crea borradores agrupados por proveedor sugerido, listos para revisar en Órdenes de Compra.</p>
+        <p style="font-size:12px;color:var(--text3);margin:-6px 0 14px">Explota el plan del MPS contra el stock total (incluye Nutratec) y las OCs pendientes de entrega. "Generar OCs" crea <b>borradores</b> agrupados por proveedor: quedan acá abajo para editar y confirmar — recién al confirmarlas pasan a Órdenes de Compra.</p>
         <div class="kpis" id="prop-kpis"></div>
         <div class="tbl-wrap"><table>
           <thead><tr>
@@ -275,6 +275,7 @@
           <div class="empty-ico" id="prop-empty-ico">▶</div><div class="empty-t" id="prop-empty-t">MRP sin correr</div>
           <div class="empty-s" id="prop-empty-s">Elegí los meses a explosionar y tocá "▶ Correr MRP".</div>
         </div>
+        <div id="prop-borradores" style="margin-top:22px"></div>
       </div>
 
       <!-- ══ SEMÁFORO DE INSUMOS ══ -->
@@ -682,8 +683,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js?v=20260717-16"></script>
-<script src="store.js?v=20260717-16"></script>
-<script src="app.js?v=20260717-16"></script>
+<script src="data.js?v=20260717-17"></script>
+<script src="store.js?v=20260717-17"></script>
+<script src="app.js?v=20260717-17"></script>
 </body>
 </html>

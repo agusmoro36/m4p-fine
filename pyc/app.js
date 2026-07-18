@@ -691,8 +691,8 @@ function confirmarOC(id) {
   if (!o || o.estado !== 'borrador') return;
   if (!confirm(`¿Confirmar la ${o.nro} a ${o.proveedor}? Pasa a Pendiente (en firme).`)) return;
   putRec('ocs', id, { ...o, estado: 'pendiente' });
-  renderOCs();
-  toast(`✓ ${o.nro} confirmada — en firme, pendiente de entrega`, '🧾', 4000);
+  renderOCs(); renderPropBorradores();
+  toast(`✓ ${o.nro} confirmada — pasó a Órdenes de Compra (en firme)`, '🧾', 4000);
 }
 function renderOCs() {
   const q = norm(document.getElementById('s-ocs')?.value || '');
@@ -712,6 +712,7 @@ function renderOCs() {
   const data = allRecs('ocs').filter(o => {
     if (fp && o.proveedor !== fp) return false;
     if (fe && o.estado !== fe) return false;
+    if (!fe && o.estado === 'borrador') return false; // borradores viven en OCs Propuestas
     if (fpg === 'pagada' && !o.factura?.pagada) return false;
     if (fpg === 'impaga' && o.factura?.pagada) return false;
     if (fpg === 'vencida' && !(o.factura && !o.factura.pagada && o.factura.vencPago && o.factura.vencPago < hoy)) return false;
@@ -832,6 +833,7 @@ function moRecalc() {
   } else el.style.display = 'none';
 }
 function editOC(id) {
+  window._ocNuevaBorrador = false;
   const o = id ? DB.ocs[id] : null;
   document.getElementById('mo-title').textContent = o ? '✏ ' + o.nro : '+ Nueva Orden de Compra';
   document.getElementById('mo-id').value = o?.id || '';
@@ -880,9 +882,10 @@ function guardarOC() {
     tc: parseFloat(document.getElementById('mo-tc').value) || null,
     leadTime: parseInt(document.getElementById('mo-lt').value, 10) || null,
     obs: document.getElementById('mo-obs').value.trim(),
-    items, estado: prev?.estado || 'pendiente', _deleted: false,
+    items, estado: prev?.estado || (window._ocNuevaBorrador ? 'borrador' : 'pendiente'), _deleted: false,
   });
-  closeM('m-oc'); renderOCs(); toast('OC guardada · ' + (prev?.nro || DB.ocs[id].nro));
+  window._ocNuevaBorrador = false;
+  closeM('m-oc'); renderOCs(); renderPropBorradores(); toast('OC guardada · ' + (prev?.nro || DB.ocs[id].nro));
 }
 function borrarOC() {
   const id = document.getElementById('mo-id').value;
@@ -1694,9 +1697,42 @@ function correrMRP() {
 function _mesesSel() {
   return [...document.querySelectorAll('.prop-mes:checked')].map(c => c.value);
 }
+function renderPropBorradores() {
+  const el = document.getElementById('prop-borradores');
+  if (!el) return;
+  const bs = allRecs('ocs').filter(o => o.estado === 'borrador')
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  if (!bs.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="sh" style="margin-bottom:10px"><div class="sh-title" style="font-size:17px">📝 Borradores por confirmar <small>· ${bs.length} OC(s) — editá y confirmá para pasarlas a Órdenes de Compra</small></div></div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>N°</th><th>Proveedor</th><th>Ítems</th><th class="tr">Total</th><th class="tc" style="width:280px"></th></tr></thead>
+      <tbody>${bs.map(o => {
+        const tot = _ocTotal(o);
+        const its = (o.items || []).map(it => it.descripcion || it.codigo).join(', ');
+        return `<tr>
+          <td><span class="mono" style="color:var(--gold2);font-weight:700;font-size:11.5px">${esc(o.nro)}</span></td>
+          <td style="font-weight:600">${esc(o.proveedor)}</td>
+          <td style="font-size:12.5px;max-width:300px">${esc(its.length > 64 ? its.slice(0, 62) + '…' : its)}<br><span class="mono" style="font-size:9.5px;color:var(--text3)">${(o.items || []).length} ítem(s)</span></td>
+          <td class="num">${tot > 0 ? _sym(o.moneda) + fmt(tot, 2) : '—'}</td>
+          <td class="tc" style="white-space:nowrap">
+            <button class="btn btn-g btn-sm" onclick="editOC('${esc(o.id)}')">✏ Editar</button>
+            <button class="btn btn-p btn-sm" onclick="confirmarOC('${esc(o.id)}')">✓ Confirmar</button>
+            <button class="btn btn-r btn-sm" onclick="eliminarBorrador('${esc(o.id)}')">🗑</button>
+          </td></tr>`;
+      }).join('')}</tbody></table></div>`;
+}
+function eliminarBorrador(id) {
+  const o = DB.ocs[id];
+  if (!o) return;
+  if (!confirm(`¿Eliminar el borrador ${o.nro} (${o.proveedor})?`)) return;
+  delRec('ocs', id);
+  renderPropBorradores(); renderOCs();
+  toast(`🗑 Borrador ${o.nro} eliminado`);
+}
 function renderPropuestas() {
   _mesesPanelInit();
   _mesesLabel();
+  renderPropBorradores();
   if (!_mrpSel) {
     document.getElementById('tbl-prop').innerHTML = '';
     document.getElementById('prop-kpis').innerHTML = '';
@@ -1759,6 +1795,7 @@ function crearOCDesdeProp(cod, falt) {
   const ins = DB.insumos[cod];
   const sug = provSugerido(cod);
   editOC('');
+  window._ocNuevaBorrador = true; // desde Propuestas: nace como borrador
   document.getElementById('mo-prov').value = sug.nombre || '';
   document.getElementById('mo-moneda').value = sug.moneda || ins?.moneda || 'USD';
   const tr = document.querySelector('#mo-items tr');
