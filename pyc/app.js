@@ -845,6 +845,7 @@ function editOC(id) {
   document.getElementById('mo-lt').value = o?.leadTime || '';
   document.getElementById('mo-obs').value = o?.obs || '';
   document.getElementById('mo-del').style.display = o ? '' : 'none';
+  _ocModalBotones(o?.estado === 'borrador');
   const body = document.getElementById('mo-items');
   body.innerHTML = '';
   (o?.items?.length ? o.items : [{}]).forEach(it => moAddItem(it));
@@ -856,9 +857,10 @@ function editOC(id) {
   moRecalc();
   openM('m-oc');
 }
-function guardarOC() {
+function guardarOC(enFirme = true) {
   const id = document.getElementById('mo-id').value || uid();
   const prev = DB.ocs[id];
+  const eraBorrador = prev ? prev.estado === 'borrador' : !!window._ocNuevaBorrador;
   const prov = document.getElementById('mo-prov').value.trim();
   if (!prov) { toast('Falta el proveedor', '⚠'); return; }
   const items = [];
@@ -882,10 +884,14 @@ function guardarOC() {
     tc: parseFloat(document.getElementById('mo-tc').value) || null,
     leadTime: parseInt(document.getElementById('mo-lt').value, 10) || null,
     obs: document.getElementById('mo-obs').value.trim(),
-    items, estado: prev?.estado || (window._ocNuevaBorrador ? 'borrador' : 'pendiente'), _deleted: false,
+    items, estado: eraBorrador ? (enFirme ? 'pendiente' : 'borrador') : (prev?.estado || 'pendiente'), _deleted: false,
   });
   window._ocNuevaBorrador = false;
-  closeM('m-oc'); renderOCs(); renderPropBorradores(); toast('OC guardada · ' + (prev?.nro || DB.ocs[id].nro));
+  closeM('m-oc'); renderOCs(); renderPropBorradores();
+  const nro = prev?.nro || DB.ocs[id].nro;
+  if (eraBorrador && enFirme) toast(`✓ ${nro} en firme — pasó a Órdenes de Compra`, '🧾', 4200);
+  else if (eraBorrador) toast(`📝 Borrador ${nro} guardado — sigue en OCs Propuestas`, '💾', 3800);
+  else toast('OC guardada · ' + nro);
 }
 function borrarOC() {
   const id = document.getElementById('mo-id').value;
@@ -1791,11 +1797,19 @@ function renderPropuestas() {
   ].map(([l, v, c]) => `<div class="kpi"><div class="kpi-acc" style="background:${c}"></div><div class="kpi-l">${l}</div><div class="kpi-v" style="font-size:22px">${v}</div></div>`).join('');
   window._propFilas = filas;
 }
+function _ocModalBotones(esBorrador) {
+  const bb = document.getElementById('mo-btn-borrador');
+  const bg = document.getElementById('mo-btn-guardar');
+  if (bb) bb.style.display = esBorrador ? '' : 'none';
+  if (bg) bg.textContent = esBorrador ? '✓ Generar OC en firme' : 'Guardar OC';
+}
 function crearOCDesdeProp(cod, falt) {
   const ins = DB.insumos[cod];
   const sug = provSugerido(cod);
   editOC('');
   window._ocNuevaBorrador = true; // desde Propuestas: nace como borrador
+  _ocModalBotones(true);
+  document.getElementById('mo-title').textContent = '📝 Nueva OC (borrador desde MRP)';
   document.getElementById('mo-prov').value = sug.nombre || '';
   document.getElementById('mo-moneda').value = sug.moneda || ins?.moneda || 'USD';
   const tr = document.querySelector('#mo-items tr');
