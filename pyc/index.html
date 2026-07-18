@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260717-15';
+  var VER = '20260717-16';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260717-15">
+<link rel="stylesheet" href="styles.css?v=20260717-16">
 </head>
 <body>
 <div class="layout">
@@ -282,9 +282,16 @@
         <div class="sh">
           <div class="sh-title">Semáforo de Insumos <small>· cobertura actual y 3 meses</small></div>
           <div class="sh-actions">
+            <select class="fsel" id="f-sem-mes" onchange="semPage=1;renderSemaforo()"></select>
+            <select class="fsel" id="f-sem-color" onchange="semPage=1;renderSemaforo()">
+              <option value="">Todos los colores</option>
+              <option value="r">🔴 Rojos (&lt;15d)</option>
+              <option value="y">🟡 Amarillos (15–45d)</option>
+              <option value="g">🟢 Verdes (&gt;45d)</option>
+            </select>
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2)">
-              <input type="checkbox" id="sem-criticos" onchange="renderSemaforo()"> solo críticos</label>
-            <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-sem" placeholder="Buscar insumo…" oninput="renderSemaforo()"></div>
+              <input type="checkbox" id="sem-criticos" onchange="semPage=1;renderSemaforo()"> solo críticos</label>
+            <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-sem" placeholder="Buscar insumo…" oninput="semPage=1;renderSemaforo()"></div>
           </div>
         </div>
         <p style="font-size:12px;color:var(--text3);margin:-6px 0 14px">Días de cobertura contra la demanda del plan MPS (stock total + OCs pendientes de entrega, mes a mes): 🔴 &lt; 15 días · 🟡 15–45 · 🟢 &gt; 45 · ⚪ sin demanda en el plan.</p>
@@ -675,8 +682,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js?v=20260717-15"></script>
-<script src="store.js?v=20260717-15"></script>
-<script src="app.js?v=20260717-15"></script>
+<script src="data.js?v=20260717-16"></script>
+<script src="store.js?v=20260717-16"></script>
+<script src="app.js?v=20260717-16"></script>
 </body>
 </html>

@@ -1831,6 +1831,8 @@ function _semPill(dias) {
   return `<span class="pill pill-green">🟢 ${dias > 365 ? '+1a' : Math.round(dias) + 'd'}</span>`;
 }
 let semPage = 1;
+// color de un valor de días: r/y/g, null = sin demanda
+function _semColor(d) { return d == null ? null : d < 15 ? 'r' : d <= 45 ? 'y' : 'g'; }
 function renderSemaforo() {
   const q = norm(document.getElementById('s-sem')?.value || '');
   const soloCrit = document.getElementById('sem-criticos')?.checked;
@@ -1839,6 +1841,14 @@ function renderSemaforo() {
     const el = document.getElementById(id);
     if (el && meses[i + 1]) el.textContent = mesCorto(meses[i + 1]);
   });
+  // filtro por mes: opciones = Hoy + los 3 meses de la vista
+  const selMes = document.getElementById('f-sem-mes');
+  if (selMes && !selMes.options.length) {
+    selMes.innerHTML = '<option value="">Todos los meses</option>' +
+      meses.map((m, i) => `<option value="${i}">${i === 0 ? 'Hoy (' + mesCorto(m) + ')' : mesCorto(m)}</option>`).join('');
+  }
+  const fMes = selMes?.value ?? '';
+  const fColor = document.getElementById('f-sem-color')?.value || '';
   const filas = Object.values(nec).map(n => {
     const stk = stockTotalIns(n.codigo);
     const pipe = pipelineOC(n.codigo);
@@ -1854,6 +1864,12 @@ function renderSemaforo() {
     const critico = dias.some(d => d != null && d < 15);
     return { ...n, stk, pipe, dias, critico };
   }).filter(f => (!q || norm(f.codigo).includes(q) || norm(f.nombre).includes(q)) && (!soloCrit || f.critico))
+    .filter(f => {
+      if (!fColor && fMes === '') return true;
+      const colores = f.dias.map(_semColor);
+      if (fMes !== '') return fColor ? colores[+fMes] === fColor : colores[+fMes] != null;
+      return colores.includes(fColor); // color en cualquier mes de la vista
+    })
     .sort((a, b) => {
       const da = a.dias.find(d => d != null) ?? 1e9, db = b.dias.find(d => d != null) ?? 1e9;
       return da - db;
