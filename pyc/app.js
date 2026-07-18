@@ -1754,21 +1754,47 @@ function crearOCDesdeProp(cod, falt) {
   if (sug.precio > 0) tr.querySelector('.mo-precio').value = sug.precio;
   moRecalc();
 }
-function crearOCsPropuestas() {
+let _genOCsGrupos = null;
+function _agruparPropPorProv() {
   const filas = window._propFilas || [];
-  if (!filas.length) { toast('No hay faltantes en el horizonte', '✓'); return; }
-  // agrupar por proveedor sugerido
   const grupos = {};
   filas.forEach(f => {
     const sug = provSugerido(f.codigo);
-    const k = sug.nombre || '(sin proveedor)';
-    (grupos[k] ||= { moneda: sug.moneda || 'USD', items: [] }).items.push({ f, sug });
+    const nombre = sug.nombre || '(sin proveedor)';
+    const k = norm(nombre); // agrupa sin distinguir mayúsculas/acentos: "BASEL" y "Basel" = 1 OC
+    (grupos[k] ||= { nombre, moneda: sug.moneda || 'USD', items: [] }).items.push({ f, sug });
   });
-  if (!confirm(`Se crearán ${Object.keys(grupos).length} OC(s) en estado Pendiente, agrupadas por proveedor. ¿Continuar?`)) return;
+  return grupos;
+}
+function crearOCsPropuestas() {
+  const filas = window._propFilas || [];
+  if (!filas.length) { toast('No hay faltantes para generar OCs', '✓'); return; }
+  const grupos = _genOCsGrupos = _agruparPropPorProv();
+  const provs = Object.entries(grupos);
+  // resumen: una tarjeta por proveedor con sus ítems y subtotal
+  document.getElementById('gen-ocs-resumen').innerHTML =
+    `<div style="font-size:13px;color:var(--text2);margin-bottom:12px">Se crearán <b style="color:var(--gold2)">${provs.length} OC(s)</b> con <b>${filas.length} ítem(s)</b> en total:</div>` +
+    provs.map(([, g]) => {
+      const sub = g.items.reduce((s, { f, sug }) => s + Math.ceil(f.falt) * (sug.precio || 0), 0);
+      return `<div style="border:1px solid var(--border);border-radius:8px;padding:11px 14px;margin-bottom:10px;background:var(--bg2)">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px">
+          <div style="font-weight:600;font-size:15px">🏬 ${esc(g.nombre)}</div>
+          <div class="mono" style="font-size:11px;color:var(--text3)">${g.items.length} ítem(s)${sub > 0 ? ' · ' + (g.moneda === 'USD' ? 'USD ' : '$ ') + fmt(sub, 0) : ''}</div>
+        </div>
+        ${g.items.map(({ f, sug }) => `<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:2px 0;color:var(--text2)">
+          <span>${esc(f.nombre)} <span class="mono" style="font-size:10px;color:var(--text3)">${esc(f.codigo)}</span></span>
+          <span class="mono" style="font-size:11px">${fmt(Math.ceil(f.falt), 0)} ${esc(f.um || '')}</span></div>`).join('')}
+      </div>`;
+    }).join('');
+  openM('m-gen-ocs');
+}
+function confirmarGenOCs() {
+  const grupos = _genOCsGrupos;
+  if (!grupos) return;
   let n = 0;
-  Object.entries(grupos).forEach(([prov, g]) => {
+  Object.values(grupos).forEach((g) => {
     const id = uid();
-    putRec('ocs', id, { id, nro: _ocNextNro(), proveedor: prov, fecha: hoyISO(),
+    putRec('ocs', id, { id, nro: _ocNextNro(), proveedor: g.nombre, fecha: hoyISO(),
       condPago: '', moneda: g.moneda, tc: null, leadTime: null,
       obs: 'Generada desde OCs Propuestas (MRP)',
       items: g.items.map(({ f, sug }) => ({ codigo: f.codigo, descripcion: f.nombre, um: f.um,
@@ -1776,7 +1802,10 @@ function crearOCsPropuestas() {
       estado: 'pendiente' });
     n++;
   });
-  renderPropuestas(); toast(`⚡ ${n} OC(s) creadas — revisalas en Órdenes de Compra`, '✓', 4500);
+  _genOCsGrupos = null;
+  closeM('m-gen-ocs');
+  renderPropuestas();
+  toast(`⚡ ${n} OC(s) creadas — revisalas en Órdenes de Compra`, '✓', 4500);
 }
 
 // ── SEMÁFORO ──
