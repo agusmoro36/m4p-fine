@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260717-14';
+  var VER = '20260717-15';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260717-14">
+<link rel="stylesheet" href="styles.css?v=20260717-15">
 </head>
 <body>
 <div class="layout">
@@ -149,6 +149,7 @@
             <select class="fsel" id="f-oc-prov" onchange="ocPage=1;renderOCs()"><option value="">Todos los proveedores</option></select>
             <select class="fsel" id="f-oc-estado" onchange="ocPage=1;renderOCs()">
               <option value="">Todos los estados</option>
+              <option value="borrador">📝 Borradores</option>
               <option value="pendiente">⏳ Pendientes</option>
               <option value="entregada">✓ Entregadas</option>
             </select>
@@ -547,7 +548,7 @@
   <div class="modal" style="max-width:640px;width:94vw">
     <button class="modal-close" onclick="closeM('m-gen-ocs')">✕</button>
     <div class="modal-title">⚡ Generar OCs por proveedor</div>
-    <p style="font-size:12.5px;color:var(--text3);margin:0 0 14px">Revisá cómo se agrupan los faltantes. Se creará <b>una OC por proveedor</b> en estado <b>Pendiente</b>.</p>
+    <p style="font-size:12.5px;color:var(--text3);margin:0 0 14px">Revisá cómo se agrupan los faltantes. Se creará <b>una OC por proveedor</b> en estado <b>📝 Borrador</b>: las editás tranquila y las confirmás una por una para pasarlas a Pendiente (en firme).</p>
     <div id="gen-ocs-resumen" style="max-height:52vh;overflow-y:auto"></div>
     <div class="modal-footer">
       <button class="btn btn-g" onclick="closeM('m-gen-ocs')">Cancelar</button>
@@ -674,8 +675,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js?v=20260717-14"></script>
-<script src="store.js?v=20260717-14"></script>
-<script src="app.js?v=20260717-14"></script>
+<script src="data.js?v=20260717-15"></script>
+<script src="store.js?v=20260717-15"></script>
+<script src="app.js?v=20260717-15"></script>
 </body>
 </html>

@@ -686,6 +686,14 @@ function _ocPedido(o) { return (o.items || []).reduce((s, it) => s + (it.cantida
 function _ocRecibido(o) { return (o.items || []).reduce((s, it) => s + (it.recibido || 0), 0); }
 const _sym = m => m === 'ARS' ? '$ ' : 'USD ';
 
+function confirmarOC(id) {
+  const o = DB.ocs[id];
+  if (!o || o.estado !== 'borrador') return;
+  if (!confirm(`¿Confirmar la ${o.nro} a ${o.proveedor}? Pasa a Pendiente (en firme).`)) return;
+  putRec('ocs', id, { ...o, estado: 'pendiente' });
+  renderOCs();
+  toast(`✓ ${o.nro} confirmada — en firme, pendiente de entrega`, '🧾', 4000);
+}
 function renderOCs() {
   const q = norm(document.getElementById('s-ocs')?.value || '');
   const fp = document.getElementById('f-oc-prov')?.value || '';
@@ -716,11 +724,13 @@ function renderOCs() {
   }).sort((a, b) => (b.nro || '').localeCompare(a.nro || ''));
 
   const all = allRecs('ocs');
-  const pendientes = all.filter(o => o.estado !== 'entregada').length;
+  const pendientes = all.filter(o => o.estado === 'pendiente').length;
+  const borradores = all.filter(o => o.estado === 'borrador').length;
   const porPagar = all.filter(o => o.factura && !o.factura.pagada);
   const pagoVencido = porPagar.filter(o => o.factura.vencPago && o.factura.vencPago < hoy).length;
   document.getElementById('oc-kpis').innerHTML = [
     ['OCs', all.length, 'var(--gold)'],
+    ...(borradores ? [['Borradores (MRP)', borradores, 'var(--gold2)']] : []),
     ['Pendientes de entrega', pendientes, 'var(--orange)'],
     ['Facturas por pagar', porPagar.length, 'var(--blue)'],
     ['Pago vencido', pagoVencido, pagoVencido ? 'var(--red)' : 'var(--green)'],
@@ -734,7 +744,9 @@ function renderOCs() {
     const itemsShort = items.length > 58 ? items.slice(0, 56) + '…' : items;
     const estadoPill = o.estado === 'entregada'
       ? '<span class="pill pill-green">✓ entregada</span>'
-      : '<span class="pill" style="background:var(--orange-dim);color:var(--orange);border:1px solid rgba(249,115,22,.3)">⏳ pendiente</span>';
+      : o.estado === 'borrador'
+        ? '<span class="pill pill-mp">📝 borrador</span>'
+        : '<span class="pill" style="background:var(--orange-dim);color:var(--orange);border:1px solid rgba(249,115,22,.3)">⏳ pendiente</span>';
     const recTxt = rec > 0 && o.estado !== 'entregada'
       ? `<span class="mono" style="font-size:10.5px">${fmt(rec, 1)}/${fmt(ped, 1)}<br><span style="color:var(--orange)">faltan ${fmt(ped - rec, 1)}</span></span>`
       : (o.estado === 'entregada' ? `<span class="mono" style="font-size:10.5px;color:var(--green)">${fmt(rec, 1)}/${fmt(ped, 1)}</span>` : '<span style="color:var(--text3)">—</span>');
@@ -746,8 +758,10 @@ function renderOCs() {
         : `<span class="pill ${vencida ? 'pill-red' : 'pill-mp'}" title="${esc(o.factura.archivo || '')}">${vencida ? '⚠ ' : '💳 '}${fmtVenc(o.factura.vencPago) || 's/fecha'}</span>`;
       factPill = `<span class="clickable" onclick="event.stopPropagation();abrirFactura('${esc(o.id)}')" style="cursor:pointer">${factPill}</span>`;
     }
-    const accRec = o.estado !== 'entregada'
-      ? `<button class="btn btn-p btn-sm" onclick="event.stopPropagation();abrirRecepcion('${esc(o.id)}')">📥 Recepcionar</button>` : '';
+    const accRec = o.estado === 'borrador'
+      ? `<button class="btn btn-p btn-sm" onclick="event.stopPropagation();confirmarOC('${esc(o.id)}')">✓ Confirmar</button>`
+      : o.estado !== 'entregada'
+        ? `<button class="btn btn-p btn-sm" onclick="event.stopPropagation();abrirRecepcion('${esc(o.id)}')">📥 Recepcionar</button>` : '';
     return `<tr class="clickable" onclick="editOC('${esc(o.id)}')">
       <td><span class="mono" style="color:var(--gold2);font-weight:700;font-size:11.5px">${esc(o.nro)}</span><br><span class="mono" style="font-size:9.5px;color:var(--text3)">${esc(o.fecha || '')}</span></td>
       <td style="font-weight:600">${esc(o.proveedor)}</td>
@@ -880,7 +894,8 @@ function borrarOC() {
 
 // ── Recepción integrada ──
 function abrirRecepcion(id) {
-  const o = DB.ocs[id]; if (!o) return;
+  const o = DB.ocs[id];
+  if (o && o.estado === 'borrador') { toast('Es un borrador: confirmala antes de recepcionar', '📝', 3500); return; } if (!o) return;
   document.getElementById('mrx-oc').value = id;
   document.getElementById('mrx-sub').textContent = `· ${o.nro} · ${o.proveedor}`;
   const st = 'width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:6px 8px;color:var(--text);outline:none';
@@ -1004,7 +1019,7 @@ function exportarOCPDF(id) {
     const datos = [
       ['Proveedor', o.proveedor], ['Fecha', fmtVenc(o.fecha)],
       ['Condición de pago', o.condPago || '—'], ['Lead time', o.leadTime ? o.leadTime + ' días' : '—'],
-      ['Estado', o.estado === 'entregada' ? 'Entregada' : 'Pendiente'],
+      ['Estado', o.estado === 'entregada' ? 'Entregada' : o.estado === 'borrador' ? 'Borrador' : 'Pendiente'],
     ];
     datos.forEach(([k, v]) => {
       pdf.setFont('helvetica', 'bold'); pdf.text(k + ':', ML, y);
@@ -1799,13 +1814,13 @@ function confirmarGenOCs() {
       obs: 'Generada desde OCs Propuestas (MRP)',
       items: g.items.map(({ f, sug }) => ({ codigo: f.codigo, descripcion: f.nombre, um: f.um,
         cantidad: Math.ceil(f.falt), precio: sug.precio || 0, recibido: 0 })),
-      estado: 'pendiente' });
+      estado: 'borrador' });
     n++;
   });
   _genOCsGrupos = null;
   closeM('m-gen-ocs');
   renderPropuestas();
-  toast(`⚡ ${n} OC(s) creadas — revisalas en Órdenes de Compra`, '✓', 4500);
+  toast(`⚡ ${n} OC(s) creadas en BORRADOR — editalas y confirmalas en Órdenes de Compra`, '📝', 5000);
 }
 
 // ── SEMÁFORO ──
