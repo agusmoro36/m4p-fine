@@ -20,7 +20,7 @@ document.addEventListener('click', e => { if (e.target.classList?.contains('over
 const TITLES = {
   minsumos: 'Maestro de Insumos', mproveedores: 'Maestro de Proveedores', mproductos: 'Maestro de Producto Terminado',
   stock: 'Stock de Insumos', historial: 'Historial de Movimientos', calculadora: 'Calculadora MRP',
-  ocs: 'Órdenes de Compra', ofs: 'Órdenes a Fazón', facturas: 'Facturas',
+  ocs: 'Órdenes de Compra', ofs: 'Órdenes a Fazón',
   forecast: 'Forecast', mps: 'Plan de Producción Fazón (MPS)', propuestas: 'OCs Propuestas', semaforo: 'Semáforo de Insumos',
 };
 function go(id) {
@@ -34,7 +34,7 @@ function go(id) {
   _expandirGrupoDe(_it);
   document.getElementById('tb-title').innerHTML = `${TITLES[id] || id} <span>· Fine Planificación y Compras</span>`;
   const renders = { minsumos: renderInsumos, mproveedores: renderProveedores, mproductos: renderProductos,
-    stock: renderStock, historial: renderHistorial, calculadora: renderCalc, ocs: renderOCs, ofs: renderOFs, facturas: renderFacturas,
+    stock: renderStock, historial: renderHistorial, calculadora: renderCalc, ocs: renderOCs, ofs: renderOFs,
     forecast: renderForecast, mps: renderMPS, propuestas: renderPropuestas, semaforo: renderSemaforo };
   renders[id]?.();
 }
@@ -1872,59 +1872,6 @@ function confirmarGenOCs() {
   closeM('m-gen-ocs');
   renderPropuestas();
   toast(`⚡ ${n} OC(s) creadas en BORRADOR — editalas y confirmalas en Órdenes de Compra`, '📝', 5000);
-}
-
-// ── FACTURAS ──
-let facPage = 1;
-function _sitPill(f) {
-  const s = (f.situacion || '').trim();
-  if (/pagada/i.test(s)) return '<span class="pill pill-green">✓ pagada</span>';
-  if (/anulada|nc/i.test(s) || /NOTA CREDITO/i.test(f.obs || '')) return '<span class="pill pill-ins">✕ anulada/NC</span>';
-  if (/vencida/i.test(s)) return '<span class="pill pill-red">⚠ vencida</span>';
-  if (/pendiente/i.test(s)) return '<span class="pill" style="background:var(--orange-dim);color:var(--orange);border:1px solid rgba(249,115,22,.3)">⏳ pendiente</span>';
-  return '<span class="pill pill-ins">' + (esc(s) || '—') + '</span>';
-}
-function renderFacturas() {
-  const q = norm(document.getElementById('s-facturas')?.value || '');
-  const fs = document.getElementById('f-fac-sit')?.value || '';
-  const femp = document.getElementById('f-fac-emp')?.value || '';
-  const data = allRecs('facturas');
-  // poblar filtro de empresas
-  const selE = document.getElementById('f-fac-emp');
-  if (selE && selE.options.length <= 1)
-    [...new Set(data.map(f => f.empresa).filter(Boolean))].sort().forEach(e => selE.innerHTML += `<option value="${esc(e)}">${esc(e)}</option>`);
-  const filas = data.filter(f => {
-    if (fs === 'ANULADA' ? !(/anulada/i.test(f.situacion || '') || /NOTA CREDITO/i.test(f.obs || '')) : (fs && !(new RegExp(fs, 'i')).test(f.situacion || ''))) return false;
-    if (femp && f.empresa !== femp) return false;
-    if (q && !(norm(f.proveedor || '').includes(q) || norm(f.numero || '').includes(q) || norm(f.obs || '').includes(q))) return false;
-    return true;
-  }).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
-  const venc = data.filter(f => /vencida/i.test(f.situacion || ''));
-  const sumar = (arr, m) => arr.filter(f => f.moneda === m).reduce((s, f) => s + (f.monto || 0), 0);
-  document.getElementById('fac-kpis').innerHTML = [
-    ['Facturas', data.length, 'var(--gold)'],
-    ['Vencidas', venc.length, venc.length ? 'var(--red)' : 'var(--green)'],
-    ['Monto vencido', (sumar(venc, 'ARS') ? '$ ' + fmt(sumar(venc, 'ARS'), 0) : '') + (sumar(venc, 'USD') ? ' + USD ' + fmt(sumar(venc, 'USD'), 0) : '') || '—', 'var(--orange)'],
-    ['Pagadas', data.filter(f => /pagada/i.test(f.situacion || '')).length, 'var(--green)'],
-  ].map(([l, v, c]) => `<div class="kpi"><div class="kpi-acc" style="background:${c}"></div><div class="kpi-l">${l}</div><div class="kpi-v" style="font-size:21px">${v}</div></div>`).join('');
-  const PER = 25;
-  const start = (facPage - 1) * PER;
-  document.getElementById('tbl-facturas').innerHTML = filas.slice(start, start + PER).map(f => {
-    const oc = f.ocId ? DB.ocs[f.ocId] : null;
-    return `<tr>
-      <td class="mono" style="font-size:11px">${fmtVenc(f.fecha)}</td>
-      <td style="font-weight:600">${esc(f.proveedor || '')}<br><span style="font-size:11px;color:var(--text3)">${esc((f.obs || '').slice(0, 40))}</span></td>
-      <td class="mono" style="font-size:11px">${esc(f.numero || '')}</td>
-      <td class="num">${_sym(f.moneda)}${fmt(f.monto || 0, 2)}</td>
-      <td class="tc mono" style="font-size:11px">${fmtVenc(f.vencimiento)}</td>
-      <td class="tc">${_sitPill(f)}</td>
-      <td style="font-size:11.5px;color:var(--text3)">${esc(f.empresa || '')}</td>
-      <td class="tc">${oc && !oc._deleted ? `<span class="mono clickable" style="font-size:10px;color:var(--gold2);cursor:pointer" onclick="editOC('${esc(oc.id)}')">${esc(oc.nro)}</span>` : '<span style="color:var(--text3)">—</span>'}</td>
-      <td class="tc">${f.drive ? `<a href="${esc(f.drive)}" target="_blank" class="btn btn-g btn-sm" title="Ver factura en Drive">📄</a>` : ''}</td>
-    </tr>`;
-  }).join('');
-  document.getElementById('fac-empty').style.display = filas.length ? 'none' : 'block';
-  renderPag('pag-facturas', filas.length, PER, facPage, p => { facPage = p; renderFacturas(); });
 }
 
 // ── SEMÁFORO ──

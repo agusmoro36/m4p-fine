@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260721-1';
+  var VER = '20260721-2';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260721-1">
+<link rel="stylesheet" href="styles.css?v=20260721-2">
 </head>
 <body>
 <div class="layout">
@@ -35,7 +35,6 @@
       <div class="nav-group" onclick="toggleNavGroup(this)">Compras</div>
       <div class="nav-item" data-page="ocs" onclick="go('ocs')"><span class="nav-ico">🧾</span>Órdenes de Compra</div>
       <div class="nav-item" data-page="propuestas" onclick="go('propuestas')"><span class="nav-ico">◈</span>OCs Propuestas</div>
-      <div class="nav-item" data-page="facturas" onclick="go('facturas')"><span class="nav-ico">💳</span>Facturas</div>
 
       <div class="nav-group" onclick="toggleNavGroup(this)">Maestros</div>
       <div class="nav-item" data-page="minsumos" onclick="go('minsumos')"><span class="nav-ico">🧪</span>Insumos</div>
@@ -277,36 +276,6 @@
           <div class="empty-s" id="prop-empty-s">Elegí los meses a explosionar y tocá "▶ Correr MRP".</div>
         </div>
         <div id="prop-borradores" style="margin-top:22px"></div>
-      </div>
-
-      <!-- ══ FACTURAS ══ -->
-      <div class="page" id="page-facturas">
-        <div class="sh">
-          <div class="sh-title">Facturas <small>· históricas migradas + las adjuntas a OCs</small></div>
-          <div class="sh-actions">
-            <select class="fsel" id="f-fac-sit" onchange="facPage=1;renderFacturas()">
-              <option value="">Todas las situaciones</option>
-              <option value="Pagada">✓ Pagadas</option>
-              <option value="Vencida">⚠ Vencidas</option>
-              <option value="Pendiente">⏳ Pendientes</option>
-              <option value="ANULADA">✕ Anuladas / NC</option>
-            </select>
-            <select class="fsel" id="f-fac-emp" onchange="facPage=1;renderFacturas()"><option value="">Todas las empresas</option></select>
-            <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-facturas" placeholder="Buscar proveedor, número…" oninput="facPage=1;renderFacturas()"></div>
-          </div>
-        </div>
-        <div class="kpis" id="fac-kpis"></div>
-        <div class="tbl-wrap"><table>
-          <thead><tr>
-            <th>Fecha</th><th>Proveedor</th><th>Número</th><th class="tr">Monto</th>
-            <th class="tc">Vencimiento</th><th class="tc">Situación</th><th>Empresa</th><th class="tc">OC</th><th class="tc"></th>
-          </tr></thead>
-          <tbody id="tbl-facturas"></tbody>
-        </table></div>
-        <div class="pag" id="pag-facturas"></div>
-        <div class="empty" id="fac-empty" style="display:none">
-          <div class="empty-ico">💳</div><div class="empty-t">Sin facturas</div>
-        </div>
       </div>
 
       <!-- ══ SEMÁFORO DE INSUMOS ══ -->
@@ -715,8 +684,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js?v=20260721-1"></script>
-<script src="store.js?v=20260721-1"></script>
-<script src="app.js?v=20260721-1"></script>
+<script src="data.js?v=20260721-2"></script>
+<script src="store.js?v=20260721-2"></script>
+<script src="app.js?v=20260721-2"></script>
 </body>
 </html>
