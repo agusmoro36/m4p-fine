@@ -274,6 +274,7 @@ function verFormula(cod) {
   const p = DB.productos[cod]; if (!p) return;
   document.getElementById('mf-title').textContent = p.nombre;
   document.getElementById('mf-cod').textContent = p.codigo;
+  document.getElementById('mf-nombre').value = p.nombre || '';
   document.getElementById('mf-sku').value = p.skuCore || '';
   document.getElementById('mf-lote').value = p.loteMin || '';
   document.getElementById('mf-dias').value = p.politicaDias || '';
@@ -297,6 +298,7 @@ function guardarProducto() {
   const p = DB.productos[cod]; if (!p) return;
   putRec('productos', cod, {
     ...p,
+    nombre: document.getElementById('mf-nombre').value.trim() || p.nombre,
     skuCore: document.getElementById('mf-sku').value.trim(),
     loteMin: parseFloat(document.getElementById('mf-lote').value) || p.loteMin,
     politicaDias: parseInt(document.getElementById('mf-dias').value, 10) || null,
