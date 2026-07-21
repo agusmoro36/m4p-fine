@@ -245,19 +245,23 @@ function borrarProv() {
 // ═══════════════ MAESTRO DE PRODUCTO TERMINADO ═══════════════
 function renderProductos() {
   const q = norm(document.getElementById('s-prods')?.value || '');
+  const fe = document.getElementById('f-prod-estado')?.value || '';
   const data = allRecs('productos')
     .filter(p => !q || norm(p.codigo).includes(q) || norm(p.nombre).includes(q) || norm(p.skuCore).includes(q))
+    .filter(p => !fe || (p.estado || 'activo') === fe)
     .sort((a, b) => a.codigo.localeCompare(b.codigo));
   const all = allRecs('productos');
   document.getElementById('prod-kpis').innerHTML = [
     ['Productos', all.length, 'var(--gold)'],
-    ['Mapeados a Fine Core', all.filter(p => p.skuCore).length, 'var(--green)'],
+    ['Activos', all.filter(p => (p.estado || 'activo') === 'activo').length, 'var(--green)'],
+    ['Discontinuados', all.filter(p => p.estado === 'discontinuado').length, 'var(--text3)'],
     ['Sin SKU Core', all.filter(p => !p.skuCore).length, 'var(--red)'],
   ].map(([l, v, c]) => `<div class="kpi"><div class="kpi-acc" style="background:${c}"></div><div class="kpi-l">${l}</div><div class="kpi-v">${v}</div></div>`).join('');
   document.getElementById('tbl-prods').innerHTML = data.map(p => `
     <tr class="clickable" onclick="verFormula('${esc(p.codigo)}')">
       <td class="mono">${esc(p.codigo)}</td>
-      <td style="font-weight:600">${esc(p.nombre)}</td>
+      <td style="font-weight:600;${p.estado === 'discontinuado' ? 'opacity:.5;text-decoration:line-through' : ''}">${esc(p.nombre)}</td>
+      <td class="tc">${p.estado === 'discontinuado' ? '<span class="pill pill-ins">✕ discontinuado</span>' : '<span class="pill pill-green">✓ activo</span>'}</td>
       <td class="tc">${p.skuCore ? `<span class="pill pill-green">${esc(p.skuCore)}</span>` : '<span class="pill pill-red">sin SKU</span>'}</td>
       <td>${esc(p.cliente || '—')}</td>
       <td class="num">${fmt(p.loteMin, 0)} u</td>
@@ -273,6 +277,7 @@ function verFormula(cod) {
   document.getElementById('mf-sku').value = p.skuCore || '';
   document.getElementById('mf-lote').value = p.loteMin || '';
   document.getElementById('mf-dias').value = p.politicaDias || '';
+  document.getElementById('mf-estado').value = p.estado || 'activo';
   const mp = (p.insumos || []).filter(i => !String(i.codigo).startsWith('PK'));
   const pk = (p.insumos || []).filter(i => String(i.codigo).startsWith('PK'));
   const tabla = arr => `<div class="tbl-wrap"><table>
@@ -295,6 +300,7 @@ function guardarProducto() {
     skuCore: document.getElementById('mf-sku').value.trim(),
     loteMin: parseFloat(document.getElementById('mf-lote').value) || p.loteMin,
     politicaDias: parseInt(document.getElementById('mf-dias').value, 10) || null,
+    estado: document.getElementById('mf-estado').value,
   });
   closeM('m-formula'); renderProductos(); toast('Producto guardado · ' + cod);
 }
@@ -1440,7 +1446,9 @@ const mesCorto = m => {
   return N[parseInt(m.slice(5), 10) - 1] + ' ' + m.slice(2, 4);
 };
 function prodsPlan() {
-  return allRecs('productos').map(p => ({ ...p, sku: p.skuCore || p.codigo }))
+  // discontinuados: fuera del Forecast/MPS/MRP
+  return allRecs('productos').filter(p => (p.estado || 'activo') !== 'discontinuado')
+    .map(p => ({ ...p, sku: p.skuCore || p.codigo }))
     .sort((a, b) => a.codigo.localeCompare(b.codigo));
 }
 const F = (sku, mes) => DB.forecast[`${sku}|${mes}`]?.unidades || 0;
