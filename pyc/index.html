@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260721-5';
+  var VER = '20260721-6';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260721-5">
+<link rel="stylesheet" href="styles.css?v=20260721-6">
 </head>
 <body>
 <div class="layout">
@@ -415,8 +415,8 @@
     <button class="modal-close" onclick="closeM('m-insumo')">✕</button>
     <div class="modal-title" id="mi-title">+ Nuevo insumo</div>
     <div class="fg">
-      <div class="fl"><label>Código</label><input type="text" id="mi-cod" placeholder="MP-0000" style="font-family:var(--mono);text-transform:uppercase"></div>
-      <div class="fl"><label>Tipo</label><select id="mi-tipo"><option value="MP">MP · Materia prima</option><option value="PK">PK · Empaque</option><option value="INS">INS · General</option></select></div>
+      <div class="fl"><label>Código</label><input type="text" id="mi-cod" placeholder="MP-0000" style="font-family:var(--mono);text-transform:uppercase" oninput="this.dataset.auto=''"></div>
+      <div class="fl"><label>Tipo</label><select id="mi-tipo" onchange="sugerirCodigoInsumo()"><option value="MP">MP · Materia prima</option><option value="PK">PK · Empaque</option><option value="INS">INS · General</option></select></div>
       <div class="fl fg-full"><label>Nombre</label><input type="text" id="mi-nombre"></div>
       <div class="fl"><label>Unidad de medida</label><input type="text" id="mi-um" placeholder="kg / uni."></div>
       <div class="fl"><label>Proveedor habitual</label><input type="text" id="mi-prov"></div>
@@ -695,8 +695,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js?v=20260721-5"></script>
-<script src="store.js?v=20260721-5"></script>
-<script src="app.js?v=20260721-5"></script>
+<script src="data.js?v=20260721-6"></script>
+<script src="store.js?v=20260721-6"></script>
+<script src="app.js?v=20260721-6"></script>
 </body>
 </html>

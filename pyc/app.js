@@ -137,11 +137,31 @@ function renderInsumos() {
   document.getElementById('ins-empty').style.display = data.length ? 'none' : 'block';
   renderPag('pag-insumos', data.length, INS_PER, insPage, p => { insPage = p; renderInsumos(); });
 }
+// Siguiente código libre por serie: MP-xxxx / PK-xxxx / INS-xxxx
+function proximoCodigoInsumo(tipo) {
+  const pref = tipo + '-';
+  let max = 0;
+  Object.values(DB.insumos).forEach(i => {
+    // considera también tumbas: no reutilizar códigos borrados
+    const m = String(i.codigo || '').toUpperCase().match(new RegExp('^' + tipo + '-(\\d+)$'));
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  });
+  return pref + String(max + 1).padStart(4, '0');
+}
+function sugerirCodigoInsumo() {
+  // solo en alta nueva y si el código está vacío o fue autosugerido
+  const inp = document.getElementById('mi-cod');
+  if (inp.disabled) return;
+  if (inp.value && !inp.dataset.auto) return;
+  inp.value = proximoCodigoInsumo(document.getElementById('mi-tipo').value);
+  inp.dataset.auto = '1';
+}
 function editInsumo(cod) {
   const i = cod ? DB.insumos[cod] : null;
   document.getElementById('mi-title').textContent = i ? '✏ Editar insumo' : '+ Nuevo insumo';
   document.getElementById('mi-cod').value = i?.codigo || '';
   document.getElementById('mi-cod').disabled = !!i;
+  document.getElementById('mi-cod').dataset.auto = '';
   document.getElementById('mi-nombre').value = i?.nombre || '';
   document.getElementById('mi-tipo').value = i?.tipo || 'MP';
   document.getElementById('mi-um').value = i?.um || 'kg';
@@ -150,6 +170,7 @@ function editInsumo(cod) {
   document.getElementById('mi-prov').value = i?.proveedor || '';
   document.getElementById('mi-fecha').value = (i?.fechaPrecio || '').slice(0, 10);
   document.getElementById('mi-del').style.display = i ? '' : 'none';
+  if (!i) sugerirCodigoInsumo();
   openM('m-insumo');
 }
 function guardarInsumo() {
