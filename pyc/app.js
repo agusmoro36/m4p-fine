@@ -877,6 +877,10 @@ function editOC(id) {
   document.getElementById('mo-tc').value = o?.tc || '';
   document.getElementById('mo-lt').value = o?.leadTime || '';
   document.getElementById('mo-obs').value = o?.obs || '';
+  document.getElementById('mo-entrega').value = o?.entrega || '';
+  const dle = document.getElementById('dl-entregas');
+  if (dle) dle.innerHTML = [...new Set(allRecs('ocs').map(x => x.entrega).filter(Boolean))]
+    .map(e => `<option value="${esc(e)}">`).join('');
   document.getElementById('mo-del').style.display = o ? '' : 'none';
   _ocModalBotones(o?.estado === 'borrador');
   const body = document.getElementById('mo-items');
@@ -917,6 +921,7 @@ function guardarOC(enFirme = true) {
     tc: parseFloat(document.getElementById('mo-tc').value) || null,
     leadTime: parseInt(document.getElementById('mo-lt').value, 10) || null,
     obs: document.getElementById('mo-obs').value.trim(),
+    entrega: document.getElementById('mo-entrega').value.trim(),
     items, estado: eraBorrador ? (enFirme ? 'pendiente' : 'borrador') : (prev?.estado || 'pendiente'), _deleted: false,
   });
   window._ocNuevaBorrador = false;
@@ -1065,6 +1070,7 @@ function exportarOCPDF(id) {
       ...(pv.contacto ? [['Contacto', pv.contacto]] : []),
       ...(pv.email || pv.telefono ? [['Email / Tel.', [pv.email, pv.telefono].filter(Boolean).join(' · ')]] : []),
       ...(pv.direccion ? [['Dirección', pv.direccion]] : []),
+      ...(o.entrega ? [['Entrega en', o.entrega]] : []),
       ['Fecha', fmtVenc(o.fecha)],
       ['Condición de pago', o.condPago || pv.condPago || '—'], ['Lead time', o.leadTime ? o.leadTime + ' días' : (pv.leadTime ? pv.leadTime + ' días' : '—')],
       ['Estado', o.estado === 'entregada' ? 'Entregada' : o.estado === 'borrador' ? 'Borrador' : 'Pendiente'],
