@@ -1054,14 +1054,12 @@ function abrirEmpresa() {
   const e = DB.config.empresa || {};
   document.getElementById('me-razon').value = e.razonSocial || '';
   document.getElementById('me-cuit').value = e.cuit || '';
-  document.getElementById('me-dir').value = e.direccion || '';
   openM('m-empresa');
 }
 function guardarEmpresa() {
   putRec('config', 'empresa', { id: 'empresa',
     razonSocial: document.getElementById('me-razon').value.trim(),
-    cuit: document.getElementById('me-cuit').value.trim(),
-    direccion: document.getElementById('me-dir').value.trim() });
+    cuit: document.getElementById('me-cuit').value.trim() });
   closeM('m-empresa');
   toast('🏢 Datos de la empresa guardados — salen en los PDFs de OC');
 }
@@ -1080,7 +1078,7 @@ function exportarOCPDF(id) {
     const emp = DB.config.empresa || {};
     if (emp.razonSocial || emp.cuit) {
       pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(110, 110, 110);
-      pdf.text([emp.razonSocial, emp.cuit ? 'CUIT ' + emp.cuit : '', emp.direccion].filter(Boolean).join('  ·  '), ML, y);
+      pdf.text([emp.razonSocial, emp.cuit ? 'CUIT ' + emp.cuit : ''].filter(Boolean).join('  ·  '), ML, y);
       y += 6;
     } else { y += 3; }
     pdf.setFontSize(10); pdf.setTextColor(60, 60, 60);
