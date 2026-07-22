@@ -1058,9 +1058,15 @@ function exportarOCPDF(id) {
     pdf.setFontSize(14); pdf.text('ORDEN DE COMPRA · ' + o.nro, ML + 3, y + 9);
     y += 18;
     pdf.setFontSize(10); pdf.setTextColor(60, 60, 60);
+    const pv = allRecs('proveedores').find(p => (p.nombre || '').trim().toLowerCase() === (o.proveedor || '').trim().toLowerCase()) || {};
     const datos = [
-      ['Proveedor', o.proveedor], ['Fecha', fmtVenc(o.fecha)],
-      ['Condición de pago', o.condPago || '—'], ['Lead time', o.leadTime ? o.leadTime + ' días' : '—'],
+      ['Proveedor', o.proveedor],
+      ...(pv.cuit ? [['CUIT', pv.cuit]] : []),
+      ...(pv.contacto ? [['Contacto', pv.contacto]] : []),
+      ...(pv.email || pv.telefono ? [['Email / Tel.', [pv.email, pv.telefono].filter(Boolean).join(' · ')]] : []),
+      ...(pv.direccion ? [['Dirección', pv.direccion]] : []),
+      ['Fecha', fmtVenc(o.fecha)],
+      ['Condición de pago', o.condPago || pv.condPago || '—'], ['Lead time', o.leadTime ? o.leadTime + ' días' : (pv.leadTime ? pv.leadTime + ' días' : '—')],
       ['Estado', o.estado === 'entregada' ? 'Entregada' : o.estado === 'borrador' ? 'Borrador' : 'Pendiente'],
     ];
     datos.forEach(([k, v]) => {
