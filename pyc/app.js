@@ -709,13 +709,17 @@ function renderOCs() {
   const fpg = document.getElementById('f-oc-pago')?.value || '';
   const hoy = hoyISO();
 
-  // poblar filtro proveedores + datalists
+  // poblar filtro proveedores + datalists (siempre fresco: toma altas nuevas)
+  const nombresProv = allRecs('proveedores').map(p => p.nombre).filter(Boolean).sort((a, b) => a.localeCompare(b));
   const provSel = document.getElementById('f-oc-prov');
-  if (provSel && provSel.options.length <= 1)
-    allRecs('proveedores').map(p => p.nombre).sort().forEach(n => provSel.innerHTML += `<option value="${esc(n)}">${esc(n)}</option>`);
+  if (provSel) {
+    const sel = provSel.value;
+    provSel.innerHTML = '<option value="">Todos los proveedores</option>' +
+      nombresProv.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    provSel.value = sel;
+  }
   const dlp = document.getElementById('dl-provs');
-  if (dlp && !dlp.children.length)
-    allRecs('proveedores').map(p => p.nombre).sort().forEach(n => dlp.innerHTML += `<option value="${esc(n)}">`);
+  if (dlp) dlp.innerHTML = nombresProv.map(n => `<option value="${esc(n)}">`).join('');
 
   const data = allRecs('ocs').filter(o => {
     if (fp && o.proveedor !== fp) return false;
