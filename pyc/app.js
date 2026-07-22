@@ -1050,6 +1050,21 @@ function guardarFactura() {
 }
 
 // ── PDF de la OC (jsPDF, barra dorada) ──
+function abrirEmpresa() {
+  const e = DB.config.empresa || {};
+  document.getElementById('me-razon').value = e.razonSocial || '';
+  document.getElementById('me-cuit').value = e.cuit || '';
+  document.getElementById('me-dir').value = e.direccion || '';
+  openM('m-empresa');
+}
+function guardarEmpresa() {
+  putRec('config', 'empresa', { id: 'empresa',
+    razonSocial: document.getElementById('me-razon').value.trim(),
+    cuit: document.getElementById('me-cuit').value.trim(),
+    direccion: document.getElementById('me-dir').value.trim() });
+  closeM('m-empresa');
+  toast('🏢 Datos de la empresa guardados — salen en los PDFs de OC');
+}
 function exportarOCPDF(id) {
   try {
     const o = DB.ocs[id]; if (!o) return;
@@ -1061,7 +1076,13 @@ function exportarOCPDF(id) {
     pdf.setTextColor(26, 26, 26); pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(8); pdf.text('THE FINE COMPANY', ML + 3, y + 4.2);
     pdf.setFontSize(14); pdf.text('ORDEN DE COMPRA · ' + o.nro, ML + 3, y + 9);
-    y += 18;
+    y += 15;
+    const emp = DB.config.empresa || {};
+    if (emp.razonSocial || emp.cuit) {
+      pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); pdf.setTextColor(110, 110, 110);
+      pdf.text([emp.razonSocial, emp.cuit ? 'CUIT ' + emp.cuit : '', emp.direccion].filter(Boolean).join('  ·  '), ML, y);
+      y += 6;
+    } else { y += 3; }
     pdf.setFontSize(10); pdf.setTextColor(60, 60, 60);
     const pv = allRecs('proveedores').find(p => (p.nombre || '').trim().toLowerCase() === (o.proveedor || '').trim().toLowerCase()) || {};
     const datos = [
