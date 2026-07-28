@@ -1629,11 +1629,12 @@ function renderMPS() {
   const inp = 'width:58px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:3px 4px;color:var(--text);font-family:var(--mono);font-size:11px;text-align:right;outline:none';
   let prod3m = 0, bajoCob = 0;
 
+  const hoy = hoyISO();
   const head1 = `<tr><th class="sticky" rowspan="2" style="min-width:190px;vertical-align:bottom">Producto</th>
-    ${meses.map(m => `<th colspan="6" class="tc mps-mes" style="color:var(--gold2);font-size:9.5px">${mesCorto(m)}</th>`).join('')}</tr>`;
+    ${meses.map((m, i) => `<th colspan="6" class="tc mps-mes" style="color:var(--gold2);font-size:9.5px">${mesCorto(m)}${i === 0 ? ` <span style="color:var(--text3);font-weight:400">· en curso</span>` : ''}</th>`).join('')}</tr>`;
   const head2 = `<tr>${meses.map(() => `
-    <th class="tc mps-mes" title="Cobertura en días al inicio del mes">Cob. ini</th>
-    <th class="tr" title="Stock al 1º del mes">Stock 1º</th>
+    <th class="tc mps-mes" title="Cobertura en días al inicio del mes (mes en curso: al día de hoy)">Cob. ini</th>
+    <th class="tr" title="Mes en curso: stock de HOY. Meses siguientes: stock proyectado al 1º.">Stock ini.</th>
     <th class="tr">Fcst</th>
     <th class="tr" style="color:var(--gold2)">Plan ✏</th>
     <th class="tc" title="Batches productivos (plan ÷ lote mínimo)">Batches</th>
