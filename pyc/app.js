@@ -1700,10 +1700,12 @@ function necesidadesPlan(sel) {
       const f = r.prop / (p.loteMin || 1);
       (p.insumos || []).forEach(ins => {
         if (!ins.codigo || !ins.cantidad) return;
-        if (!nec[ins.codigo]) nec[ins.codigo] = { codigo: ins.codigo, nombre: ins.nombre, um: ins.um || 'kg', total: 0, porMes: {} };
+        if (!nec[ins.codigo]) nec[ins.codigo] = { codigo: ins.codigo, nombre: ins.nombre, um: ins.um || 'kg', total: 0, porMes: {}, prods: {} };
         const q = ins.cantidad * f;
         nec[ins.codigo].total += q;
         nec[ins.codigo].porMes[r.mes] = (nec[ins.codigo].porMes[r.mes] || 0) + q;
+        const pk = p.sku || p.codigo;
+        nec[ins.codigo].prods[pk] = (nec[ins.codigo].prods[pk] || 0) + q;
       });
     });
   });
@@ -1844,7 +1846,7 @@ function renderPropuestas() {
     }
     return `<tr>
       <td class="mono">${esc(f.codigo)}</td>
-      <td style="font-weight:600">${esc(f.nombre)}</td>
+      <td style="font-weight:600">${esc(f.nombre)}<br><span style="font-size:10px;color:var(--gold2);font-family:var(--mono)" title="Productos del plan que consumen este insumo (con su parte de la necesidad)">${Object.entries(f.prods || {}).sort((a, b) => b[1] - a[1]).map(([sku, q]) => `${esc(sku)} ${fmt(q, q < 10 ? 1 : 0)}`).join(' · ')}</span></td>
       <td class="num">${fmt(f.total, 2)} ${esc(f.um)}</td>
       <td class="num">${fmt(f.stk, 2)}</td>
       <td class="num" style="color:${f.pipe > 0 ? 'var(--blue)' : 'var(--text3)'}">${f.pipe > 0 ? fmt(f.pipe, 2) : '—'}</td>
