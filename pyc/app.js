@@ -1926,8 +1926,9 @@ function renderPropuestas() {
         stk: stockTotalIns(rep), pipe: pipelineOC(rep), falt: 0, mesCrit: f.mesCrit };
       base.push(t);
     }
-    t.falt = Math.round((t.falt + f.falt) * 1000) / 1000;
+    // la necesidad transferida se cubre PRIMERO con el stock del reemplazo
     t.total = Math.round((t.total + f.falt) * 1000) / 1000;
+    t.falt = Math.round(Math.max(0, t.total - t.stk - t.pipe) * 1000) / 1000;
     (t.recibidoDe ||= []).push({ de: f.codigo, q: f.falt });
     Object.entries(f.prods || {}).forEach(([k, q]) => { t.prods[k] = (t.prods[k] || 0) + q; });
     if (!t.mesCrit || (f.mesCrit && f.mesCrit < t.mesCrit)) t.mesCrit = f.mesCrit;
