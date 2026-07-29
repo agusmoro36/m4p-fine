@@ -613,10 +613,27 @@
     <button class="modal-close" onclick="closeM('m-of-nueva')">✕</button>
     <div class="modal-title">+ Nueva Orden a Fazón</div>
     <p style="font-size:12px;color:var(--text3);margin:0 0 12px">Agregá todos los productos y cantidades a producir. El sistema consolida la cantidad total por insumo desde cada fórmula.</p>
-    <div class="fl" style="max-width:220px;margin-bottom:12px"><label>Fazón</label><input type="text" id="ofn-fazon" value="Nutratec"></div>
-    <div style="font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:6px">Productos a producir</div>
-    <div id="ofn-prods"></div>
-    <button class="btn btn-g btn-sm" onclick="ofnAddProd()">+ Agregar producto</button>
+    <div class="fg" style="grid-template-columns:1fr 1fr;margin-bottom:12px;max-width:480px">
+      <div class="fl"><label>Fazón</label><select class="fsel" id="ofn-fazon" style="width:100%">
+        <option>Nutratec</option>
+        <option>Cuarto Creciente</option>
+      </select></div>
+      <div class="fl"><label>Tipo de orden</label><select class="fsel" id="ofn-tipo" style="width:100%" onchange="ofnTipoChange()">
+        <option value="produccion">⚙ Producción de PT</option>
+        <option value="tareas">🛠 Tareas varias</option>
+      </select></div>
+    </div>
+    <div id="ofn-prods-sec">
+      <div style="font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:6px">Productos a producir · precio = lo que cobra el fazón por unidad</div>
+      <div id="ofn-prods"></div>
+      <button class="btn btn-g btn-sm" onclick="ofnAddProd()">+ Agregar producto</button>
+    </div>
+    <div id="ofn-tareas-sec" style="display:none">
+      <div style="font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:6px">Tareas a realizar · detallá a mano qué le pedís</div>
+      <div id="ofn-tareas"></div>
+      <button class="btn btn-g btn-sm" onclick="ofnAddTarea()">+ Agregar tarea</button>
+      <p style="font-size:11.5px;color:var(--text3);margin:8px 0 0">Ej: "Reetiquetado de latas Power con etiqueta nueva". Sin explosión de fórmula ni movimientos de stock — es una orden de trabajo.</p>
+    </div>
     <div id="ofn-preview" style="margin-top:14px;max-height:38vh;overflow-y:auto"></div>
     <div class="modal-footer">
       <button class="btn btn-g" onclick="closeM('m-of-nueva')">Cancelar</button>

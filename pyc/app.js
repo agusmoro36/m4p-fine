@@ -1290,20 +1290,26 @@ function renderOFs() {
 
   const start = (ofPage - 1) * OF_PER;
   document.getElementById('tbl-ofs').innerHTML = data.slice(start, start + OF_PER).map(o => {
+    const esTarea = o.tipo === 'tareas';
     const prods = o.productos || [];
-    const totU = prods.reduce((s, p) => s + (p.cantidad || 0), 0);
-    let sub = prods.map(p => `${p.nombre} ×${fmt(p.cantidad, 0)}`).join(' · ');
+    const totU = esTarea ? (o.tareas || []).reduce((s, t) => s + (t.cantidad || 0), 0) : prods.reduce((s, p) => s + (p.cantidad || 0), 0);
+    let sub = esTarea ? (o.tareas || []).map(t => t.descripcion).join(' · ') : prods.map(p => `${p.nombre} ×${fmt(p.cantidad, 0)}`).join(' · ');
     if (sub.length > 66) sub = sub.slice(0, 64) + '…';
+    const costoFz = _ofTotalFazon(o);
     const desp = o.fechaDespacho ? fmtVenc(o.fechaDespacho.slice(0, 10)) : '—';
     const b = (fn, txt, cls) => `<button class="btn ${cls} btn-sm" onclick="event.stopPropagation();${fn}">${txt}</button>`;
     let acc = b(`exportarOFPDF('${esc(o.id)}')`, '📄', 'btn-g');
-    if (o.estado === 'borrador') acc += b(`abrirDespachoOF('${esc(o.id)}')`, '🚚 Despachar', 'btn-p') + b(`eliminarOF('${esc(o.id)}')`, '✕', 'btn-r');
+    if (esTarea) {
+      if (o.estado === 'borrador') acc += b(`enviarOFTareas('${esc(o.id)}')`, '🚚 Enviar', 'btn-p') + b(`eliminarOF('${esc(o.id)}')`, '✕', 'btn-r');
+      else if (o.estado !== 'recibida') acc += b(`completarOFTareas('${esc(o.id)}')`, '✓ Completada', 'btn-p');
+      else acc += `<span class="mono" style="font-size:10px;color:var(--text3)">✓ hecha</span>`;
+    } else if (o.estado === 'borrador') acc += b(`abrirDespachoOF('${esc(o.id)}')`, '🚚 Despachar', 'btn-p') + b(`eliminarOF('${esc(o.id)}')`, '✕', 'btn-r');
     else if (o.estado === 'despachada') acc += b(`marcarProduccionOF('${esc(o.id)}')`, '⚙ En producción', 'btn-g') + b(`abrirRecepcionOF('${esc(o.id)}')`, '📥 Ingresar PT', 'btn-p');
     else if (o.estado === 'produccion') acc += b(`abrirRecepcionOF('${esc(o.id)}')`, '📥 Ingresar PT', 'btn-p');
     else acc += `<span class="mono" style="font-size:10px;color:var(--text3)">✓ ${(o.recepciones || []).length} prod</span>`;
     return `<tr>
       <td><span class="mono" style="color:var(--gold2);font-weight:700;font-size:11.5px">${esc(o.nro)}</span><br><span class="mono" style="font-size:9.5px;color:var(--text3)">${esc((o.fechaCreacion || '').slice(0, 10))}</span></td>
-      <td style="max-width:280px">${prods.length === 1 ? esc(prods[0].nombre) : prods.length + ' productos'}<br><span style="font-size:11px;color:var(--text3)">${esc(sub)} · ${esc(o.fazon || 'Nutratec')}</span></td>
+      <td style="max-width:280px">${esTarea ? '🛠 Tareas varias' : (prods.length === 1 ? esc(prods[0].nombre) : prods.length + ' productos')}<br><span style="font-size:11px;color:var(--text3)">${esc(sub)} · ${esc(o.fazon || 'Nutratec')}${costoFz > 0 ? ' · <b style="color:var(--gold2)">$ ' + fmt(costoFz, 0) + '</b>' : ''}</span></td>
       <td class="num">${fmt(totU, 0)} u</td>
       <td class="tc">${_ofPill(o.estado)}</td>
       <td class="tc mono" style="font-size:11px">${desp}</td>
@@ -1321,14 +1327,49 @@ function _ofnRow() {
     .map(p => `<option value="${esc(p.codigo)}">${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('');
   return `<div class="ofn-row" style="display:flex;gap:8px;margin-bottom:8px">
     <select class="ofn-cod" onchange="ofnPreview()" style="${st};flex:1"><option value="">— Producto —</option>${opts}</select>
-    <input type="number" class="ofn-qty" placeholder="Cantidad" oninput="ofnPreview()" style="${st};width:120px;font-family:var(--mono)">
+    <input type="number" class="ofn-qty" placeholder="Cantidad" oninput="ofnPreview()" style="${st};width:110px;font-family:var(--mono)">
+    <input type="number" class="ofn-precio" step="0.01" min="0" placeholder="$/u fazón" oninput="ofnPreview()" style="${st};width:110px;font-family:var(--mono)" title="Precio por unidad que cobra el fazón (maquila)">
     <button class="btn btn-g btn-sm" onclick="this.closest('.ofn-row').remove();ofnPreview()" style="color:var(--red)">✕</button>
   </div>`;
 }
 function ofnAddProd() { document.getElementById('ofn-prods').insertAdjacentHTML('beforeend', _ofnRow()); }
+function _ofnTareaRow() {
+  const st = 'background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:8px 10px;color:var(--text);outline:none;font-family:var(--font)';
+  return `<div class="ofn-trow" style="display:flex;gap:8px;margin-bottom:8px">
+    <input type="text" class="ofn-tdesc" placeholder="Detalle de la tarea (ej: reetiquetar latas Power)" style="${st};flex:1">
+    <input type="number" class="ofn-tqty" placeholder="Cant." style="${st};width:90px;font-family:var(--mono)">
+    <input type="number" class="ofn-tprecio" step="0.01" min="0" placeholder="$/u" style="${st};width:100px;font-family:var(--mono)" title="Precio por unidad que cobra el fazón">
+    <button class="btn btn-g btn-sm" onclick="this.closest('.ofn-trow').remove()" style="color:var(--red)">✕</button>
+  </div>`;
+}
+function ofnAddTarea() { document.getElementById('ofn-tareas').insertAdjacentHTML('beforeend', _ofnTareaRow()); }
+function ofnTipoChange() {
+  const t = document.getElementById('ofn-tipo').value;
+  document.getElementById('ofn-prods-sec').style.display = t === 'tareas' ? 'none' : '';
+  document.getElementById('ofn-tareas-sec').style.display = t === 'tareas' ? '' : 'none';
+  document.getElementById('ofn-preview').innerHTML = '';
+  if (t === 'tareas' && !document.querySelectorAll('#ofn-tareas .ofn-trow').length) ofnAddTarea();
+}
+function _ofnTareasLeer() {
+  const ts = [];
+  document.querySelectorAll('#ofn-tareas .ofn-trow').forEach(r => {
+    const d = r.querySelector('.ofn-tdesc').value.trim();
+    if (!d) return;
+    ts.push({ descripcion: d, cantidad: parseFloat(r.querySelector('.ofn-tqty').value) || 0,
+      precio: parseFloat(r.querySelector('.ofn-tprecio').value) || 0 });
+  });
+  return ts;
+}
+function _ofTotalFazon(o) {
+  if (o.tipo === 'tareas') return (o.tareas || []).reduce((s, t) => s + (t.cantidad || 0) * (t.precio || 0), 0);
+  return (o.productos || []).reduce((s, p) => s + (p.cantidad || 0) * (p.precioFazon || 0), 0);
+}
 function nuevaOF() {
   document.getElementById('ofn-fazon').value = 'Nutratec';
+  document.getElementById('ofn-tipo').value = 'produccion';
   document.getElementById('ofn-prods').innerHTML = '';
+  document.getElementById('ofn-tareas').innerHTML = '';
+  ofnTipoChange();
   ofnAddProd();
   document.getElementById('ofn-preview').innerHTML = '';
   openM('m-of-nueva');
@@ -1338,7 +1379,8 @@ function _ofnLeer() {
   document.querySelectorAll('#ofn-prods .ofn-row').forEach(r => {
     const cod = r.querySelector('.ofn-cod').value;
     const qty = parseFloat(r.querySelector('.ofn-qty').value) || 0;
-    if (cod && qty > 0) prods.push({ cod, nombre: DB.productos[cod]?.nombre || cod, cantidad: qty, loteMin: DB.productos[cod]?.loteMin });
+    if (cod && qty > 0) prods.push({ cod, nombre: DB.productos[cod]?.nombre || cod, cantidad: qty, loteMin: DB.productos[cod]?.loteMin,
+      precioFazon: parseFloat(r.querySelector('.ofn-precio')?.value) || 0 });
   });
   return prods;
 }
@@ -1356,19 +1398,43 @@ function ofnPreview() {
       <td class="tc">${faltante ? `<span class="pill pill-red">faltan ${fmt(faltante, 2)}</span>` : '<span class="pill pill-green">ok</span>'}</td>
     </tr>`;
   }).join('');
-  box.innerHTML = `<div style="font-size:12px;color:var(--text2);margin-bottom:6px"><b>${prods.length}</b> producto(s) · <b>${lineas.length}</b> insumos consolidados</div>
+  const costoFz = prods.reduce((s, p) => s + p.cantidad * (p.precioFazon || 0), 0);
+  box.innerHTML = `<div style="font-size:12px;color:var(--text2);margin-bottom:6px"><b>${prods.length}</b> producto(s) · <b>${lineas.length}</b> insumos consolidados${costoFz > 0 ? ` · costo fazón <b style="color:var(--gold2)">$ ${fmt(costoFz, 2)}</b>` : ''}</div>
     <div class="tbl-wrap"><table><thead><tr><th>Código</th><th>Insumo</th><th class="tr">Cant. total</th><th>Lo consumen</th><th class="tc">Stock</th></tr></thead><tbody>${filas}</tbody></table></div>`;
 }
 function guardarOF() {
+  const fazon = document.getElementById('ofn-fazon').value.trim() || 'Nutratec';
+  const tipo = document.getElementById('ofn-tipo').value;
+  const id = uid();
+  if (tipo === 'tareas') {
+    const tareas = _ofnTareasLeer();
+    if (!tareas.length) { toast('Detallá al menos una tarea', '⚠'); return; }
+    putRec('ofs', id, { id, nro: _ofNext(), fazon, tipo: 'tareas', tareas,
+      productos: [], lineas: [], estado: 'borrador', fechaCreacion: new Date().toISOString(),
+      fechaDespacho: null, recepciones: [] });
+    closeM('m-of-nueva'); renderOFs(); toast('Orden de trabajo creada · ' + DB.ofs[id].nro, '🛠');
+    return;
+  }
   const prods = _ofnLeer();
   if (!prods.length) { toast('Agregá al menos un producto con cantidad', '⚠'); return; }
   const lineas = _explotarOF(prods);
   if (!lineas.length) { toast('Esos productos no tienen fórmula', '⚠'); return; }
-  const id = uid();
-  putRec('ofs', id, { id, nro: _ofNext(), fazon: document.getElementById('ofn-fazon').value.trim() || 'Nutratec',
+  putRec('ofs', id, { id, nro: _ofNext(), fazon, tipo: 'produccion',
     productos: prods, lineas, estado: 'borrador', fechaCreacion: new Date().toISOString(),
     fechaDespacho: null, recepciones: [] });
   closeM('m-of-nueva'); renderOFs(); toast('Orden creada · ' + DB.ofs[id].nro, '📋');
+}
+function enviarOFTareas(id) {
+  const o = DB.ofs[id]; if (!o || o.tipo !== 'tareas') return;
+  if (!confirm(`¿Marcar la ${o.nro} como enviada a ${o.fazon}?`)) return;
+  putRec('ofs', id, { ...o, estado: 'despachada', fechaDespacho: new Date().toISOString() });
+  renderOFs(); toast(`🚚 ${o.nro} enviada a ${o.fazon}`);
+}
+function completarOFTareas(id) {
+  const o = DB.ofs[id]; if (!o || o.tipo !== 'tareas') return;
+  if (!confirm(`¿Marcar la ${o.nro} como completada?`)) return;
+  putRec('ofs', id, { ...o, estado: 'recibida', fechaRecepcion: new Date().toISOString() });
+  renderOFs(); toast(`✓ ${o.nro} completada`);
 }
 function eliminarOF(id) {
   const o = DB.ofs[id];
@@ -1509,11 +1575,15 @@ function exportarOFPDF(id) {
     pdf.setFillColor(201, 168, 76); pdf.rect(ML, y, CW, 10, 'F');
     pdf.setTextColor(26, 26, 26); pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(8); pdf.text('THE FINE COMPANY', ML + 3, y + 4);
-    pdf.setFontSize(14); pdf.text('ORDEN DE PRODUCCIÓN A FAZÓN · ' + o.nro, ML + 3, y + 8.5);
+    pdf.setFontSize(14); pdf.text((o.tipo === 'tareas' ? 'ORDEN DE TRABAJO A FAZÓN · ' : 'ORDEN DE PRODUCCIÓN A FAZÓN · ') + o.nro, ML + 3, y + 8.5);
     y += 15;
     pdf.setTextColor(60, 60, 60); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10);
+    const totalFz = _ofTotalFazon(o);
     [['Fazón', o.fazon || 'Nutratec'],
-     ['Productos', (o.productos || []).map(p => `${p.nombre} ×${fmt(p.cantidad, 0)} u`).join('   |   ')],
+     o.tipo === 'tareas'
+       ? ['Tareas', (o.tareas || []).map(t => t.descripcion + (t.cantidad ? ` ×${fmt(t.cantidad, 0)}` : '') + (t.precio ? ` ($${fmt(t.precio, 2)}/u)` : '')).join('   |   ')]
+       : ['Productos', (o.productos || []).map(p => `${p.nombre} ×${fmt(p.cantidad, 0)} u` + (p.precioFazon ? ` ($${fmt(p.precioFazon, 2)}/u)` : '')).join('   |   ')],
+     ...(totalFz > 0 ? [['Costo fazón', '$ ' + fmt(totalFz, 2)]] : []),
      ['Estado', (OF_ESTADOS[o.estado] || ['', o.estado])[1]],
      ['Fecha', new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })],
     ].forEach(([k, v]) => {
