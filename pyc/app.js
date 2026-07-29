@@ -125,7 +125,7 @@ function renderInsumos() {
     return `
     <tr class="clickable" onclick="editInsumo('${esc(i.codigo)}')">
       <td class="mono">${esc(i.codigo)}</td>
-      <td style="font-weight:600">${esc(i.nombre)}</td>
+      <td style="font-weight:600">${esc(i.nombre)}${i.estado === 'agotar' ? `<br><span class="pill" style="background:var(--orange-dim);color:var(--orange);border:1px solid rgba(249,115,22,.3);font-size:8.5px" title="El MRP no propone comprarlo: transfiere el faltante al reemplazo">⌛ hasta agotar${i.reemplazo ? ' → ' + esc(i.reemplazo) : ''}</span>` : ''}</td>
       <td style="max-width:230px">${prodsHtml}</td>
       <td class="tc"><span class="pill pill-${i.tipo.toLowerCase()}">${i.tipo}</span></td>
       <td class="tc mono">${esc(i.um)}</td>
@@ -169,6 +169,9 @@ function editInsumo(cod) {
   document.getElementById('mi-moneda').value = i?.moneda || 'USD';
   document.getElementById('mi-prov').value = i?.proveedor || '';
   document.getElementById('mi-fecha').value = (i?.fechaPrecio || '').slice(0, 10);
+  document.getElementById('mi-estado').value = i?.estado || 'activo';
+  document.getElementById('mi-reemplazo').value = i?.reemplazo || '';
+  _fillInsumoDatalists();
   document.getElementById('mi-del').style.display = i ? '' : 'none';
   if (!i) sugerirCodigoInsumo();
   openM('m-insumo');
@@ -185,6 +188,8 @@ function guardarInsumo() {
     moneda: document.getElementById('mi-moneda').value,
     proveedor: document.getElementById('mi-prov').value.trim(),
     fechaPrecio: document.getElementById('mi-fecha').value || '',
+    estado: document.getElementById('mi-estado').value,
+    reemplazo: document.getElementById('mi-reemplazo').value.trim().toUpperCase(),
   };
   putRec('insumos', cod, { ...(DB.insumos[cod] || {}), ...rec, _deleted: false });
   closeM('m-insumo'); renderInsumos(); toast('Insumo guardado · ' + cod);
@@ -1895,7 +1900,7 @@ function renderPropuestas() {
   document.getElementById('prop-empty-s').textContent = 'El stock y las OCs pendientes cubren el plan de los meses elegidos.';
   const sel = _mrpSel;
   const { nec } = necesidadesPlan(sel);
-  const filas = Object.values(nec).map(n => {
+  const base = Object.values(nec).map(n => {
     const stk = stockTotalIns(n.codigo);
     const pipe = pipelineOC(n.codigo);
     const falt = Math.round(Math.max(0, n.total - stk - pipe) * 1000) / 1000;
@@ -1906,7 +1911,29 @@ function renderPropuestas() {
       if (acum > stk + pipe + 0.0005) { mesCrit = mes; break; }
     }
     return { ...n, stk, pipe, falt, mesCrit };
-  }).filter(f => f.falt > 0.0005).sort((a, b) => (a.mesCrit || '9999').localeCompare(b.mesCrit || '9999'));
+  });
+  // ⌛ hasta agotar stock: el faltante se transfiere al insumo reemplazo
+  const porCod = Object.fromEntries(base.map(f => [f.codigo, f]));
+  [...base].forEach(f => {
+    const ins = DB.insumos[f.codigo];
+    if (ins?.estado !== 'agotar' || f.falt <= 0.0005) return;
+    const rep = (ins.reemplazo || '').toUpperCase();
+    if (!rep || !DB.insumos[rep] || DB.insumos[rep]._deleted) { f.sinReemplazo = true; return; }
+    let t = porCod[rep];
+    if (!t) {
+      const i2 = DB.insumos[rep];
+      t = porCod[rep] = { codigo: rep, nombre: i2.nombre, um: i2.um || f.um, total: 0, porMes: {}, prods: {},
+        stk: stockTotalIns(rep), pipe: pipelineOC(rep), falt: 0, mesCrit: f.mesCrit };
+      base.push(t);
+    }
+    t.falt = Math.round((t.falt + f.falt) * 1000) / 1000;
+    t.total = Math.round((t.total + f.falt) * 1000) / 1000;
+    (t.recibidoDe ||= []).push({ de: f.codigo, q: f.falt });
+    Object.entries(f.prods || {}).forEach(([k, q]) => { t.prods[k] = (t.prods[k] || 0) + q; });
+    if (!t.mesCrit || (f.mesCrit && f.mesCrit < t.mesCrit)) t.mesCrit = f.mesCrit;
+    f.falt = 0;
+  });
+  const filas = base.filter(f => f.falt > 0.0005).sort((a, b) => (a.mesCrit || '9999').localeCompare(b.mesCrit || '9999'));
 
   let costoUSD = 0, costoARS = 0;
   const html = filas.map(f => {
@@ -1919,7 +1946,7 @@ function renderPropuestas() {
     }
     return `<tr>
       <td class="mono">${esc(f.codigo)}</td>
-      <td style="font-weight:600">${esc(f.nombre)}<br><span style="font-size:10px;color:var(--gold2);font-family:var(--mono)" title="Productos del plan que consumen este insumo (con su parte de la necesidad)">${Object.entries(f.prods || {}).sort((a, b) => b[1] - a[1]).map(([sku, q]) => `${esc(sku)} ${fmt(q, q < 10 ? 1 : 0)}`).join(' · ')}</span></td>
+      <td style="font-weight:600">${esc(f.nombre)}<br><span style="font-size:10px;color:var(--gold2);font-family:var(--mono)" title="Productos del plan que consumen este insumo (con su parte de la necesidad)">${Object.entries(f.prods || {}).sort((a, b) => b[1] - a[1]).map(([sku, q]) => `${esc(sku)} ${fmt(q, q < 10 ? 1 : 0)}`).join(' · ')}</span>${f.recibidoDe ? `<br><span style="font-size:10px;color:var(--orange)" title="El insumo original está en 'hasta agotar stock': su faltante se compra con este reemplazo">⌛ incluye ${f.recibidoDe.map(r => fmt(r.q, 2) + ' ' + esc(f.um) + ' por reemplazo de ' + esc(r.de)).join(' · ')}</span>` : ''}${f.sinReemplazo ? `<br><span style="font-size:10px;color:var(--red)">⚠ hasta agotar SIN reemplazo definido</span>` : ''}</td>
       <td class="num">${fmt(f.total, 2)} ${esc(f.um)}</td>
       <td class="num">${fmt(f.stk, 2)}</td>
       <td class="num" style="color:${f.pipe > 0 ? 'var(--blue)' : 'var(--text3)'}">${f.pipe > 0 ? fmt(f.pipe, 2) : '—'}</td>
