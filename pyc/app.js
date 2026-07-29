@@ -1307,7 +1307,7 @@ function renderOFs() {
     else if (o.estado === 'despachada') acc += b(`marcarProduccionOF('${esc(o.id)}')`, '⚙ En producción', 'btn-g') + b(`abrirRecepcionOF('${esc(o.id)}')`, '📥 Ingresar PT', 'btn-p');
     else if (o.estado === 'produccion') acc += b(`abrirRecepcionOF('${esc(o.id)}')`, '📥 Ingresar PT', 'btn-p');
     else acc += `<span class="mono" style="font-size:10px;color:var(--text3)">✓ ${(o.recepciones || []).length} prod</span>`;
-    return `<tr>
+    return `<tr class="clickable" onclick="editOF('${esc(o.id)}')">
       <td><span class="mono" style="color:var(--gold2);font-weight:700;font-size:11.5px">${esc(o.nro)}</span><br><span class="mono" style="font-size:9.5px;color:var(--text3)">${esc((o.fechaCreacion || '').slice(0, 10))}</span></td>
       <td style="max-width:280px">${esTarea ? '🛠 Tareas varias' : (prods.length === 1 ? esc(prods[0].nombre) : prods.length + ' productos')}<br><span style="font-size:11px;color:var(--text3)">${esc(sub)} · ${esc(o.fazon || 'Nutratec')}${costoFz > 0 ? ' · <b style="color:var(--gold2)">' + _ofCostoStr(o) + '</b>' : ''}</span></td>
       <td class="num">${fmt(totU, 0)} u</td>
@@ -1321,28 +1321,28 @@ function renderOFs() {
 }
 
 // ── Nueva OF ──
-function _ofnRow() {
+function _ofnRow(it = {}) {
   const st = 'background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:8px 10px;color:var(--text);outline:none;font-family:var(--font)';
   const opts = allRecs('productos').sort((a, b) => a.codigo.localeCompare(b.codigo))
-    .map(p => `<option value="${esc(p.codigo)}">${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('');
+    .map(p => `<option value="${esc(p.codigo)}"${p.codigo === it.cod ? ' selected' : ''}>${esc(p.codigo)} — ${esc(p.nombre)}</option>`).join('');
   return `<div class="ofn-row" style="display:flex;gap:8px;margin-bottom:8px">
     <select class="ofn-cod" onchange="ofnPreview()" style="${st};flex:1"><option value="">— Producto —</option>${opts}</select>
-    <input type="number" class="ofn-qty" placeholder="Cantidad" oninput="ofnPreview()" style="${st};width:110px;font-family:var(--mono)">
-    <input type="number" class="ofn-precio" step="0.01" min="0" placeholder="$/u fazón" oninput="ofnPreview()" style="${st};width:110px;font-family:var(--mono)" title="Precio por unidad que cobra el fazón (maquila)">
+    <input type="number" class="ofn-qty" placeholder="Cantidad" value="${it.cantidad ?? ''}" oninput="ofnPreview()" style="${st};width:110px;font-family:var(--mono)">
+    <input type="number" class="ofn-precio" step="0.01" min="0" placeholder="$/u fazón" value="${it.precioFazon || ''}" oninput="ofnPreview()" style="${st};width:110px;font-family:var(--mono)" title="Precio por unidad que cobra el fazón (maquila)">
     <button class="btn btn-g btn-sm" onclick="this.closest('.ofn-row').remove();ofnPreview()" style="color:var(--red)">✕</button>
   </div>`;
 }
-function ofnAddProd() { document.getElementById('ofn-prods').insertAdjacentHTML('beforeend', _ofnRow()); }
-function _ofnTareaRow() {
+function ofnAddProd(it) { document.getElementById('ofn-prods').insertAdjacentHTML('beforeend', _ofnRow(it || {})); }
+function _ofnTareaRow(t = {}) {
   const st = 'background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:8px 10px;color:var(--text);outline:none;font-family:var(--font)';
   return `<div class="ofn-trow" style="display:flex;gap:8px;margin-bottom:8px">
-    <input type="text" class="ofn-tdesc" placeholder="Detalle de la tarea (ej: reetiquetar latas Power)" style="${st};flex:1">
-    <input type="number" class="ofn-tqty" placeholder="Cant." style="${st};width:90px;font-family:var(--mono)">
-    <input type="number" class="ofn-tprecio" step="0.01" min="0" placeholder="$/u" style="${st};width:100px;font-family:var(--mono)" title="Precio por unidad que cobra el fazón">
+    <input type="text" class="ofn-tdesc" placeholder="Detalle de la tarea (ej: reetiquetar latas Power)" value="${esc(t.descripcion || '')}" style="${st};flex:1">
+    <input type="number" class="ofn-tqty" placeholder="Cant." value="${t.cantidad || ''}" style="${st};width:90px;font-family:var(--mono)">
+    <input type="number" class="ofn-tprecio" step="0.01" min="0" placeholder="$/u" value="${t.precio || ''}" style="${st};width:100px;font-family:var(--mono)" title="Precio por unidad que cobra el fazón">
     <button class="btn btn-g btn-sm" onclick="this.closest('.ofn-trow').remove()" style="color:var(--red)">✕</button>
   </div>`;
 }
-function ofnAddTarea() { document.getElementById('ofn-tareas').insertAdjacentHTML('beforeend', _ofnTareaRow()); }
+function ofnAddTarea(t) { document.getElementById('ofn-tareas').insertAdjacentHTML('beforeend', _ofnTareaRow(t || {})); }
 function ofnTipoChange() {
   const t = document.getElementById('ofn-tipo').value;
   document.getElementById('ofn-prods-sec').style.display = t === 'tareas' ? 'none' : '';
@@ -1372,7 +1372,29 @@ function _ofTotalFazon(o) {
   if (o.tipo === 'tareas') return (o.tareas || []).reduce((s, t) => s + (t.cantidad || 0) * (t.precio || 0), 0);
   return (o.productos || []).reduce((s, p) => s + (p.cantidad || 0) * (p.precioFazon || 0), 0);
 }
+function editOF(id) {
+  const o = DB.ofs[id]; if (!o) return;
+  if (o.estado !== 'borrador') { toast('Solo se modifican borradores — esta orden ya fue despachada', '⚠', 3500); return; }
+  document.getElementById('m-of-nueva').dataset.editId = id;
+  document.getElementById('ofn-title').textContent = '✏ ' + o.nro + ' · ' + (o.fazon || 'Nutratec');
+  document.getElementById('ofn-guardar').textContent = 'Guardar cambios';
+  document.getElementById('ofn-fazon').value = o.fazon || 'Nutratec';
+  document.getElementById('ofn-tipo').value = o.tipo === 'tareas' ? 'tareas' : 'produccion';
+  document.getElementById('ofn-moneda').value = o.moneda || 'USD';
+  document.getElementById('ofn-tc').value = o.tc || '';
+  document.getElementById('ofn-prods').innerHTML = '';
+  document.getElementById('ofn-tareas').innerHTML = '';
+  ofnTipoChange();
+  if (o.tipo === 'tareas') { document.getElementById('ofn-tareas').innerHTML = ''; (o.tareas || []).forEach(t => ofnAddTarea(t)); }
+  else (o.productos || []).forEach(p => ofnAddProd(p));
+  document.getElementById('ofn-preview').innerHTML = '';
+  if (o.tipo !== 'tareas') ofnPreview();
+  openM('m-of-nueva');
+}
 function nuevaOF() {
+  document.getElementById('m-of-nueva').dataset.editId = '';
+  document.getElementById('ofn-title').textContent = '+ Nueva Orden a Fazón';
+  document.getElementById('ofn-guardar').textContent = 'Crear orden';
   document.getElementById('ofn-fazon').value = 'Nutratec';
   document.getElementById('ofn-tipo').value = 'produccion';
   document.getElementById('ofn-moneda').value = 'USD';
@@ -1417,26 +1439,28 @@ function ofnPreview() {
 function guardarOF() {
   const fazon = document.getElementById('ofn-fazon').value.trim() || 'Nutratec';
   const tipo = document.getElementById('ofn-tipo').value;
-  const id = uid();
+  const editId = document.getElementById('m-of-nueva').dataset.editId || '';
+  const prev = editId ? DB.ofs[editId] : null;
+  const id = editId || uid();
   if (tipo === 'tareas') {
     const tareas = _ofnTareasLeer();
     if (!tareas.length) { toast('Detallá al menos una tarea', '⚠'); return; }
-    putRec('ofs', id, { id, nro: _ofNext(), fazon, tipo: 'tareas', tareas,
+    putRec('ofs', id, { ...(prev || {}), id, nro: prev?.nro || _ofNext(), fazon, tipo: 'tareas', tareas,
       moneda: document.getElementById('ofn-moneda').value, tc: parseFloat(document.getElementById('ofn-tc').value) || null,
-      productos: [], lineas: [], estado: 'borrador', fechaCreacion: new Date().toISOString(),
-      fechaDespacho: null, recepciones: [] });
-    closeM('m-of-nueva'); renderOFs(); toast('Orden de trabajo creada · ' + DB.ofs[id].nro, '🛠');
+      productos: [], lineas: [], estado: prev?.estado || 'borrador', fechaCreacion: prev?.fechaCreacion || new Date().toISOString(),
+      fechaDespacho: prev?.fechaDespacho || null, recepciones: prev?.recepciones || [] });
+    closeM('m-of-nueva'); renderOFs(); toast((prev ? 'Orden actualizada · ' : 'Orden de trabajo creada · ') + DB.ofs[id].nro, '🛠');
     return;
   }
   const prods = _ofnLeer();
   if (!prods.length) { toast('Agregá al menos un producto con cantidad', '⚠'); return; }
   const lineas = _explotarOF(prods);
   if (!lineas.length) { toast('Esos productos no tienen fórmula', '⚠'); return; }
-  putRec('ofs', id, { id, nro: _ofNext(), fazon, tipo: 'produccion',
+  putRec('ofs', id, { ...(prev || {}), id, nro: prev?.nro || _ofNext(), fazon, tipo: 'produccion',
     moneda: document.getElementById('ofn-moneda').value, tc: parseFloat(document.getElementById('ofn-tc').value) || null,
-    productos: prods, lineas, estado: 'borrador', fechaCreacion: new Date().toISOString(),
-    fechaDespacho: null, recepciones: [] });
-  closeM('m-of-nueva'); renderOFs(); toast('Orden creada · ' + DB.ofs[id].nro, '📋');
+    productos: prods, lineas, estado: prev?.estado || 'borrador', fechaCreacion: prev?.fechaCreacion || new Date().toISOString(),
+    fechaDespacho: prev?.fechaDespacho || null, recepciones: prev?.recepciones || [] });
+  closeM('m-of-nueva'); renderOFs(); toast((prev ? 'Orden actualizada · ' : 'Orden creada · ') + DB.ofs[id].nro, '📋');
 }
 function enviarOFTareas(id) {
   const o = DB.ofs[id]; if (!o || o.tipo !== 'tareas') return;
