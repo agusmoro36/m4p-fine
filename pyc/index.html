@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260728-5';
+  var VER = '20260728-6';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260728-5">
+<link rel="stylesheet" href="styles.css?v=20260728-6">
 </head>
 <body>
 <div class="layout">
@@ -613,7 +613,7 @@
     <button class="modal-close" onclick="closeM('m-of-nueva')">✕</button>
     <div class="modal-title">+ Nueva Orden a Fazón</div>
     <p style="font-size:12px;color:var(--text3);margin:0 0 12px">Agregá todos los productos y cantidades a producir. El sistema consolida la cantidad total por insumo desde cada fórmula.</p>
-    <div class="fg" style="grid-template-columns:1fr 1fr;margin-bottom:12px;max-width:480px">
+    <div class="fg" style="grid-template-columns:1fr 1fr 1fr 1fr;margin-bottom:12px">
       <div class="fl"><label>Fazón</label><select class="fsel" id="ofn-fazon" style="width:100%">
         <option>Nutratec</option>
         <option>Cuarto Creciente</option>
@@ -622,6 +622,11 @@
         <option value="produccion">⚙ Producción de PT</option>
         <option value="tareas">🛠 Tareas varias</option>
       </select></div>
+      <div class="fl"><label>Moneda del precio</label><select class="fsel" id="ofn-moneda" style="width:100%" onchange="ofnPreview()">
+        <option>USD</option>
+        <option>ARS</option>
+      </select></div>
+      <div class="fl"><label>Tipo de cambio (BNA)</label><input type="number" id="ofn-tc" step="0.01" min="0" placeholder="ej: 1480" oninput="ofnPreview()" style="font-family:var(--mono)"></div>
     </div>
     <div id="ofn-prods-sec">
       <div style="font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:6px">Productos a producir · precio = lo que cobra el fazón por unidad</div>
@@ -739,8 +744,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js?v=20260728-5"></script>
-<script src="store.js?v=20260728-5"></script>
-<script src="app.js?v=20260728-5"></script>
+<script src="data.js?v=20260728-6"></script>
+<script src="store.js?v=20260728-6"></script>
+<script src="app.js?v=20260728-6"></script>
 </body>
 </html>

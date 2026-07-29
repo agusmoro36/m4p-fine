@@ -1309,7 +1309,7 @@ function renderOFs() {
     else acc += `<span class="mono" style="font-size:10px;color:var(--text3)">✓ ${(o.recepciones || []).length} prod</span>`;
     return `<tr>
       <td><span class="mono" style="color:var(--gold2);font-weight:700;font-size:11.5px">${esc(o.nro)}</span><br><span class="mono" style="font-size:9.5px;color:var(--text3)">${esc((o.fechaCreacion || '').slice(0, 10))}</span></td>
-      <td style="max-width:280px">${esTarea ? '🛠 Tareas varias' : (prods.length === 1 ? esc(prods[0].nombre) : prods.length + ' productos')}<br><span style="font-size:11px;color:var(--text3)">${esc(sub)} · ${esc(o.fazon || 'Nutratec')}${costoFz > 0 ? ' · <b style="color:var(--gold2)">$ ' + fmt(costoFz, 0) + '</b>' : ''}</span></td>
+      <td style="max-width:280px">${esTarea ? '🛠 Tareas varias' : (prods.length === 1 ? esc(prods[0].nombre) : prods.length + ' productos')}<br><span style="font-size:11px;color:var(--text3)">${esc(sub)} · ${esc(o.fazon || 'Nutratec')}${costoFz > 0 ? ' · <b style="color:var(--gold2)">' + _ofCostoStr(o) + '</b>' : ''}</span></td>
       <td class="num">${fmt(totU, 0)} u</td>
       <td class="tc">${_ofPill(o.estado)}</td>
       <td class="tc mono" style="font-size:11px">${desp}</td>
@@ -1360,6 +1360,14 @@ function _ofnTareasLeer() {
   });
   return ts;
 }
+function _ofCostoStr(o) {
+  const t = _ofTotalFazon(o);
+  if (t <= 0) return '';
+  let s = _sym(o.moneda || 'USD') + fmt(t, 2);
+  const tc = o.tc || 0;
+  if (tc > 0) s += (o.moneda === 'ARS') ? ` (≈ USD ${fmt(t / tc, 2)})` : ` (≈ $ ${fmt(t * tc, 0)} ARS)`;
+  return s;
+}
 function _ofTotalFazon(o) {
   if (o.tipo === 'tareas') return (o.tareas || []).reduce((s, t) => s + (t.cantidad || 0) * (t.precio || 0), 0);
   return (o.productos || []).reduce((s, p) => s + (p.cantidad || 0) * (p.precioFazon || 0), 0);
@@ -1367,6 +1375,8 @@ function _ofTotalFazon(o) {
 function nuevaOF() {
   document.getElementById('ofn-fazon').value = 'Nutratec';
   document.getElementById('ofn-tipo').value = 'produccion';
+  document.getElementById('ofn-moneda').value = 'USD';
+  document.getElementById('ofn-tc').value = '';
   document.getElementById('ofn-prods').innerHTML = '';
   document.getElementById('ofn-tareas').innerHTML = '';
   ofnTipoChange();
@@ -1399,7 +1409,9 @@ function ofnPreview() {
     </tr>`;
   }).join('');
   const costoFz = prods.reduce((s, p) => s + p.cantidad * (p.precioFazon || 0), 0);
-  box.innerHTML = `<div style="font-size:12px;color:var(--text2);margin-bottom:6px"><b>${prods.length}</b> producto(s) · <b>${lineas.length}</b> insumos consolidados${costoFz > 0 ? ` · costo fazón <b style="color:var(--gold2)">$ ${fmt(costoFz, 2)}</b>` : ''}</div>
+  const _m = { moneda: document.getElementById('ofn-moneda').value, tc: parseFloat(document.getElementById('ofn-tc').value) || 0 };
+  const costoStr = _ofCostoStr({ ..._m, tipo: 'produccion', productos: prods });
+  box.innerHTML = `<div style="font-size:12px;color:var(--text2);margin-bottom:6px"><b>${prods.length}</b> producto(s) · <b>${lineas.length}</b> insumos consolidados${costoFz > 0 ? ` · costo fazón <b style="color:var(--gold2)">${costoStr}</b>` : ''}</div>
     <div class="tbl-wrap"><table><thead><tr><th>Código</th><th>Insumo</th><th class="tr">Cant. total</th><th>Lo consumen</th><th class="tc">Stock</th></tr></thead><tbody>${filas}</tbody></table></div>`;
 }
 function guardarOF() {
@@ -1410,6 +1422,7 @@ function guardarOF() {
     const tareas = _ofnTareasLeer();
     if (!tareas.length) { toast('Detallá al menos una tarea', '⚠'); return; }
     putRec('ofs', id, { id, nro: _ofNext(), fazon, tipo: 'tareas', tareas,
+      moneda: document.getElementById('ofn-moneda').value, tc: parseFloat(document.getElementById('ofn-tc').value) || null,
       productos: [], lineas: [], estado: 'borrador', fechaCreacion: new Date().toISOString(),
       fechaDespacho: null, recepciones: [] });
     closeM('m-of-nueva'); renderOFs(); toast('Orden de trabajo creada · ' + DB.ofs[id].nro, '🛠');
@@ -1420,6 +1433,7 @@ function guardarOF() {
   const lineas = _explotarOF(prods);
   if (!lineas.length) { toast('Esos productos no tienen fórmula', '⚠'); return; }
   putRec('ofs', id, { id, nro: _ofNext(), fazon, tipo: 'produccion',
+    moneda: document.getElementById('ofn-moneda').value, tc: parseFloat(document.getElementById('ofn-tc').value) || null,
     productos: prods, lineas, estado: 'borrador', fechaCreacion: new Date().toISOString(),
     fechaDespacho: null, recepciones: [] });
   closeM('m-of-nueva'); renderOFs(); toast('Orden creada · ' + DB.ofs[id].nro, '📋');
@@ -1581,9 +1595,9 @@ function exportarOFPDF(id) {
     const totalFz = _ofTotalFazon(o);
     [['Fazón', o.fazon || 'Nutratec'],
      o.tipo === 'tareas'
-       ? ['Tareas', (o.tareas || []).map(t => t.descripcion + (t.cantidad ? ` ×${fmt(t.cantidad, 0)}` : '') + (t.precio ? ` ($${fmt(t.precio, 2)}/u)` : '')).join('   |   ')]
-       : ['Productos', (o.productos || []).map(p => `${p.nombre} ×${fmt(p.cantidad, 0)} u` + (p.precioFazon ? ` ($${fmt(p.precioFazon, 2)}/u)` : '')).join('   |   ')],
-     ...(totalFz > 0 ? [['Costo fazón', '$ ' + fmt(totalFz, 2)]] : []),
+       ? ['Tareas', (o.tareas || []).map(t => t.descripcion + (t.cantidad ? ` ×${fmt(t.cantidad, 0)}` : '') + (t.precio ? ` (${_sym(o.moneda || 'USD')}${fmt(t.precio, 2)}/u)` : '')).join('   |   ')]
+       : ['Productos', (o.productos || []).map(p => `${p.nombre} ×${fmt(p.cantidad, 0)} u` + (p.precioFazon ? ` (${_sym(o.moneda || 'USD')}${fmt(p.precioFazon, 2)}/u)` : '')).join('   |   ')],
+     ...(totalFz > 0 ? [['Costo fazón', _ofCostoStr(o)]] : []),
      ['Estado', (OF_ESTADOS[o.estado] || ['', o.estado])[1]],
      ['Fecha', new Date().toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })],
     ].forEach(([k, v]) => {
