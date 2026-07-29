@@ -291,41 +291,114 @@ function renderProductos() {
     </tr>`).join('');
   document.getElementById('prod-empty').style.display = data.length ? 'none' : 'block';
 }
+function proximoCodigoPT() {
+  let max = 0;
+  Object.values(DB.productos).forEach(p => {
+    const m = String(p.codigo || '').match(/^PT-(\d+)$/);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  });
+  return 'PT-' + String(max + 1).padStart(4, '0');
+}
+function _fillInsumoDatalists() {
+  const dli = document.getElementById('dl-insumos');
+  if (dli && !dli.children.length)
+    allRecs('insumos').sort((a, b) => a.codigo.localeCompare(b.codigo))
+      .forEach(i => dli.innerHTML += `<option value="${esc(i.codigo)}" label="${esc(i.codigo)} — ${esc(i.nombre)}">`);
+  const dld = document.getElementById('dl-insumos-desc');
+  if (dld && !dld.children.length)
+    allRecs('insumos').filter(i => i.nombre).sort((a, b) => a.nombre.localeCompare(b.nombre))
+      .forEach(i => dld.innerHTML += `<option value="${esc(i.nombre)}" label="${esc(i.nombre)} — ${esc(i.codigo)}">`);
+}
+function mfAddRow(ins = {}) {
+  const st = 'width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:5px 7px;color:var(--text);outline:none';
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td style="padding:4px 6px;width:120px"><input type="text" class="mf-icod" list="dl-insumos" value="${esc(ins.codigo || '')}" placeholder="MP-0000" style="${st};font-family:var(--mono);font-size:11px;text-transform:uppercase" oninput="mfAutoCod(this)"></td>
+    <td style="padding:4px 6px"><input type="text" class="mf-inom" list="dl-insumos-desc" value="${esc(ins.nombre || '')}" placeholder="o buscá por nombre…" style="${st};font-size:13px" oninput="mfAutoDesc(this)"></td>
+    <td style="padding:4px 6px;width:110px"><input type="number" class="mf-icant" step="any" min="0" value="${ins.cantidad ?? ''}" placeholder="por batch" style="${st};font-family:var(--mono);font-size:11.5px;text-align:right"></td>
+    <td style="padding:4px 6px;width:64px"><input type="text" class="mf-ium" value="${esc(ins.um || '')}" placeholder="kg" style="${st};font-family:var(--mono);font-size:11px;text-align:center"></td>
+    <td style="padding:4px 2px;width:30px;text-align:center"><button class="btn-ico" title="Quitar" onclick="this.closest('tr').remove()">✕</button></td>`;
+  document.getElementById('mf-items').appendChild(tr);
+}
+function mfAutoCod(inp) {
+  const i = DB.insumos[inp.value.trim().toUpperCase()];
+  if (!i || i._deleted) return;
+  const tr = inp.closest('tr');
+  tr.querySelector('.mf-inom').value = i.nombre || '';
+  const um = tr.querySelector('.mf-ium'); if (!um.value) um.value = i.um || 'kg';
+}
+function mfAutoDesc(inp) {
+  const d = norm(inp.value);
+  if (d.length < 3) return;
+  const hit = allRecs('insumos').find(i => norm(i.nombre) === d);
+  if (!hit) return;
+  const tr = inp.closest('tr');
+  tr.querySelector('.mf-icod').value = hit.codigo;
+  mfAutoCod(tr.querySelector('.mf-icod'));
+}
 function verFormula(cod) {
-  const p = DB.productos[cod]; if (!p) return;
-  document.getElementById('mf-title').textContent = p.nombre;
-  document.getElementById('mf-cod').textContent = p.codigo;
-  document.getElementById('mf-nombre').value = p.nombre || '';
-  document.getElementById('mf-sku').value = p.skuCore || '';
-  document.getElementById('mf-lote').value = p.loteMin || '';
-  document.getElementById('mf-dias').value = p.politicaDias || '';
-  document.getElementById('mf-estado').value = p.estado || 'activo';
-  const mp = (p.insumos || []).filter(i => !String(i.codigo).startsWith('PK'));
-  const pk = (p.insumos || []).filter(i => String(i.codigo).startsWith('PK'));
-  const tabla = arr => `<div class="tbl-wrap"><table>
-    <thead><tr><th>Código</th><th>Insumo</th><th class="tr">Cant. por batch</th><th class="tc">UM</th></tr></thead>
-    <tbody>${arr.map(i => `<tr>
-      <td class="mono">${esc(i.codigo)}</td><td>${esc(i.nombre)}</td>
-      <td class="num">${fmt(i.cantidad, 3)}</td><td class="tc mono">${esc(i.um)}</td></tr>`).join('')}
-    </tbody></table></div>`;
-  document.getElementById('mf-body').innerHTML =
-    (mp.length ? `<div class="form-sec">🧪 Materias primas · núcleos (${mp.length})</div>` + tabla(mp) : '') +
-    (pk.length ? `<div class="form-sec">📦 Empaque · packaging (${pk.length})</div>` + tabla(pk) : '');
-  document.getElementById('m-formula').dataset.cod = cod;
+  const p = cod ? DB.productos[cod] : null;
+  _fillInsumoDatalists();
+  document.getElementById('mf-title').textContent = p ? p.nombre : '+ Nuevo producto terminado';
+  document.getElementById('mf-cod').textContent = p ? p.codigo : `se asignará ${proximoCodigoPT()}`;
+  document.getElementById('mf-nombre').value = p?.nombre || '';
+  document.getElementById('mf-sku').value = p?.skuCore || '';
+  document.getElementById('mf-lote').value = p?.loteMin || '';
+  document.getElementById('mf-dias').value = p?.politicaDias || '';
+  document.getElementById('mf-estado').value = p?.estado || 'activo';
+  document.getElementById('mf-del').style.display = p ? '' : 'none';
+  const ins = (p?.insumos || []);
+  const mp = ins.filter(i => !String(i.codigo).startsWith('PK')).length;
+  const pk = ins.filter(i => String(i.codigo).startsWith('PK')).length;
+  document.getElementById('mf-body').innerHTML = `
+    <div class="form-sec">Fórmula por batch <span class="mono" style="font-size:9px;color:var(--text3)">· ${mp} MP + ${pk} PK</span>
+      <span style="float:right"><button class="btn btn-p btn-sm" onclick="mfAddRow()">+ Agregar insumo</button></span></div>
+    <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden"><div style="max-height:46vh;overflow-y:auto"><table>
+      <thead><tr><th>Código</th><th>Insumo</th><th class="tr">Cant. por batch</th><th class="tc">UM</th><th></th></tr></thead>
+      <tbody id="mf-items"></tbody>
+    </table></div></div>`;
+  (ins.length ? ins : [{}]).forEach(i => mfAddRow(i));
+  document.getElementById('m-formula').dataset.cod = cod || '';
   openM('m-formula');
 }
-function guardarProducto() {
+function eliminarProducto() {
   const cod = document.getElementById('m-formula').dataset.cod;
   const p = DB.productos[cod]; if (!p) return;
+  if (!confirm(`¿Eliminar el producto ${p.nombre} (${cod})? Sale del maestro y de la planificación.`)) return;
+  delRec('productos', cod);
+  closeM('m-formula'); renderProductos();
+  toast(`🗑 ${p.nombre} eliminado`);
+}
+function guardarProducto() {
+  const cod0 = document.getElementById('m-formula').dataset.cod;
+  const p = cod0 ? DB.productos[cod0] : null;
+  const nombre = document.getElementById('mf-nombre').value.trim();
+  if (!nombre) { toast('Falta el nombre del producto', '⚠'); return; }
+  const loteMin = parseFloat(document.getElementById('mf-lote').value) || 0;
+  if (!loteMin) { toast('Falta el batch (lote mínimo)', '⚠'); return; }
+  const insumos = [];
+  let sinDatos = 0;
+  document.querySelectorAll('#mf-items tr').forEach(tr => {
+    const codigo = tr.querySelector('.mf-icod').value.trim().toUpperCase();
+    const nom = tr.querySelector('.mf-inom').value.trim();
+    const cantidad = parseFloat(tr.querySelector('.mf-icant').value) || 0;
+    if (!codigo && !nom) return;
+    if (!codigo || !cantidad) { sinDatos++; return; }
+    insumos.push({ codigo, nombre: nom || DB.insumos[codigo]?.nombre || '', cantidad,
+      um: tr.querySelector('.mf-ium').value.trim() || DB.insumos[codigo]?.um || 'kg' });
+  });
+  if (sinDatos) { toast(`${sinDatos} renglón(es) sin código o sin cantidad — completalos o quitalos`, '⚠', 4000); return; }
+  const cod = cod0 || proximoCodigoPT();
   putRec('productos', cod, {
-    ...p,
-    nombre: document.getElementById('mf-nombre').value.trim() || p.nombre,
+    ...(p || {}), codigo: cod, nombre,
     skuCore: document.getElementById('mf-sku').value.trim(),
-    loteMin: parseFloat(document.getElementById('mf-lote').value) || p.loteMin,
+    loteMin,
     politicaDias: parseInt(document.getElementById('mf-dias').value, 10) || null,
     estado: document.getElementById('mf-estado').value,
+    insumos, _deleted: false,
   });
-  closeM('m-formula'); renderProductos(); toast('Producto guardado · ' + cod);
+  closeM('m-formula'); renderProductos();
+  toast((p ? 'Producto guardado · ' : '✚ Producto creado · ') + cod + (insumos.length ? ` (${insumos.length} insumos en fórmula)` : ' — ojo: sin fórmula, el MRP no puede explotarlo'), '◎', 4500);
 }
 
 // ═══════════════ STOCK DE INSUMOS (Fase 2) ═══════════════
