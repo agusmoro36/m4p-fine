@@ -1067,11 +1067,9 @@ function confirmarRecepcion() {
 function abrirFactura(id) {
   const _o = DB.ocs[id];
   setTimeout(() => {
-    const st = document.getElementById('mf2-pago-status');
     const inp = document.getElementById('mf2-pago');
     if (inp) inp.value = '';
-    if (st) st.innerHTML = _o?.factura?.comprobante
-      ? `<span style="color:var(--green)">✓ comprobante ya adjunto: ${esc(_o.factura.comprobante)}${_o.factura.fechaPago ? ' (' + fmtVenc(_o.factura.fechaPago) + ')' : ''}</span>` : '';
+    _renderComprobantes(id);
   }, 0);
   const o = DB.ocs[id]; if (!o) return;
   document.getElementById('mf2-oc').value = id;
@@ -1115,33 +1113,64 @@ async function procesarFacturaPDF() {
     st.textContent = '⚠ No pude leer el PDF — cargá la fecha a mano.';
   }
 }
+function _comprobantesDe(o) {
+  const f = o?.factura || {};
+  const arr = Array.isArray(f.comprobantes) ? [...f.comprobantes] : [];
+  if (f.comprobante && !arr.some(c => c.nombre === f.comprobante))
+    arr.unshift({ nombre: f.comprobante, fecha: f.fechaPago || '' });
+  return arr;
+}
+function _renderComprobantes(id) {
+  const st = document.getElementById('mf2-pago-status');
+  if (!st) return;
+  const o = DB.ocs[id];
+  const lista = _comprobantesDe(o);
+  const nuevos = [...(document.getElementById('mf2-pago')?.files || [])];
+  st.innerHTML =
+    lista.map((c, i) => `<div style="color:var(--green);padding:1px 0">✓ ${esc(c.nombre)}${c.fecha ? ' <span style="color:var(--text3)">(' + fmtVenc(c.fecha) + ')</span>' : ''}
+      <button class="btn-ico" style="font-size:11px" title="Quitar de la lista" onclick="quitarComprobante('${esc(id)}',${i})">✕</button></div>`).join('') +
+    nuevos.map(f => `<div style="color:var(--gold2);padding:1px 0">＋ ${esc(f.name)} <span style="color:var(--text3)">— se adjunta al guardar</span></div>`).join('') +
+    (nuevos.length ? `<div style="color:var(--text2);margin-top:3px">La factura queda marcada como <b>pagada</b> al guardar.</div>` : '');
+}
+function quitarComprobante(id, idx) {
+  const o = DB.ocs[id]; if (!o?.factura) return;
+  const lista = _comprobantesDe(o);
+  const q = lista.splice(idx, 1)[0];
+  putRec('ocs', id, { ...o, factura: { ...o.factura, comprobantes: lista, comprobante: '' } });
+  _renderComprobantes(id);
+  toast(`Comprobante ${q?.nombre || ''} quitado de la lista`);
+}
 function comprobanteAdjuntado() {
-  const f = document.getElementById('mf2-pago').files[0];
-  if (!f) return;
+  const fs = [...document.getElementById('mf2-pago').files];
+  if (!fs.length) return;
   document.getElementById('mf2-pagada').checked = true;
-  document.getElementById('mf2-pago-status').innerHTML = `<span style="color:var(--green)">✓ ${esc(f.name)} — la factura queda marcada como <b>pagada</b> al guardar</span>`;
+  _renderComprobantes(document.getElementById('mf2-oc').value);
 }
 function guardarFactura() {
   const id = document.getElementById('mf2-oc').value;
   const o = DB.ocs[id]; if (!o) return;
   const venc = document.getElementById('mf2-venc').value;
   const file = document.getElementById('mf2-file').files[0];
-  const pago = document.getElementById('mf2-pago').files[0];
-  const pagada = document.getElementById('mf2-pagada').checked || !!pago;
+  const pagos = [...document.getElementById('mf2-pago').files];
+  const pagada = document.getElementById('mf2-pagada').checked || pagos.length > 0;
+  const comprobantes = _comprobantesDe(o);
+  pagos.forEach(f => { if (!comprobantes.some(c => c.nombre === f.name)) comprobantes.push({ nombre: f.name, fecha: hoyISO() }); });
   putRec('ocs', id, { ...o, factura: {
     ...(o.factura || {}),
     archivo: file?.name || o.factura?.archivo || '',
     vencPago: venc || '', pagada,
-    comprobante: pago?.name || o.factura?.comprobante || '',
-    fechaPago: pago ? hoyISO() : (o.factura?.fechaPago || (pagada ? o.factura?.fechaPago || hoyISO() : '')),
+    comprobantes, comprobante: '',
+    fechaPago: pagos.length ? hoyISO() : (o.factura?.fechaPago || (pagada ? o.factura?.fechaPago || hoyISO() : '')),
     fechaCarga: o.factura?.fechaCarga || hoyISO() } });
-  if (pago && SB) {
+  pagos.forEach((pago, i) => {
+    if (!SB) return;
     const fr2 = new FileReader();
-    fr2.onload = () => SB.from(PYC_SB_TABLE).upsert({ key: 'pyc_pago_' + id,
+    const key = 'pyc_pago_' + id + '_' + Date.now() + '_' + i;
+    fr2.onload = () => SB.from(PYC_SB_TABLE).upsert({ key,
       value: { nombre: pago.name, data: fr2.result, fecha: hoyISO() },
       update_at: new Date().toISOString() }, { onConflict: 'key' }).then(() => {});
     fr2.readAsDataURL(pago);
-  }
+  });
   if (file && SB) {
     const fr = new FileReader();
     fr.onload = () => SB.from(PYC_SB_TABLE).upsert({ key: 'pyc_fac_' + id,
