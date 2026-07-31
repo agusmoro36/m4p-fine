@@ -1065,6 +1065,14 @@ function confirmarRecepcion() {
 
 // ── Factura con vencimiento de pago desde el PDF ──
 function abrirFactura(id) {
+  const _o = DB.ocs[id];
+  setTimeout(() => {
+    const st = document.getElementById('mf2-pago-status');
+    const inp = document.getElementById('mf2-pago');
+    if (inp) inp.value = '';
+    if (st) st.innerHTML = _o?.factura?.comprobante
+      ? `<span style="color:var(--green)">✓ comprobante ya adjunto: ${esc(_o.factura.comprobante)}${_o.factura.fechaPago ? ' (' + fmtVenc(_o.factura.fechaPago) + ')' : ''}</span>` : '';
+  }, 0);
   const o = DB.ocs[id]; if (!o) return;
   document.getElementById('mf2-oc').value = id;
   document.getElementById('mf2-sub').textContent = `· ${o.nro} · ${o.proveedor}`;
@@ -1107,15 +1115,33 @@ async function procesarFacturaPDF() {
     st.textContent = '⚠ No pude leer el PDF — cargá la fecha a mano.';
   }
 }
+function comprobanteAdjuntado() {
+  const f = document.getElementById('mf2-pago').files[0];
+  if (!f) return;
+  document.getElementById('mf2-pagada').checked = true;
+  document.getElementById('mf2-pago-status').innerHTML = `<span style="color:var(--green)">✓ ${esc(f.name)} — la factura queda marcada como <b>pagada</b> al guardar</span>`;
+}
 function guardarFactura() {
   const id = document.getElementById('mf2-oc').value;
   const o = DB.ocs[id]; if (!o) return;
   const venc = document.getElementById('mf2-venc').value;
   const file = document.getElementById('mf2-file').files[0];
+  const pago = document.getElementById('mf2-pago').files[0];
+  const pagada = document.getElementById('mf2-pagada').checked || !!pago;
   putRec('ocs', id, { ...o, factura: {
+    ...(o.factura || {}),
     archivo: file?.name || o.factura?.archivo || '',
-    vencPago: venc || '', pagada: document.getElementById('mf2-pagada').checked,
+    vencPago: venc || '', pagada,
+    comprobante: pago?.name || o.factura?.comprobante || '',
+    fechaPago: pago ? hoyISO() : (o.factura?.fechaPago || (pagada ? o.factura?.fechaPago || hoyISO() : '')),
     fechaCarga: o.factura?.fechaCarga || hoyISO() } });
+  if (pago && SB) {
+    const fr2 = new FileReader();
+    fr2.onload = () => SB.from(PYC_SB_TABLE).upsert({ key: 'pyc_pago_' + id,
+      value: { nombre: pago.name, data: fr2.result, fecha: hoyISO() },
+      update_at: new Date().toISOString() }, { onConflict: 'key' }).then(() => {});
+    fr2.readAsDataURL(pago);
+  }
   if (file && SB) {
     const fr = new FileReader();
     fr.onload = () => SB.from(PYC_SB_TABLE).upsert({ key: 'pyc_fac_' + id,
