@@ -175,3 +175,4 @@ td.num{font-family:var(--mono);font-size:12.5px;text-align:right}
 }
 .banner-core b{color:var(--text)}
 .banner-core .aviso{display:block;margin-top:6px;color:var(--orange);font-size:12px}
+.banner-core .ok{display:block;margin-top:6px;color:var(--green);font-size:12px}

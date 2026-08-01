@@ -1938,7 +1938,11 @@ function _leerContrato(txt) {
   const pisan = forecast.filter(f => f.unidades === 0 && (DB.forecast[`${f.sku}|${f.mes}`]?.unidades || 0) > 0);
   if (!forecast.length) avisos.push('El JSON no trae forecast — se importan solo stock de PT y ritmo. El forecast queda como está.');
 
-  return { mesCurso, forecast, stock, pisan, ritmo: c.ritmo_30d || null, generado: c.generado || '', avisos };
+  const stockIns = c.stock_insumos && Object.keys(c.stock_insumos).length ? c.stock_insumos : null;
+  const pipeOcs = c.pipeline_ocs && Object.keys(c.pipeline_ocs).length ? c.pipeline_ocs : null;
+  if (stockIns) avisos.push(`Trae stock de insumos de Core (${Object.keys(stockIns).length} códigos) y OCs pendientes (${Object.keys(pipeOcs || {}).length}) — el MRP los va a usar en lugar de los datos locales.`);
+
+  return { mesCurso, forecast, stock, pisan, stockIns, pipeOcs, ritmo: c.ritmo_30d || null, generado: c.generado || '', avisos };
 }
 function previewImportCore() {
   const txt = document.getElementById('mic-json').value.trim();
@@ -1955,7 +1959,9 @@ function previewImportCore() {
     <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg3)">
       <div style="margin-bottom:6px"><b>${d.forecast.length}</b> celdas de forecast ·
         <b>${d.stock.length}</b> stock de PT ·
-        <b>${d.ritmo ? Object.keys(d.ritmo).length : 0}</b> ritmo 30d</div>
+        <b>${d.ritmo ? Object.keys(d.ritmo).length : 0}</b> ritmo 30d${d.stockIns ? ` ·
+        <b>${Object.keys(d.stockIns).length}</b> stock de insumos ·
+        <b>${Object.keys(d.pipeOcs || {}).length}</b> OCs pendientes` : ''}</div>
       <div style="color:var(--text3);font-size:11px">Mes en curso: <b class="mono">${esc(d.mesCurso)}</b>${d.generado ? ` · generado ${esc(String(d.generado).slice(0, 16).replace('T', ' '))}` : ''}</div>
       ${ajust.length ? `<div style="margin-top:8px;font-size:11px">
         <div style="color:var(--text3);margin-bottom:3px">Descuento del mes en curso (forecast − vendido):</div>
@@ -1981,6 +1987,8 @@ function confirmarImportCore() {
     .forEach(f => putRec('forecast', `${f.sku}|${f.mes}`, { id: `${f.sku}|${f.mes}`, sku: f.sku, mes: f.mes, unidades: f.unidades }));
   d.stock.forEach(s => putRec('stockpt', s.sku, { id: s.sku, sku: s.sku, unidades: s.unidades, fecha: hoyISO() }));
   if (d.ritmo) putRec('config', 'ritmo30d', { id: 'ritmo30d', datos: d.ritmo, fecha: hoyISO() });
+  if (d.stockIns) putRec('config', 'stockins', { id: 'stockins', datos: d.stockIns, fecha: hoyISO() });
+  if (d.pipeOcs) putRec('config', 'pipeocs', { id: 'pipeocs', datos: d.pipeOcs, fecha: hoyISO() });
   window._contratoCore = null;
   closeM('m-import-core');
   renderForecast();
@@ -2080,12 +2088,27 @@ function necesidadesPlan(sel) {
   Object.values(nec).forEach(n => { n.total = Math.round(n.total * 1000) / 1000; });
   return { nec, meses };
 }
+// ── Stock y pipeline: Core manda desde que las compras se gestionan allá ──
+// Mientras las recepciones y las OCs se cargaban acá, DB.lotes y DB.ocs eran la verdad.
+// Ahora la verdad está en Core y llega por el contrato; lo local queda de respaldo
+// para que el MRP siga corriendo si todavía no se importó.
+const _coreStock = () => DB.config.stockins && !DB.config.stockins._deleted ? DB.config.stockins : null;
+const _corePipe = () => DB.config.pipeocs && !DB.config.pipeocs._deleted ? DB.config.pipeocs : null;
+function fuenteDatosMRP() {
+  const st = _coreStock();
+  return st ? { core: true, fecha: st.fecha, n: Object.keys(st.datos || {}).length,
+                nPipe: Object.keys(_corePipe()?.datos || {}).length } : { core: false };
+}
 function pipelineOC(cod) {
+  const p = _corePipe();
+  if (p) return Number(p.datos?.[cod]) || 0;
   return allRecs('ocs').filter(o => o.estado !== 'entregada')
     .reduce((s, o) => s + (o.items || []).filter(it => it.codigo === cod)
       .reduce((x, it) => x + Math.max(0, (it.cantidad || 0) - (it.recibido || 0)), 0), 0);
 }
 function stockTotalIns(cod) {
+  const st = _coreStock();
+  if (st) return Number(st.datos?.[cod]) || 0;
   return lotesVivos().filter(l => l.codigo === cod).reduce((s, l) => s + l.cantidad, 0);
 }
 function provSugerido(cod) {
@@ -2178,9 +2201,11 @@ function renderPropuestas() {
     const b = document.getElementById('banner-prop'); if (b) b.style.display = 'block';
     const g = document.getElementById('btn-gen-ocs'); if (g) g.style.display = 'none';
     const av = document.getElementById('banner-prop-stock');
-    if (av) av.innerHTML = '<span class="aviso">⚠ Ojo: el <b>Stock</b> y <b>En OCs pend.</b> de esta tabla salen de los datos de P&C. '
-      + 'A medida que las recepciones se carguen en Core, estos números se van a quedar atrás y el faltante va a salir de más. '
-      + 'Contrastá contra Core antes de comprar.</span>';
+    const f = fuenteDatosMRP();
+    if (av) av.innerHTML = f.core
+      ? `<span class="ok">✓ <b>Stock</b> y <b>En OCs pend.</b> vienen de Fine Core — ${f.n} códigos con stock y ${f.nPipe} con OCs pendientes, importados el ${fmtVenc(f.fecha)}. Volvé a importar para actualizarlos.</span>`
+      : '<span class="aviso">⚠ Ojo: el <b>Stock</b> y <b>En OCs pend.</b> de esta tabla salen de los datos de P&C, que ya no se actualizan. '
+      + 'Importá desde Core (pantalla Forecast) para que el faltante sea confiable.</span>';
   }
   _mesesPanelInit();
   _mesesLabel();
