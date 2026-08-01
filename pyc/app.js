@@ -5,8 +5,16 @@
 // Acá quedan en solo lectura: si se crearan de los dos lados, colisionarían los números.
 // El resto (MPS, MRP, semáforo, fazón) sigue operativo.
 const OCS_EN_CORE = true;
+// El fazón también: Core mueve los lotes a consignación NUTRATEC y descuenta el
+// consumo al ingresar el PT, así que su stock ya no se infla (F4, 1-ago-2026).
+const OFS_EN_CORE = true;
 function _bloqueadoOC(que = 'Las órdenes de compra') {
   if (!OCS_EN_CORE) return false;
+  toast(`${que} se gestionan en Fine Core`, '🔒', 4000);
+  return true;
+}
+function _bloqueadoOF(que = 'Las órdenes a fazón') {
+  if (!OFS_EN_CORE) return false;
   toast(`${que} se gestionan en Fine Core`, '🔒', 4000);
   return true;
 }
@@ -521,6 +529,9 @@ function renderStock() {
       </td>
     </tr>`;
   }).join('')).join('');
+  if (OCS_EN_CORE || OFS_EN_CORE) {
+    const bs = document.getElementById('banner-stock'); if (bs) bs.style.display = 'block';
+  }
   document.getElementById('stk-empty').style.display = items.length ? 'none' : 'block';
   renderPag('pag-stock', items.length, STK_PER, stkPage, p => { stkPage = p; renderStock(); });
 }
@@ -1387,7 +1398,8 @@ function renderOFs() {
     const desp = o.fechaDespacho ? fmtVenc(o.fechaDespacho.slice(0, 10)) : '—';
     const b = (fn, txt, cls) => `<button class="btn ${cls} btn-sm" onclick="event.stopPropagation();${fn}">${txt}</button>`;
     let acc = b(`exportarOFPDF('${esc(o.id)}')`, '📄', 'btn-g');
-    if (esTarea) {
+    if (OFS_EN_CORE) { /* solo consulta: queda el PDF */ }
+    else if (esTarea) {
       if (o.estado === 'borrador') acc += b(`enviarOFTareas('${esc(o.id)}')`, '🚚 Enviar', 'btn-p') + b(`eliminarOF('${esc(o.id)}')`, '✕', 'btn-r');
       else if (o.estado !== 'recibida') acc += b(`completarOFTareas('${esc(o.id)}')`, '✓ Completada', 'btn-p');
       else acc += `<span class="mono" style="font-size:10px;color:var(--text3)">✓ hecha</span>`;
@@ -1404,6 +1416,10 @@ function renderOFs() {
       <td class="tc" style="white-space:nowrap">${acc}</td>
     </tr>`;
   }).join('');
+  if (OFS_EN_CORE) {
+    const bn = document.getElementById('banner-ofs'); if (bn) bn.style.display = 'block';
+    const nb = document.getElementById('btn-nueva-of'); if (nb) nb.style.display = 'none';
+  }
   document.getElementById('of-empty').style.display = data.length ? 'none' : 'block';
   renderPag('pag-ofs', data.length, OF_PER, ofPage, p => { ofPage = p; renderOFs(); });
 }
@@ -1461,6 +1477,11 @@ function _ofTotalFazon(o) {
   return (o.productos || []).reduce((s, p) => s + (p.cantidad || 0) * (p.precioFazon || 0), 0);
 }
 function editOF(id) {
+  if (OFS_EN_CORE) setTimeout(() => {
+    document.querySelectorAll('#m-of-nueva input, #m-of-nueva select, #m-of-nueva textarea')
+      .forEach(el => { el.disabled = true; });
+    ['ofn-guardar', 'ofn-del'].forEach(k => { const el = document.getElementById(k); if (el) el.style.display = 'none'; });
+  }, 0);
   const o = DB.ofs[id]; if (!o) return;
   if (o.estado !== 'borrador') { toast('Solo se modifican borradores — esta orden ya fue despachada', '⚠', 3500); return; }
   document.getElementById('m-of-nueva').dataset.editId = id;
@@ -1480,6 +1501,7 @@ function editOF(id) {
   openM('m-of-nueva');
 }
 function nuevaOF() {
+  if (_bloqueadoOF()) return;
   document.getElementById('m-of-nueva').dataset.editId = '';
   document.getElementById('ofn-title').textContent = '+ Nueva Orden a Fazón';
   document.getElementById('ofn-guardar').textContent = 'Crear orden';
@@ -1525,6 +1547,7 @@ function ofnPreview() {
     <div class="tbl-wrap"><table><thead><tr><th>Código</th><th>Insumo</th><th class="tr">Cant. total</th><th>Lo consumen</th><th class="tc">Stock</th></tr></thead><tbody>${filas}</tbody></table></div>`;
 }
 function guardarOF() {
+  if (_bloqueadoOF()) return;
   const fazon = document.getElementById('ofn-fazon').value.trim() || 'Nutratec';
   const tipo = document.getElementById('ofn-tipo').value;
   const editId = document.getElementById('m-of-nueva').dataset.editId || '';
@@ -1551,18 +1574,21 @@ function guardarOF() {
   closeM('m-of-nueva'); renderOFs(); toast((prev ? 'Orden actualizada · ' : 'Orden creada · ') + DB.ofs[id].nro, '📋');
 }
 function enviarOFTareas(id) {
+  if (_bloqueadoOF()) return;
   const o = DB.ofs[id]; if (!o || o.tipo !== 'tareas') return;
   if (!confirm(`¿Marcar la ${o.nro} como enviada a ${o.fazon}?`)) return;
   putRec('ofs', id, { ...o, estado: 'despachada', fechaDespacho: new Date().toISOString() });
   renderOFs(); toast(`🚚 ${o.nro} enviada a ${o.fazon}`);
 }
 function completarOFTareas(id) {
+  if (_bloqueadoOF()) return;
   const o = DB.ofs[id]; if (!o || o.tipo !== 'tareas') return;
   if (!confirm(`¿Marcar la ${o.nro} como completada?`)) return;
   putRec('ofs', id, { ...o, estado: 'recibida', fechaRecepcion: new Date().toISOString() });
   renderOFs(); toast(`✓ ${o.nro} completada`);
 }
 function eliminarOF(id) {
+  if (_bloqueadoOF()) return;
   const o = DB.ofs[id];
   if (!o || o.estado !== 'borrador') { toast('Solo se eliminan borradores', '⚠'); return; }
   if (!confirm('¿Eliminar la ' + o.nro + '?')) return;
@@ -1571,6 +1597,7 @@ function eliminarOF(id) {
 
 // ── Despacho: transfiere lotes a "Nutratec" (abiertos → FEFO) ──
 function abrirDespachoOF(id) {
+  if (_bloqueadoOF('Los despachos a fazón')) return;
   const o = DB.ofs[id]; if (!o) return;
   document.getElementById('ofd-id').value = id;
   document.getElementById('ofd-sub').textContent = `· ${o.nro} · ${(o.productos || []).map(p => p.nombre).join(', ').slice(0, 60)}`;
@@ -1604,6 +1631,7 @@ function ofdReplan(i) {
   document.getElementById('ofd-plan-' + i).innerHTML = html;
 }
 function confirmarDespachoOF() {
+  if (_bloqueadoOF('Los despachos a fazón')) return;
   const id = document.getElementById('ofd-id').value;
   const o = DB.ofs[id]; if (!o) return;
   const lineas = o.lineas.map((l, i) => {
@@ -1630,6 +1658,7 @@ function confirmarDespachoOF() {
   toast(`🚚 ${o.nro} despachada — insumos transferidos a Nutratec`, '✓', 4000);
 }
 function marcarProduccionOF(id) {
+  if (_bloqueadoOF()) return;
   const o = DB.ofs[id]; if (!o) return;
   putRec('ofs', id, { ...o, estado: 'produccion' });
   renderOFs(); toast(o.nro + ' en producción', '⚙');
@@ -1637,6 +1666,7 @@ function marcarProduccionOF(id) {
 
 // ── Recepción de PT: consume BOM × producido desde Nutratec ──
 function abrirRecepcionOF(id) {
+  if (_bloqueadoOF('Los ingresos de producto terminado')) return;
   const o = DB.ofs[id]; if (!o) return;
   document.getElementById('ofr-id').value = id;
   document.getElementById('ofr-sub').textContent = '· ' + o.nro;
@@ -1653,6 +1683,7 @@ function abrirRecepcionOF(id) {
   openM('m-of-rec');
 }
 function confirmarRecepcionOF() {
+  if (_bloqueadoOF('Los ingresos de producto terminado')) return;
   const id = document.getElementById('ofr-id').value;
   const o = DB.ofs[id]; if (!o) return;
   const recs = []; let algo = false;

@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260801-4';
+  var VER = '20260801-5';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260801-4">
+<link rel="stylesheet" href="styles.css?v=20260801-5">
 </head>
 <body>
 <div class="layout">
@@ -204,8 +204,13 @@
               <option value="recibida">Recibida</option>
             </select>
             <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-ofs" placeholder="Buscar OF o producto…" oninput="ofPage=1;renderOFs()"></div>
-            <button class="btn btn-p" onclick="nuevaOF()">+ Nueva orden</button>
+            <button class="btn btn-p" id="btn-nueva-of" onclick="nuevaOF()">+ Nueva orden</button>
           </div>
+        </div>
+        <div class="banner-core" id="banner-ofs" style="display:none">
+          <b>Las órdenes a fazón ahora se gestionan en Fine Core.</b>
+          Acá quedan en <b>solo lectura</b> como histórico, con su PDF. El despacho mueve los insumos a
+          consignación en Nutratec y el ingreso de producto terminado descuenta el consumo — todo eso vive en Core.
         </div>
         <div class="kpis" id="of-kpis"></div>
         <div class="tbl-wrap"><table>
@@ -345,6 +350,12 @@
             <button class="btn btn-g" onclick="abrirPosiciones()">📍 Posiciones</button>
             <button class="btn btn-p" onclick="editLote('')">+ Ingreso manual</button>
           </div>
+        </div>
+        <div class="banner-core" id="banner-stock" style="display:none">
+          <b>El stock vivo está en Fine Core.</b>
+          Lo que se ve acá es la foto del último recuento con su detalle de lotes, vencimientos y ubicaciones:
+          <b>ya no se actualiza</b>, porque las recepciones y el fazón se operan en Core.
+          El MRP no usa estos números — usa los que trae el contrato.
         </div>
         <div class="kpis" id="stk-kpis"></div>
         <div class="tbl-wrap"><table>
@@ -779,8 +790,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js?v=20260801-4"></script>
-<script src="store.js?v=20260801-4"></script>
-<script src="app.js?v=20260801-4"></script>
+<script src="data.js?v=20260801-5"></script>
+<script src="store.js?v=20260801-5"></script>
+<script src="app.js?v=20260801-5"></script>
 </body>
 </html>
