@@ -1861,6 +1861,100 @@ function importarForecastCSV() {
   fr.readAsText(file);
 }
 
+// ── IMPORTAR DESDE FINE CORE (contrato GET /api/pyc/contrato) ──
+// El mes en curso llega con el forecast COMPLETO; acá le restamos lo ya vendido,
+// porque el stock de PT de hoy ya absorbió esas ventas (si no, se produce de más).
+function abrirImportCore() {
+  document.getElementById('mic-json').value = '';
+  document.getElementById('mic-preview').innerHTML = '';
+  document.getElementById('mic-btn').disabled = true;
+  openM('m-import-core');
+}
+function _leerContrato(txt) {
+  const c = JSON.parse(txt);
+  if (!c || typeof c !== 'object') throw new Error('el JSON no es un objeto');
+  const mesCurso = c.mes_curso || mesesHorizonte(1)[0];
+  const vend = c.vendido_mes_curso || {};
+  const avisos = [];
+  const skusPyC = new Set(prodsPlan().map(p => p.sku));
+
+  const forecast = (c.forecast || []).map(f => {
+    const sku = String(f.sku || '').toUpperCase();
+    const mes = String(f.mes || '');
+    const full = Number(f.unidades) || 0;
+    const esCurso = mes === mesCurso;
+    const vendido = esCurso ? (Number(vend[f.sku] ?? vend[sku]) || 0) : 0;
+    return { sku, mes, unidades: Math.max(0, Math.round(full - vendido)), full, vendido, esCurso };
+  }).filter(f => f.sku && /^\d{4}-\d{2}$/.test(f.mes));
+
+  const stock = Object.entries(c.stock_pt || {}).map(([sku, v]) => ({
+    sku: String(sku).toUpperCase(),
+    unidades: Number(typeof v === 'object' ? v.total : v) || 0,
+  }));
+
+  // avisos: SKUs que llegan y no existen acá, y productos nuestros que Core no manda
+  const llegan = new Set([...forecast.map(f => f.sku), ...stock.map(s => s.sku)]);
+  const sobran = [...llegan].filter(s => !skusPyC.has(s));
+  const faltan = [...skusPyC].filter(s => !llegan.has(s));
+  if (sobran.length) avisos.push(`${sobran.length} SKU sin producto en P&C (se importan igual, no los usa nadie): ${sobran.slice(0, 6).join(', ')}${sobran.length > 6 ? '…' : ''}`);
+  if (faltan.length) avisos.push(`${faltan.length} producto(s) de P&C sin datos en Core — quedan con lo que ya tenían: ${faltan.slice(0, 6).join(', ')}${faltan.length > 6 ? '…' : ''}`);
+  if (!forecast.length && !stock.length) throw new Error('el JSON no trae ni forecast ni stock_pt');
+
+  // Guarda: mientras Core termine de cargar meses, un 0 que llega no debe borrar
+  // un forecast cargado a mano. Se marcan para que se puedan excluir del import.
+  const pisan = forecast.filter(f => f.unidades === 0 && (DB.forecast[`${f.sku}|${f.mes}`]?.unidades || 0) > 0);
+  if (!forecast.length) avisos.push('El JSON no trae forecast — se importan solo stock de PT y ritmo. El forecast queda como está.');
+
+  return { mesCurso, forecast, stock, pisan, ritmo: c.ritmo_30d || null, generado: c.generado || '', avisos };
+}
+function previewImportCore() {
+  const txt = document.getElementById('mic-json').value.trim();
+  const box = document.getElementById('mic-preview');
+  const btn = document.getElementById('mic-btn');
+  if (!txt) { box.innerHTML = ''; btn.disabled = true; return; }
+  let d;
+  try { d = _leerContrato(txt); }
+  catch (e) { box.innerHTML = `<div class="pill pill-red">⚠ ${esc(e.message || String(e))}</div>`; btn.disabled = true; return; }
+  window._contratoCore = d;
+  btn.disabled = false;
+  const ajust = d.forecast.filter(f => f.esCurso && f.vendido > 0);
+  box.innerHTML = `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--bg3)">
+      <div style="margin-bottom:6px"><b>${d.forecast.length}</b> celdas de forecast ·
+        <b>${d.stock.length}</b> stock de PT ·
+        <b>${d.ritmo ? Object.keys(d.ritmo).length : 0}</b> ritmo 30d</div>
+      <div style="color:var(--text3);font-size:11px">Mes en curso: <b class="mono">${esc(d.mesCurso)}</b>${d.generado ? ` · generado ${esc(String(d.generado).slice(0, 16).replace('T', ' '))}` : ''}</div>
+      ${ajust.length ? `<div style="margin-top:8px;font-size:11px">
+        <div style="color:var(--text3);margin-bottom:3px">Descuento del mes en curso (forecast − vendido):</div>
+        ${ajust.slice(0, 8).map(f => `<div class="mono" style="font-size:10.5px">${esc(f.sku)}: ${fmt(f.full, 0)} − ${fmt(f.vendido, 0)} = <b>${fmt(f.unidades, 0)}</b></div>`).join('')}
+        ${ajust.length > 8 ? `<div style="color:var(--text3)">…y ${ajust.length - 8} más</div>` : ''}
+      </div>` : ''}
+      ${d.avisos.map(a => `<div style="margin-top:7px;color:var(--orange);font-size:11px">⚠ ${esc(a)}</div>`).join('')}
+      ${d.pisan.length ? `<div style="margin-top:9px;padding-top:9px;border-top:1px solid var(--border)">
+        <label style="display:flex;gap:7px;align-items:flex-start;cursor:pointer;font-size:11px;color:var(--red)">
+          <input type="checkbox" id="mic-pisar" style="margin-top:2px">
+          <span><b>${d.pisan.length} celda(s) llegan en 0 y acá tienen valor cargado.</b>
+          Por defecto <b>no se tocan</b>. Tildá solo si querés que Core las ponga en cero.
+          <span class="mono" style="font-size:10px;color:var(--text3)">${d.pisan.slice(0, 5).map(f => esc(f.sku) + ' ' + esc(f.mes)).join(' · ')}${d.pisan.length > 5 ? '…' : ''}</span></span>
+        </label></div>` : ''}
+    </div>`;
+}
+function confirmarImportCore() {
+  const d = window._contratoCore;
+  if (!d) return;
+  const pisar = document.getElementById('mic-pisar')?.checked;
+  const excluir = pisar ? new Set() : new Set(d.pisan.map(f => `${f.sku}|${f.mes}`));
+  d.forecast.filter(f => !excluir.has(`${f.sku}|${f.mes}`))
+    .forEach(f => putRec('forecast', `${f.sku}|${f.mes}`, { id: `${f.sku}|${f.mes}`, sku: f.sku, mes: f.mes, unidades: f.unidades }));
+  d.stock.forEach(s => putRec('stockpt', s.sku, { id: s.sku, sku: s.sku, unidades: s.unidades, fecha: hoyISO() }));
+  if (d.ritmo) putRec('config', 'ritmo30d', { id: 'ritmo30d', datos: d.ritmo, fecha: hoyISO() });
+  window._contratoCore = null;
+  closeM('m-import-core');
+  renderForecast();
+  const n = d.forecast.length - excluir.size;
+  toast(`Importado de Core · ${n} celdas de forecast y ${d.stock.length} stocks${excluir.size ? ` · ${excluir.size} preservadas` : ''}`, '⇄', 4200);
+}
+
 // ── MPS · matriz estilo Excel: filas = productos, bloques de columnas por mes ──
 function renderMPS() {
   const prods = prodsPlan();

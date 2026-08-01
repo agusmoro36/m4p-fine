@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260728-9';
+  var VER = '20260801-2';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260728-9">
+<link rel="stylesheet" href="styles.css?v=20260801-2">
 </head>
 <body>
 <div class="layout">
@@ -222,11 +222,12 @@
         <div class="sh">
           <div class="sh-title">Forecast <small>· demanda de PT desde Fine Core + stock actual</small></div>
           <div class="sh-actions">
+            <button class="btn btn-p" onclick="abrirImportCore()">⇄ Importar desde Core</button>
             <button class="btn btn-g" onclick="document.getElementById('fc-file').click()">📥 Importar CSV</button>
             <input type="file" id="fc-file" accept=".csv,.txt" style="display:none" onchange="importarForecastCSV()">
           </div>
         </div>
-        <p style="font-size:12px;color:var(--text3);margin:-6px 0 14px">Editá las celdas a mano o importá el CSV de Fine Core (formato: <span class="mono" style="font-size:10px">SKU, mes (aaaa-mm), unidades</span> — o una fila por SKU con columnas por mes). El <b>stock PT actual</b> también viene de Fine Core. Cuando haya acceso a la API, esto se llenará solo.</p>
+        <p style="font-size:12px;color:var(--text3);margin:-6px 0 14px"><b>⇄ Importar desde Core</b> es la vía recomendada: traés forecast, stock de PT y ritmo de venta de una sola vez. También podés editar las celdas a mano o importar un CSV (<span class="mono" style="font-size:10px">SKU, mes (aaaa-mm), unidades</span>, o una fila por SKU con columnas por mes).</p>
         <div class="kpis" id="fc-kpis"></div>
         <div class="tbl-wrap" style="overflow-x:auto"><table style="min-width:1000px">
           <thead id="fc-head"></thead>
@@ -740,6 +741,27 @@
   </div>
 </div>
 
+<!-- ══ MODAL IMPORTAR DESDE CORE ══ -->
+<div class="overlay" id="m-import-core">
+  <div class="modal" style="max-width:640px">
+    <button class="modal-close" onclick="closeM('m-import-core')">✕</button>
+    <div class="modal-title">⇄ Importar desde Fine Core</div>
+    <p style="font-size:12px;color:var(--text3);margin:0 0 12px">
+      Abrí <span class="mono" style="font-size:11px">/api/pyc/contrato</span> en Core (logueada), copiá todo el JSON y pegalo acá.
+      Trae <b>forecast</b>, <b>stock de PT</b> y <b>ritmo de venta 30d</b>.
+      Del mes en curso se descuenta lo ya vendido — el stock de hoy ya lo absorbió.
+    </p>
+    <textarea id="mic-json" rows="10" placeholder='{ "generado": "…", "mes_curso": "2026-08", "forecast": [ … ], … }'
+      style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-family:var(--mono);font-size:11px;color:var(--text);outline:none"
+      oninput="previewImportCore()"></textarea>
+    <div id="mic-preview" style="margin-top:12px;font-size:12px"></div>
+    <div class="modal-footer">
+      <button class="btn btn-g" onclick="closeM('m-import-core')">Cancelar</button>
+      <button class="btn btn-p" id="mic-btn" onclick="confirmarImportCore()" disabled>Importar</button>
+    </div>
+  </div>
+</div>
+
 <datalist id="dl-insumos"></datalist>
 <datalist id="dl-posiciones"></datalist>
 
@@ -747,8 +769,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js?v=20260728-9"></script>
-<script src="store.js?v=20260728-9"></script>
-<script src="app.js?v=20260728-9"></script>
+<script src="data.js?v=20260801-2"></script>
+<script src="store.js?v=20260801-2"></script>
+<script src="app.js?v=20260801-2"></script>
 </body>
 </html>
