@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260801-2';
+  var VER = '20260801-3';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260801-2">
+<link rel="stylesheet" href="styles.css?v=20260801-3">
 </head>
 <body>
 <div class="layout">
@@ -167,8 +167,13 @@
             </select>
             <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-ocs" placeholder="Buscar OC, insumo o proveedor…" oninput="ocPage=1;renderOCs()"></div>
             <button class="btn btn-g" onclick="abrirEmpresa()" title="Razón social y CUIT que salen en el PDF de las OCs">🏢 Datos de la empresa</button>
-            <button class="btn btn-p" onclick="editOC('')">+ Nueva OC</button>
+            <button class="btn btn-p" id="btn-nueva-oc" onclick="editOC('')">+ Nueva OC</button>
           </div>
+        </div>
+        <div class="banner-core" id="banner-ocs" style="display:none">
+          <b>Las OCs ahora se gestionan en Fine Core.</b>
+          Acá quedan en <b>solo lectura</b> como histórico: se pueden consultar y exportar el PDF, pero no crear,
+          editar ni recibir. Las nuevas órdenes, sus recepciones y sus facturas van por Core.
         </div>
         <div class="kpis" id="oc-kpis"></div>
         <div class="tbl-wrap"><table>
@@ -266,8 +271,13 @@
               <div id="prop-meses-panel" style="display:none;position:absolute;top:110%;left:0;z-index:50;background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:10px 14px;box-shadow:0 6px 24px rgba(0,0,0,.15);min-width:180px"></div>
             </div>
             <button class="btn btn-p" onclick="correrMRP()">▶ Correr MRP</button>
-            <button class="btn btn-g" onclick="crearOCsPropuestas()">⚡ Generar OCs por proveedor</button>
+            <button class="btn btn-g" id="btn-gen-ocs" onclick="crearOCsPropuestas()">⚡ Generar OCs por proveedor</button>
           </div>
+        </div>
+        <div class="banner-core" id="banner-prop" style="display:none">
+          <b>El MRP sigue funcionando acá; las OCs se cargan en Core.</b>
+          Corré la explosión, mirá el faltante y el proveedor sugerido, y cargá esas órdenes en Fine Core.
+          <span id="banner-prop-stock"></span>
         </div>
         <p style="font-size:12px;color:var(--text3);margin:-6px 0 14px">Explota el plan del MPS contra el stock total (incluye Nutratec) y las OCs pendientes de entrega. "Generar OCs" crea <b>borradores</b> agrupados por proveedor: quedan acá abajo para editar y confirmar — recién al confirmarlas pasan a Órdenes de Compra.</p>
         <div class="kpis" id="prop-kpis"></div>
@@ -769,8 +779,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js?v=20260801-2"></script>
-<script src="store.js?v=20260801-2"></script>
-<script src="app.js?v=20260801-2"></script>
+<script src="data.js?v=20260801-3"></script>
+<script src="store.js?v=20260801-3"></script>
+<script src="app.js?v=20260801-3"></script>
 </body>
 </html>

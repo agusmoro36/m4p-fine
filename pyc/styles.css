@@ -166,3 +166,12 @@ td.num{font-family:var(--mono);font-size:12.5px;text-align:right}
 .cob-y{background:var(--yellow-dim);color:var(--yellow)}
 .cob-g{background:var(--green-dim);color:var(--green)}
 .cob-n{color:var(--text3)}
+
+/* Banner de módulo migrado a Fine Core */
+.banner-core{
+  background:var(--gold-dim);border:1px solid var(--border2);border-left:3px solid var(--gold);
+  border-radius:var(--r);padding:11px 15px;margin:0 0 14px;
+  font-size:13px;line-height:1.55;color:var(--text2);
+}
+.banner-core b{color:var(--text)}
+.banner-core .aviso{display:block;margin-top:6px;color:var(--orange);font-size:12px}
