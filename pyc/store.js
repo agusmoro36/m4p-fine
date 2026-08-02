@@ -20,6 +20,8 @@ const DB = {
   stockpt: {},      // id SKU → {id,sku,unidades,fecha,updatedAt}  (stock PT actual de Fine Core)
   mps: {},          // id `PT-xxxx|aaaa-mm` → {id,cod,mes,cantidad,manual:true} overrides del plan
   movimientos: {},  // id → {id,fecha,tipo,codigo,nombre,cantidad,desde,hacia,ref,updatedAt}
+  regdocs: {},      // id → registros/habilitaciones vigentes {id,tipo,nombre,alcance,producto,pais,organismo,numero,emision,vencimiento,alertaDias,responsable,estado,obs,updatedAt}
+  regtramites: {},  // id → trámites regulatorios en curso {id,tipo,nombre,alcance,producto,pais,organismo,estado,inicio,presentado,resuelto,expediente,responsable,costo,requisitos[],docId?,updatedAt}
   config: {},       // posiciones → {id:'posiciones', lista:[...]}
 };
 const COLLS = Object.keys(DB);

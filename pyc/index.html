@@ -7,7 +7,7 @@
 <script>
 // Auto cache-busting: fuerza recarga cuando hay versión nueva desplegada
 (function(){
-  var VER = '20260801-5';
+  var VER = '20260801-6';
   try {
     var url = new URL(window.location.href);
     if (url.searchParams.get('v') !== VER) {
@@ -20,7 +20,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css?v=20260801-5">
+<link rel="stylesheet" href="styles.css?v=20260801-6">
 </head>
 <body>
 <div class="layout">
@@ -49,6 +49,10 @@
       <div class="nav-group" onclick="toggleNavGroup(this)">Planificación</div>
       <div class="nav-item" data-page="forecast" onclick="go('forecast')"><span class="nav-ico">📈</span>Forecast</div>
       <div class="nav-item" data-page="mps" onclick="go('mps')"><span class="nav-ico">🗓</span>Plan Fazón (MPS)</div>
+
+      <div class="nav-group" onclick="toggleNavGroup(this)">Regulatorio</div>
+      <div class="nav-item" data-page="regdocs" onclick="go('regdocs')"><span class="nav-ico">📜</span>Registros y Habilitaciones<span class="nav-badge" id="reg-badge"></span></div>
+      <div class="nav-item" data-page="regtramites" onclick="go('regtramites')"><span class="nav-ico">🗂</span>Trámites</div>
 
       <div class="nav-group" onclick="toggleNavGroup(this)">Reportes</div>
       <div class="nav-item" data-page="semaforo" onclick="go('semaforo')"><span class="nav-ico">🚦</span>Semáforo Insumos</div>
@@ -429,6 +433,74 @@
         </div>
       </div>
 
+      <!-- ══ REGISTROS Y HABILITACIONES ══ -->
+      <div class="page" id="page-regdocs">
+        <div class="sh">
+          <div class="sh-title">Registros y Habilitaciones <small>· lo que está vigente y cuándo vence</small></div>
+          <div class="sh-actions">
+            <select class="fsel" id="f-rd-alcance" onchange="rdPage=1;renderRegDocs()">
+              <option value="">Todos los alcances</option>
+            </select>
+            <select class="fsel" id="f-rd-venc" onchange="rdPage=1;renderRegDocs()">
+              <option value="">Todos los estados</option>
+              <option value="vencido">✕ Vencidos</option>
+              <option value="alerta">⚠ Por vencer</option>
+              <option value="vigente">✓ Vigentes</option>
+              <option value="baja">○ Dados de baja</option>
+            </select>
+            <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-regdocs" placeholder="Buscar tipo, número, organismo…" oninput="rdPage=1;renderRegDocs()"></div>
+            <button class="btn btn-g" onclick="exportarRegDocs()">↓ CSV</button>
+            <button class="btn btn-p" onclick="editRegDoc('')">+ Nuevo registro</button>
+          </div>
+        </div>
+        <div class="kpis" id="rd-kpis"></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr>
+            <th class="tc">Vencimiento</th><th>Tipo</th><th>Detalle</th><th>Alcance</th>
+            <th>Organismo</th><th>Número</th><th class="tc">Emisión</th><th class="tc">Vence</th><th>Responsable</th>
+          </tr></thead>
+          <tbody id="tbl-regdocs"></tbody>
+        </table></div>
+        <div class="pag" id="pag-regdocs"></div>
+        <div class="empty" id="rd-empty" style="display:none">
+          <div class="empty-ico">📜</div><div class="empty-t">Todavía no hay registros cargados</div>
+          <div class="empty-s">Cargá acá el RNE, las habilitaciones del depósito, los matafuegos, los RNPA de cada producto<br>y los certificados de libre venta. El sistema avisa antes de que venzan.</div>
+        </div>
+      </div>
+
+      <!-- ══ TRÁMITES REGULATORIOS ══ -->
+      <div class="page" id="page-regtramites">
+        <div class="sh">
+          <div class="sh-title">Trámites Regulatorios <small>· lanzamientos y renovaciones en curso</small></div>
+          <div class="sh-actions">
+            <select class="fsel" id="f-rt-estado" onchange="rtPage=1;renderRegTramites()">
+              <option value="abiertos">En curso (sin cerrar)</option>
+              <option value="">Todos</option>
+              <option value="preparacion">📝 En preparación</option>
+              <option value="presentado">📤 Presentado</option>
+              <option value="observado">⚠ Observado</option>
+              <option value="aprobado">✓ Aprobado</option>
+              <option value="rechazado">✕ Rechazado</option>
+            </select>
+            <div class="search-box"><span class="search-ico">⌕</span><input type="text" id="s-regtram" placeholder="Buscar trámite, producto, expediente…" oninput="rtPage=1;renderRegTramites()"></div>
+            <button class="btn btn-p" onclick="editRegTramite('')">+ Nuevo trámite</button>
+          </div>
+        </div>
+        <div class="kpis" id="rt-kpis"></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr>
+            <th class="tc">Estado</th><th>Trámite</th><th>Alcance</th><th>Organismo</th>
+            <th class="tc">Requisitos</th><th class="tc">Inicio</th><th class="tc">Presentado</th><th class="tc">Días</th><th>Responsable</th>
+          </tr></thead>
+          <tbody id="tbl-regtram"></tbody>
+        </table></div>
+        <div class="pag" id="pag-regtram"></div>
+        <div class="empty" id="rt-empty" style="display:none">
+          <div class="empty-ico">🗂</div><div class="empty-t">No hay trámites con ese filtro</div>
+          <div class="empty-s">Un trámite es el expediente en curso: el RNPA de un producto nuevo,<br>la renovación de una habilitación, la aprobación de un rótulo.</div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -783,15 +855,104 @@
   </div>
 </div>
 
+<!-- ══ MODAL REGISTRO / HABILITACIÓN ══ -->
+<div class="overlay" id="m-regdoc">
+  <div class="modal" style="max-width:680px;width:94vw">
+    <button class="modal-close" onclick="closeM('m-regdoc')">✕</button>
+    <div class="modal-title"><span id="rdm-title">Registro / habilitación</span></div>
+    <div class="fg" style="grid-template-columns:1fr 1fr;margin-bottom:12px">
+      <div class="fl"><label>Tipo</label><select class="fsel" id="rdm-tipo" onchange="rdmTipoChange()" style="width:100%"></select></div>
+      <div class="fl"><label>Alcance · a qué aplica</label><select class="fsel" id="rdm-alcance" onchange="rdmAlcanceChange()" style="width:100%"></select></div>
+      <div class="fl fg-full" id="rdm-prod-wrap" style="display:none"><label>Producto</label>
+        <select class="fsel" id="rdm-producto" style="width:100%"></select></div>
+      <div class="fl fg-full"><label>Detalle · cómo lo reconocés</label>
+        <input type="text" id="rdm-nombre" placeholder="ej: Matafuegos depósito Ruta 8 · 4 extintores ABC"></div>
+      <div class="fl"><label>Organismo</label><input type="text" id="rdm-organismo" list="dl-organismos" placeholder="ANMAT / Municipalidad…"></div>
+      <div class="fl"><label>Número / expediente</label><input type="text" id="rdm-numero" placeholder="ej: RNPA 04-123456" style="font-family:var(--mono)"></div>
+      <div class="fl"><label>País (solo export)</label><input type="text" id="rdm-pais" placeholder="Argentina / Chile / Uruguay…"></div>
+      <div class="fl"><label>Responsable</label><input type="text" id="rdm-resp" placeholder="quién lo gestiona"></div>
+      <div class="fl"><label>Fecha de emisión</label><input type="date" id="rdm-emision"></div>
+      <div class="fl"><label>Fecha de vencimiento</label><input type="date" id="rdm-venc"></div>
+      <div class="fl"><label>Avisar con (días de anticipación)</label><input type="number" id="rdm-alerta" min="0" placeholder="60"></div>
+      <div class="fl"><label>Estado</label><select class="fsel" id="rdm-estado" style="width:100%">
+        <option value="vigente">✓ Vigente</option>
+        <option value="baja">○ Dado de baja / reemplazado</option>
+      </select></div>
+      <div class="fl fg-full"><label>Observaciones · dónde está el papel</label>
+        <textarea id="rdm-obs" rows="2" placeholder="ej: original en carpeta regulatoria, copia escaneada en Drive"></textarea></div>
+    </div>
+    <p style="font-size:11.5px;color:var(--text3);margin:0" id="rdm-hint"></p>
+    <div class="modal-footer">
+      <button class="btn btn-r" id="rdm-del" onclick="borrarRegDoc()">🗑 Eliminar</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-g" id="rdm-renov" onclick="renovarRegDoc()">↻ Iniciar renovación</button>
+      <button class="btn btn-g" onclick="closeM('m-regdoc')">Cerrar</button>
+      <button class="btn btn-p" onclick="guardarRegDoc()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL TRÁMITE REGULATORIO ══ -->
+<div class="overlay" id="m-regtram">
+  <div class="modal" style="max-width:760px;width:95vw">
+    <button class="modal-close" onclick="closeM('m-regtram')">✕</button>
+    <div class="modal-title"><span id="rtm-title">Trámite regulatorio</span></div>
+    <div class="fg" style="grid-template-columns:1fr 1fr;margin-bottom:10px">
+      <div class="fl"><label>Tipo de trámite</label><select class="fsel" id="rtm-tipo" onchange="rtmTipoChange()" style="width:100%"></select></div>
+      <div class="fl"><label>Alcance · a qué aplica</label><select class="fsel" id="rtm-alcance" onchange="rtmAlcanceChange()" style="width:100%"></select></div>
+      <div class="fl fg-full" id="rtm-prod-wrap" style="display:none"><label>Producto</label>
+        <select class="fsel" id="rtm-producto" style="width:100%"></select></div>
+      <div class="fl fg-full"><label>Detalle</label>
+        <input type="text" id="rtm-nombre" placeholder="ej: RNPA Morning Boost — primer lanzamiento"></div>
+      <div class="fl"><label>Organismo</label><input type="text" id="rtm-organismo" list="dl-organismos" placeholder="ANMAT / INAL…"></div>
+      <div class="fl"><label>Expediente</label><input type="text" id="rtm-exped" placeholder="nº de expediente" style="font-family:var(--mono)"></div>
+      <div class="fl"><label>Estado</label><select class="fsel" id="rtm-estado" style="width:100%">
+        <option value="preparacion">📝 En preparación</option>
+        <option value="presentado">📤 Presentado</option>
+        <option value="observado">⚠ Observado — hay que responder</option>
+        <option value="aprobado">✓ Aprobado</option>
+        <option value="rechazado">✕ Rechazado / desistido</option>
+      </select></div>
+      <div class="fl"><label>Responsable</label><input type="text" id="rtm-resp" placeholder="quién lo gestiona"></div>
+      <div class="fl"><label>Inicio</label><input type="date" id="rtm-inicio"></div>
+      <div class="fl"><label>Presentado el</label><input type="date" id="rtm-present"></div>
+      <div class="fl"><label>Resuelto el</label><input type="date" id="rtm-resuelto"></div>
+      <div class="fl"><label>Costo estimado (ARS)</label><input type="number" id="rtm-costo" min="0" step="any"></div>
+      <div class="fl fg-full"><label>Observaciones · qué observó el organismo, qué falta</label>
+        <textarea id="rtm-obs" rows="2"></textarea></div>
+    </div>
+    <div class="form-sec">Requisitos a presentar
+      <span style="float:right">
+        <button class="btn btn-g btn-sm" onclick="rtmPlantilla()">↺ Checklist estándar del tipo</button>
+        <button class="btn btn-p btn-sm" onclick="rtmAddReq()">+ Agregar requisito</button>
+      </span></div>
+    <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <div style="max-height:34vh;overflow-y:auto"><table>
+        <thead><tr><th class="tc" style="width:44px">✓</th><th>Requisito</th><th style="width:210px">Nota</th><th style="width:30px"></th></tr></thead>
+        <tbody id="rtm-reqs"></tbody>
+      </table></div>
+    </div>
+    <p style="font-size:11.5px;color:var(--text3);margin:10px 0 0" id="rtm-hint"></p>
+    <div class="modal-footer">
+      <button class="btn btn-r" id="rtm-del" onclick="borrarRegTramite()">🗑 Eliminar</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-g" id="rtm-emitir" onclick="emitirDesdeTramite()">📜 Cargar el certificado obtenido</button>
+      <button class="btn btn-g" onclick="closeM('m-regtram')">Cerrar</button>
+      <button class="btn btn-p" onclick="guardarRegTramite()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <datalist id="dl-insumos"></datalist>
 <datalist id="dl-posiciones"></datalist>
+<datalist id="dl-organismos"></datalist>
 
 <div id="toasts"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js?v=20260801-5"></script>
-<script src="store.js?v=20260801-5"></script>
-<script src="app.js?v=20260801-5"></script>
+<script src="data.js?v=20260801-6"></script>
+<script src="store.js?v=20260801-6"></script>
+<script src="app.js?v=20260801-6"></script>
 </body>
 </html>

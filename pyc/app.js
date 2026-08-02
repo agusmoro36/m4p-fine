@@ -41,6 +41,7 @@ const TITLES = {
   stock: 'Stock de Insumos', historial: 'Historial de Movimientos', calculadora: 'Calculadora MRP',
   ocs: 'Órdenes de Compra', ofs: 'Órdenes a Fazón',
   forecast: 'Forecast', mps: 'Plan de Producción Fazón (MPS)', propuestas: 'OCs Propuestas', semaforo: 'Semáforo de Insumos',
+  regdocs: 'Registros y Habilitaciones', regtramites: 'Trámites Regulatorios',
 };
 function go(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -54,7 +55,8 @@ function go(id) {
   document.getElementById('tb-title').innerHTML = `${TITLES[id] || id} <span>· Fine Planificación y Compras</span>`;
   const renders = { minsumos: renderInsumos, mproveedores: renderProveedores, mproductos: renderProductos,
     stock: renderStock, historial: renderHistorial, calculadora: renderCalc, ocs: renderOCs, ofs: renderOFs,
-    forecast: renderForecast, mps: renderMPS, propuestas: renderPropuestas, semaforo: renderSemaforo };
+    forecast: renderForecast, mps: renderMPS, propuestas: renderPropuestas, semaforo: renderSemaforo,
+    regdocs: renderRegDocs, regtramites: renderRegTramites };
   renders[id]?.();
 }
 // ── Grupos de menú colapsables (▾) con memoria ──
@@ -2473,9 +2475,508 @@ function renderSemaforo() {
   renderPag('pag-sem', filas.length, PER, semPage, p => { semPage = p; renderSemaforo(); });
 }
 
+// ═══════════════ REGULATORIO ═══════════════
+// Dos entidades que se alimentan entre sí:
+//   `regdocs`     — lo que YA está otorgado y vence (RNE, RNPA, matafuegos, habilitaciones,
+//                   rótulos aprobados, libre venta). Es el calendario de vencimientos.
+//   `regtramites` — el expediente en curso que lo produce: el lanzamiento de un producto nuevo,
+//                   la renovación de una habilitación, la aprobación de un rótulo.
+// Un trámite aprobado emite su regdoc; un regdoc por vencer abre su trámite de renovación.
+// Nada de esto toca insumos ni lotes: los vencimientos de mercadería viven en Fine Core.
+
+// [valor, etiqueta, alcance sugerido, vigencia típica en meses (0 = no vence solo)]
+const REG_TIPOS = [
+  ['RNE',        'RNE · Registro Nacional de Establecimiento', 'Empresa', 60],
+  ['RNPA',       'RNPA · Registro Nacional de Producto Alimenticio', 'Producto', 60],
+  ['Rotulo',     'Rótulo · arte aprobado', 'Producto', 0],
+  ['LibreVenta', 'Certificado de libre venta (export)', 'Producto', 12],
+  ['RegExport',  'Registro en país de destino (export)', 'Producto', 0],
+  ['HabMuni',    'Habilitación municipal', 'Depósito', 12],
+  ['Matafuegos', 'Matafuegos · recarga y control', 'Depósito', 12],
+  ['Bomberos',   'Certificado de bomberos', 'Depósito', 12],
+  ['Plagas',     'Control de plagas', 'Depósito', 6],
+  ['Agua',       'Análisis de potabilidad de agua', 'Depósito', 6],
+  ['Libreta',    'Libretas sanitarias del personal', 'Empresa', 12],
+  ['Seguro',     'Seguro / ART', 'Empresa', 12],
+  ['Efluentes',  'Residuos y efluentes', 'Depósito', 12],
+  ['Otro',       'Otro', 'Empresa', 0],
+];
+const REG_ALCANCES = ['Empresa', 'Depósito', 'Oficina', 'Nutratec (fazón)', 'Producto'];
+const REG_ORGANISMOS = ['ANMAT', 'INAL', 'Municipalidad', 'Bomberos', 'SENASA',
+  'Ministerio de Salud provincial', 'ART / aseguradora', 'Otro'];
+
+// Checklists de arranque por tipo — se cargan con un botón, se editan a mano.
+const REG_CHECKLIST = {
+  RNPA: ['Fórmula cuali-cuantitativa', 'Proyecto de rótulo', 'Memoria descriptiva del proceso',
+    'Análisis fisicoquímico y microbiológico', 'RNE vigente del elaborador',
+    'Especificaciones técnicas de los insumos', 'Formulario y arancel pagos'],
+  RNE: ['Habilitación municipal vigente', 'Plano del establecimiento', 'Memoria descriptiva',
+    'Director técnico designado', 'Formulario y arancel pagos'],
+  Rotulo: ['Arte final en alta', 'Información nutricional calculada', 'Declaración de alérgenos',
+    'Leyendas obligatorias verificadas', 'RNPA del producto vigente'],
+  LibreVenta: ['RNPA vigente del producto', 'Nota de solicitud', 'Arancel pago',
+    'Legalización / apostilla (si el destino la pide)'],
+  RegExport: ['Certificado de libre venta', 'Rótulo traducido al idioma del destino',
+    'Análisis del producto', 'Agente o importador designado en destino'],
+  HabMuni: ['Plano aprobado', 'Certificado de bomberos vigente', 'Libre deuda municipal',
+    'Contrato de locación o título', 'Formulario y tasa pagos'],
+  Matafuegos: ['Relevamiento de extintores por sector', 'Recarga / prueba hidráulica',
+    'Tarjeta y oblea al día', 'Certificado del prestador'],
+  Bomberos: ['Inspección coordinada', 'Matafuegos al día', 'Señalización y salidas verificadas',
+    'Plano de evacuación'],
+  Plagas: ['Servicio contratado', 'Certificado del período', 'Plano de cebaderas',
+    'Registro de monitoreos'],
+  Agua: ['Muestra tomada por laboratorio habilitado', 'Protocolo fisicoquímico',
+    'Protocolo microbiológico'],
+  Libreta: ['Nómina del personal alcanzado', 'Turnos asignados', 'Libretas emitidas y archivadas'],
+  Seguro: ['Póliza vigente', 'Nómina declarada actualizada', 'Comprobante de pago al día'],
+};
+
+const REG_ESTADOS_TRAM = {
+  preparacion: ['📝 En preparación', 'pill-ins'],
+  presentado:  ['📤 Presentado', 'pill-blue'],
+  observado:   ['⚠ Observado', 'pill-orange'],
+  aprobado:    ['✓ Aprobado', 'pill-green'],
+  rechazado:   ['✕ Rechazado', 'pill-red'],
+};
+
+const _regTipo = t => REG_TIPOS.find(x => x[0] === t);
+const _regTipoLbl = t => _regTipo(t)?.[1] || t || '—';
+// El nombre corto es lo que va en la columna: "RNPA", "Matafuegos"…
+const _regTipoCorto = t => (_regTipoLbl(t).split('·')[0] || '').trim();
+
+// Estado de vigencia de un registro: la alerta la define cada registro (alertaDias, 60 por defecto)
+function regEstado(d) {
+  if (d.estado === 'baja') return { k: 'baja', dias: null, pill: '<span class="pill pill-ins">○ de baja</span>' };
+  if (!d.vencimiento) return { k: 'sinvenc', dias: null, pill: '<span class="pill pill-ins">sin vencimiento</span>' };
+  const dias = Math.round((new Date(d.vencimiento + 'T00:00:00') - new Date(hoyISO() + 'T00:00:00')) / 864e5);
+  const av = d.alertaDias ?? 60;
+  if (dias < 0) return { k: 'vencido', dias, pill: `<span class="pill pill-red">✕ vencido hace ${-dias} d</span>` };
+  if (dias <= av) return { k: 'alerta', dias, pill: `<span class="pill pill-orange">⚠ vence en ${dias} d</span>` };
+  // Lejos del vencimiento, los días sueltos no dicen nada: mejor meses o años
+  const resta = dias > 700 ? `${Math.floor(dias / 365)} años` : dias > 60 ? `${Math.round(dias / 30)} meses` : `${dias} d`;
+  return { k: 'vigente', dias, pill: `<span class="pill pill-green">✓ ${resta}</span>` };
+}
+// Suma meses a una fecha ISO cuidando los fines de mes (31-ene + 1 mes = 28/29-feb, no 3-mar)
+function _sumarMeses(iso, meses) {
+  if (!iso || !meses) return '';
+  const [a, m, d] = iso.split('-').map(Number);
+  const t = new Date(a, m - 1 + meses, 1);
+  t.setDate(Math.min(d, new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate()));
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+}
+function _regProdNombre(cod) { return cod ? (DB.productos[cod]?.nombre || cod) : ''; }
+// Alcance mostrable: para los registros de producto, el producto ES el alcance
+function _regAlcanceTxt(r) {
+  return r.alcance === 'Producto' ? (_regProdNombre(r.producto) || 'Producto') : (r.alcance || '—');
+}
+function actualizarBadgeReg() {
+  const el = document.getElementById('reg-badge');
+  if (!el) return;
+  const st = allRecs('regdocs').map(regEstado);
+  const venc = st.filter(s => s.k === 'vencido').length;
+  const tot = venc + st.filter(s => s.k === 'alerta').length;
+  el.textContent = tot || '';
+  el.className = 'nav-badge' + (tot ? ' on' : '') + (venc ? ' crit' : '');
+}
+function _regFillSelect(id, opts, val) {
+  const el = document.getElementById(id);
+  el.innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
+  el.value = val ?? opts[0]?.[0] ?? '';
+}
+function _regFillProductos(id, val) {
+  const el = document.getElementById(id);
+  el.innerHTML = '<option value="">— Seleccionar producto —</option>' +
+    allRecs('productos').sort((a, b) => a.nombre.localeCompare(b.nombre))
+      .map(p => `<option value="${esc(p.codigo)}">${esc(p.nombre)} · ${esc(p.codigo)}</option>`).join('');
+  el.value = val || '';
+}
+function _regFillOrganismos() {
+  const dl = document.getElementById('dl-organismos');
+  if (dl && !dl.children.length) dl.innerHTML = REG_ORGANISMOS.map(o => `<option value="${esc(o)}">`).join('');
+}
+
+// ── Registros y habilitaciones ──
+let rdPage = 1;
+const RD_PER = 20;
+function regDocsFiltrados() {
+  const q = norm(document.getElementById('s-regdocs')?.value || '');
+  const fa = document.getElementById('f-rd-alcance')?.value || '';
+  const fv = document.getElementById('f-rd-venc')?.value || '';
+  return allRecs('regdocs')
+    .map(d => ({ ...d, _st: regEstado(d) }))
+    .filter(d => !fa || d.alcance === fa)
+    .filter(d => !fv || (fv === 'vigente' ? (d._st.k === 'vigente' || d._st.k === 'sinvenc') : d._st.k === fv))
+    .filter(d => !q || [d.nombre, d.numero, d.organismo, _regTipoLbl(d.tipo), _regProdNombre(d.producto), d.pais, d.responsable]
+      .some(v => norm(v).includes(q)))
+    // vencidos primero, después por fecha; los que no vencen, al final
+    .sort((a, b) => (a.vencimiento || '9999').localeCompare(b.vencimiento || '9999'));
+}
+function renderRegDocs() {
+  const fsel = document.getElementById('f-rd-alcance');
+  if (fsel && fsel.options.length <= 1)
+    fsel.innerHTML = '<option value="">Todos los alcances</option>' +
+      REG_ALCANCES.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('');
+  const data = regDocsFiltrados();
+  const all = allRecs('regdocs').map(d => regEstado(d));
+  const venc = all.filter(s => s.k === 'vencido').length;
+  const alerta = all.filter(s => s.k === 'alerta').length;
+  const enCurso = allRecs('regtramites').filter(t => t.estado !== 'aprobado' && t.estado !== 'rechazado').length;
+  document.getElementById('rd-kpis').innerHTML = [
+    ['Registros vigentes', all.filter(s => s.k === 'vigente' || s.k === 'sinvenc').length, 'var(--green)'],
+    ['Por vencer', alerta, alerta ? 'var(--orange)' : 'var(--text3)'],
+    ['Vencidos', venc, venc ? 'var(--red)' : 'var(--text3)'],
+    ['Trámites en curso', enCurso, 'var(--gold)'],
+  ].map(([l, v, c]) => `<div class="kpi"><div class="kpi-acc" style="background:${c}"></div><div class="kpi-l">${l}</div><div class="kpi-v">${v}</div></div>`).join('');
+  const start = (rdPage - 1) * RD_PER;
+  document.getElementById('tbl-regdocs').innerHTML = data.slice(start, start + RD_PER).map(d => `
+    <tr class="clickable" onclick="editRegDoc('${esc(d.id)}')">
+      <td class="tc">${d._st.pill}</td>
+      <td><span class="pill pill-gold">${esc(_regTipoCorto(d.tipo))}</span></td>
+      <td style="font-weight:600;${d.estado === 'baja' ? 'opacity:.5' : ''}">${esc(d.nombre || '—')}</td>
+      <td>${esc(_regAlcanceTxt(d))}${d.pais ? ` <span class="pill pill-blue">${esc(d.pais)}</span>` : ''}</td>
+      <td style="color:var(--text2)">${esc(d.organismo || '—')}</td>
+      <td class="mono">${esc(d.numero || '—')}</td>
+      <td class="tc mono" style="color:var(--text3)">${fmtVenc(d.emision)}</td>
+      <td class="tc mono">${fmtVenc(d.vencimiento)}</td>
+      <td style="color:var(--text2)">${esc(d.responsable || '—')}</td>
+    </tr>`).join('');
+  document.getElementById('rd-empty').style.display = data.length ? 'none' : 'block';
+  renderPag('pag-regdocs', data.length, RD_PER, rdPage, p => { rdPage = p; renderRegDocs(); });
+  actualizarBadgeReg();
+}
+function rdmAlcanceChange() {
+  document.getElementById('rdm-prod-wrap').style.display =
+    document.getElementById('rdm-alcance').value === 'Producto' ? '' : 'none';
+}
+function rdmTipoChange() {
+  const t = _regTipo(document.getElementById('rdm-tipo').value);
+  if (!t) return;
+  document.getElementById('rdm-alcance').value = t[2];
+  rdmAlcanceChange();
+  const em = document.getElementById('rdm-emision').value;
+  const vc = document.getElementById('rdm-venc');
+  if (em && t[3] && !vc.value) vc.value = _sumarMeses(em, t[3]);
+  document.getElementById('rdm-hint').textContent = t[3]
+    ? `Vigencia habitual: ${t[3] >= 12 ? (t[3] / 12) + ' año(s)' : t[3] + ' meses'}. Verificá contra el certificado — manda lo que dice el papel.`
+    : 'Este tipo normalmente no tiene vencimiento fijo. Dejá la fecha vacía si no vence.';
+}
+function editRegDoc(id) {
+  const d = id ? DB.regdocs[id] : null;
+  _regFillOrganismos();
+  _regFillSelect('rdm-tipo', REG_TIPOS.map(t => [t[0], t[1]]), d?.tipo);
+  _regFillSelect('rdm-alcance', REG_ALCANCES.map(a => [a, a]), d?.alcance);
+  _regFillProductos('rdm-producto', d?.producto);
+  document.getElementById('rdm-title').textContent = d ? (d.nombre || _regTipoLbl(d.tipo)) : '+ Nuevo registro / habilitación';
+  document.getElementById('rdm-nombre').value = d?.nombre || '';
+  document.getElementById('rdm-organismo').value = d?.organismo || '';
+  document.getElementById('rdm-numero').value = d?.numero || '';
+  document.getElementById('rdm-pais').value = d?.pais || '';
+  document.getElementById('rdm-resp').value = d?.responsable || '';
+  document.getElementById('rdm-emision').value = d?.emision || '';
+  document.getElementById('rdm-venc').value = d?.vencimiento || '';
+  document.getElementById('rdm-alerta').value = d?.alertaDias ?? 60;
+  document.getElementById('rdm-estado').value = d?.estado || 'vigente';
+  document.getElementById('rdm-obs').value = d?.obs || '';
+  document.getElementById('rdm-hint').textContent = '';
+  document.getElementById('rdm-del').style.display = d ? '' : 'none';
+  document.getElementById('rdm-renov').style.display = d ? '' : 'none';
+  const m = document.getElementById('m-regdoc');
+  m.dataset.id = id || '';
+  m.dataset.tram = '';
+  rdmAlcanceChange();
+  openM('m-regdoc');
+}
+function guardarRegDoc() {
+  const m = document.getElementById('m-regdoc');
+  const id0 = m.dataset.id;
+  const d = id0 ? DB.regdocs[id0] : null;
+  const nombre = document.getElementById('rdm-nombre').value.trim();
+  if (!nombre) { toast('Poné un detalle para reconocerlo después', '⚠'); return; }
+  const alcance = document.getElementById('rdm-alcance').value;
+  const producto = document.getElementById('rdm-producto').value;
+  if (alcance === 'Producto' && !producto) { toast('Elegí el producto al que aplica', '⚠'); return; }
+  const emision = document.getElementById('rdm-emision').value;
+  const vencimiento = document.getElementById('rdm-venc').value;
+  if (emision && vencimiento && vencimiento < emision) { toast('El vencimiento no puede ser anterior a la emisión', '⚠', 4000); return; }
+  const id = id0 || uid();
+  putRec('regdocs', id, {
+    ...(d || {}), id,
+    tipo: document.getElementById('rdm-tipo').value,
+    nombre, alcance, producto: alcance === 'Producto' ? producto : '',
+    organismo: document.getElementById('rdm-organismo').value.trim(),
+    numero: document.getElementById('rdm-numero').value.trim(),
+    pais: document.getElementById('rdm-pais').value.trim(),
+    responsable: document.getElementById('rdm-resp').value.trim(),
+    emision, vencimiento,
+    alertaDias: parseInt(document.getElementById('rdm-alerta').value, 10) || 60,
+    estado: document.getElementById('rdm-estado').value,
+    obs: document.getElementById('rdm-obs').value.trim(),
+    _deleted: false,
+  });
+  // Si vino de un trámite aprobado, queda enlazado en los dos sentidos
+  const tid = m.dataset.tram;
+  if (tid && DB.regtramites[tid]) putRec('regtramites', tid, { ...DB.regtramites[tid], docId: id });
+  closeM('m-regdoc');
+  renderRegDocs();
+  const st = regEstado(DB.regdocs[id]);
+  toast((d ? 'Registro guardado' : '✚ Registro creado') +
+    (st.k === 'vencido' ? ' — ojo: ya está vencido' : st.k === 'alerta' ? ` — vence en ${st.dias} días` : ''), '📜', 4000);
+}
+function borrarRegDoc() {
+  const id = document.getElementById('m-regdoc').dataset.id;
+  const d = DB.regdocs[id];
+  if (!d) return;
+  if (!confirm(`¿Eliminar "${d.nombre}"? Si el certificado se venció y ya no aplica, conviene ponerlo "dado de baja" en vez de borrarlo — así queda el antecedente.`)) return;
+  delRec('regdocs', id);
+  closeM('m-regdoc'); renderRegDocs();
+  toast('🗑 Registro eliminado');
+}
+function renovarRegDoc() {
+  const id = document.getElementById('m-regdoc').dataset.id;
+  const d = DB.regdocs[id];
+  if (!d) return;
+  const tid = uid();
+  putRec('regtramites', tid, {
+    id: tid, tipo: d.tipo, nombre: `Renovación · ${d.nombre}`,
+    alcance: d.alcance, producto: d.producto || '', pais: d.pais || '',
+    organismo: d.organismo || '', estado: 'preparacion', responsable: d.responsable || '',
+    inicio: hoyISO(), presentado: '', resuelto: '', expediente: '', costo: null,
+    obs: `Renueva el registro ${d.numero || d.nombre}${d.vencimiento ? ` (vence ${fmtVenc(d.vencimiento)})` : ''}.`,
+    requisitos: (REG_CHECKLIST[d.tipo] || []).map(t => ({ texto: t, ok: false, nota: '' })),
+    renuevaId: id,
+  });
+  closeM('m-regdoc');
+  go('regtramites');
+  editRegTramite(tid);
+  toast('Trámite de renovación creado', '↻');
+}
+function exportarRegDocs() {
+  const data = regDocsFiltrados();
+  if (!data.length) { toast('No hay registros para exportar', '⚠'); return; }
+  const cols = ['Estado', 'Tipo', 'Detalle', 'Alcance', 'País', 'Organismo', 'Número', 'Emisión', 'Vencimiento', 'Días', 'Responsable', 'Observaciones'];
+  const esc2 = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const filas = data.map(d => [
+    d._st.k, _regTipoCorto(d.tipo), d.nombre, _regAlcanceTxt(d), d.pais, d.organismo,
+    d.numero, d.emision, d.vencimiento, d._st.dias ?? '', d.responsable, d.obs,
+  ].map(esc2).join(';'));
+  // BOM para que Excel en español abra los acentos bien
+  const blob = new Blob(['﻿' + [cols.join(';'), ...filas].join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `regulatorio_${hoyISO()}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(`${data.length} registros exportados`, '↓');
+}
+
+// ── Trámites ──
+let rtPage = 1;
+const RT_PER = 20;
+function renderRegTramites() {
+  const q = norm(document.getElementById('s-regtram')?.value || '');
+  const fe = document.getElementById('f-rt-estado')?.value ?? 'abiertos';
+  const abierto = t => t.estado !== 'aprobado' && t.estado !== 'rechazado';
+  const data = allRecs('regtramites')
+    .filter(t => fe === 'abiertos' ? abierto(t) : (!fe || t.estado === fe))
+    .filter(t => !q || [t.nombre, t.expediente, t.organismo, _regTipoLbl(t.tipo), _regProdNombre(t.producto), t.responsable]
+      .some(v => norm(v).includes(q)))
+    .sort((a, b) => (b.inicio || '').localeCompare(a.inicio || ''));
+  const all = allRecs('regtramites');
+  document.getElementById('rt-kpis').innerHTML = [
+    ['En preparación', all.filter(t => t.estado === 'preparacion').length, 'var(--text3)'],
+    ['Presentados', all.filter(t => t.estado === 'presentado').length, 'var(--blue)'],
+    ['Observados', all.filter(t => t.estado === 'observado').length, all.some(t => t.estado === 'observado') ? 'var(--orange)' : 'var(--text3)'],
+    ['Aprobados', all.filter(t => t.estado === 'aprobado').length, 'var(--green)'],
+  ].map(([l, v, c]) => `<div class="kpi"><div class="kpi-acc" style="background:${c}"></div><div class="kpi-l">${l}</div><div class="kpi-v">${v}</div></div>`).join('');
+  const start = (rtPage - 1) * RT_PER;
+  document.getElementById('tbl-regtram').innerHTML = data.slice(start, start + RT_PER).map(t => {
+    const [lbl, cls] = REG_ESTADOS_TRAM[t.estado] || ['—', 'pill-ins'];
+    const reqs = t.requisitos || [];
+    const ok = reqs.filter(r => r.ok).length;
+    const cerrado = t.estado === 'aprobado' || t.estado === 'rechazado';
+    const ref = cerrado ? t.resuelto : hoyISO();
+    const dias = t.inicio && ref ? Math.round((new Date(ref + 'T00:00:00') - new Date(t.inicio + 'T00:00:00')) / 864e5) : null;
+    return `
+    <tr class="clickable" onclick="editRegTramite('${esc(t.id)}')">
+      <td class="tc"><span class="pill ${cls}">${lbl}</span></td>
+      <td><span class="pill pill-gold">${esc(_regTipoCorto(t.tipo))}</span> <span style="font-weight:600">${esc(t.nombre || '—')}</span></td>
+      <td>${esc(_regAlcanceTxt(t))}${t.pais ? ` <span class="pill pill-blue">${esc(t.pais)}</span>` : ''}</td>
+      <td style="color:var(--text2)">${esc(t.organismo || '—')}</td>
+      <td class="tc mono" style="color:${reqs.length && ok === reqs.length ? 'var(--green)' : 'var(--text3)'}">${reqs.length ? `${ok}/${reqs.length}` : '—'}</td>
+      <td class="tc mono" style="color:var(--text3)">${fmtVenc(t.inicio)}</td>
+      <td class="tc mono" style="color:var(--text3)">${fmtVenc(t.presentado)}</td>
+      <td class="tc mono">${dias == null ? '—' : dias + ' d'}</td>
+      <td style="color:var(--text2)">${esc(t.responsable || '—')}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('rt-empty').style.display = data.length ? 'none' : 'block';
+  renderPag('pag-regtram', data.length, RT_PER, rtPage, p => { rtPage = p; renderRegTramites(); });
+}
+function rtmAlcanceChange() {
+  document.getElementById('rtm-prod-wrap').style.display =
+    document.getElementById('rtm-alcance').value === 'Producto' ? '' : 'none';
+}
+function rtmTipoChange() {
+  const t = _regTipo(document.getElementById('rtm-tipo').value);
+  if (!t) return;
+  document.getElementById('rtm-alcance').value = t[2];
+  rtmAlcanceChange();
+  // El checklist se reemplaza solo si está intacto (es la plantilla anterior, sin tildar ni anotar).
+  // Si ella ya tocó algo, no se pisa: agrega con el botón.
+  if (_rtmChecklistIntacto()) {
+    document.getElementById('rtm-reqs').innerHTML = '';
+    (REG_CHECKLIST[t[0]] || []).forEach(txt => _rtmReqRow({ texto: txt }));
+  }
+}
+function _rtmChecklistIntacto() {
+  const filas = [...document.querySelectorAll('#rtm-reqs tr')];
+  if (!filas.length) return true;
+  if (filas.some(tr => tr.querySelector('.rq-ok').checked || tr.querySelector('.rq-nota').value.trim())) return false;
+  const txts = filas.map(tr => norm(tr.querySelector('.rq-txt').value));
+  return Object.values(REG_CHECKLIST).some(p =>
+    p.length === txts.length && p.every((x, i) => norm(x) === txts[i]));
+}
+function _rtmReqRow(r = {}) {
+  const st = 'width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:5px 7px;color:var(--text);outline:none';
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td class="tc" style="padding:4px 6px"><input type="checkbox" class="rq-ok" ${r.ok ? 'checked' : ''}></td>
+    <td style="padding:4px 6px"><input type="text" class="rq-txt" value="${esc(r.texto || '')}" placeholder="qué documento hay que presentar" style="${st};font-size:13px"></td>
+    <td style="padding:4px 6px"><input type="text" class="rq-nota" value="${esc(r.nota || '')}" placeholder="nota" style="${st};font-size:12px"></td>
+    <td style="padding:4px 2px;text-align:center"><button class="btn-ico" title="Quitar" onclick="this.closest('tr').remove()">✕</button></td>`;
+  document.getElementById('rtm-reqs').appendChild(tr);
+}
+function rtmAddReq() { _rtmReqRow(); }
+function rtmPlantilla() {
+  const tipo = document.getElementById('rtm-tipo').value;
+  const base = REG_CHECKLIST[tipo];
+  if (!base) { toast('No hay checklist estándar para este tipo — cargalos a mano', 'ℹ'); return; }
+  // No pisa lo ya cargado: agrega solo los que faltan
+  const actuales = [...document.querySelectorAll('#rtm-reqs .rq-txt')].map(i => norm(i.value));
+  let sumados = 0;
+  base.forEach(txt => { if (!actuales.includes(norm(txt))) { _rtmReqRow({ texto: txt }); sumados++; } });
+  toast(sumados ? `${sumados} requisito(s) agregados` : 'Ya estaban todos', '☑');
+}
+function _rtmLeerReqs() {
+  const out = [];
+  document.querySelectorAll('#rtm-reqs tr').forEach(tr => {
+    const texto = tr.querySelector('.rq-txt').value.trim();
+    if (!texto) return;
+    out.push({ texto, ok: tr.querySelector('.rq-ok').checked, nota: tr.querySelector('.rq-nota').value.trim() });
+  });
+  return out;
+}
+function editRegTramite(id) {
+  const t = id ? DB.regtramites[id] : null;
+  _regFillOrganismos();
+  _regFillSelect('rtm-tipo', REG_TIPOS.map(x => [x[0], x[1]]), t?.tipo);
+  _regFillSelect('rtm-alcance', REG_ALCANCES.map(a => [a, a]), t?.alcance);
+  _regFillProductos('rtm-producto', t?.producto);
+  document.getElementById('rtm-title').textContent = t ? (t.nombre || _regTipoLbl(t.tipo)) : '+ Nuevo trámite regulatorio';
+  document.getElementById('rtm-nombre').value = t?.nombre || '';
+  document.getElementById('rtm-organismo').value = t?.organismo || '';
+  document.getElementById('rtm-exped').value = t?.expediente || '';
+  document.getElementById('rtm-estado').value = t?.estado || 'preparacion';
+  document.getElementById('rtm-resp').value = t?.responsable || '';
+  document.getElementById('rtm-inicio').value = t?.inicio || hoyISO();
+  document.getElementById('rtm-present').value = t?.presentado || '';
+  document.getElementById('rtm-resuelto').value = t?.resuelto || '';
+  document.getElementById('rtm-costo').value = t?.costo ?? '';
+  document.getElementById('rtm-obs').value = t?.obs || '';
+  document.getElementById('rtm-del').style.display = t ? '' : 'none';
+  const doc = t?.docId ? DB.regdocs[t.docId] : null;
+  document.getElementById('rtm-emitir').style.display = t && t.estado === 'aprobado' && !doc ? '' : 'none';
+  document.getElementById('rtm-hint').innerHTML = doc && !doc._deleted
+    ? `📜 Ya generó el registro <b>${esc(doc.nombre)}</b>${doc.vencimiento ? ` · vence ${fmtVenc(doc.vencimiento)}` : ''}.`
+    : t?.estado === 'aprobado'
+      ? 'Aprobado pero todavía sin certificado cargado — con “Cargar el certificado obtenido” pasa a Registros y empieza a controlarse el vencimiento.'
+      : '';
+  document.getElementById('rtm-reqs').innerHTML = '';
+  (t?.requisitos || []).forEach(r => _rtmReqRow(r));
+  if (!t) rtmTipoChange();
+  document.getElementById('m-regtram').dataset.id = id || '';
+  rtmAlcanceChange();
+  openM('m-regtram');
+}
+function guardarRegTramite() {
+  const id0 = document.getElementById('m-regtram').dataset.id;
+  const t = id0 ? DB.regtramites[id0] : null;
+  const nombre = document.getElementById('rtm-nombre').value.trim();
+  if (!nombre) { toast('Poné un detalle para reconocer el trámite', '⚠'); return; }
+  const alcance = document.getElementById('rtm-alcance').value;
+  const producto = document.getElementById('rtm-producto').value;
+  if (alcance === 'Producto' && !producto) { toast('Elegí el producto al que aplica', '⚠'); return; }
+  const estado = document.getElementById('rtm-estado').value;
+  const presentado = document.getElementById('rtm-present').value;
+  let resuelto = document.getElementById('rtm-resuelto').value;
+  if ((estado === 'aprobado' || estado === 'rechazado') && !resuelto) resuelto = hoyISO();
+  const id = id0 || uid();
+  putRec('regtramites', id, {
+    ...(t || {}), id,
+    tipo: document.getElementById('rtm-tipo').value,
+    nombre, alcance, producto: alcance === 'Producto' ? producto : '',
+    organismo: document.getElementById('rtm-organismo').value.trim(),
+    expediente: document.getElementById('rtm-exped').value.trim(),
+    estado, responsable: document.getElementById('rtm-resp').value.trim(),
+    inicio: document.getElementById('rtm-inicio').value,
+    presentado, resuelto,
+    costo: parseFloat(document.getElementById('rtm-costo').value) || null,
+    obs: document.getElementById('rtm-obs').value.trim(),
+    requisitos: _rtmLeerReqs(),
+    _deleted: false,
+  });
+  const yaTieneDoc = DB.regtramites[id].docId && !DB.regdocs[DB.regtramites[id].docId]?._deleted;
+  closeM('m-regtram'); renderRegTramites();
+  if (estado === 'aprobado' && !yaTieneDoc) {
+    toast('Trámite aprobado — cargá el certificado para que se controle el vencimiento', '📜', 5000);
+    editRegTramite(id);
+  } else {
+    toast(t ? 'Trámite guardado' : '✚ Trámite creado', '🗂');
+  }
+}
+function borrarRegTramite() {
+  const id = document.getElementById('m-regtram').dataset.id;
+  const t = DB.regtramites[id];
+  if (!t) return;
+  if (!confirm(`¿Eliminar el trámite "${t.nombre}"?`)) return;
+  delRec('regtramites', id);
+  closeM('m-regtram'); renderRegTramites();
+  toast('🗑 Trámite eliminado');
+}
+// Trámite aprobado → registro vigente. Precarga lo que ya se sabe y deja que ella complete el resto.
+function emitirDesdeTramite() {
+  const id = document.getElementById('m-regtram').dataset.id;
+  const t = DB.regtramites[id];
+  if (!t) return;
+  closeM('m-regtram');
+  // Si es una renovación, el registro anterior queda dado de baja
+  if (t.renuevaId && DB.regdocs[t.renuevaId] && !DB.regdocs[t.renuevaId]._deleted)
+    putRec('regdocs', t.renuevaId, { ...DB.regdocs[t.renuevaId], estado: 'baja' });
+  editRegDoc('');
+  const tipo = _regTipo(t.tipo);
+  const emision = t.resuelto || hoyISO();
+  document.getElementById('rdm-tipo').value = t.tipo;
+  document.getElementById('rdm-alcance').value = t.alcance;
+  _regFillProductos('rdm-producto', t.producto);
+  document.getElementById('rdm-nombre').value = (t.nombre || '').replace(/^Renovación · /, '');
+  document.getElementById('rdm-organismo').value = t.organismo || '';
+  document.getElementById('rdm-numero').value = t.expediente || '';
+  document.getElementById('rdm-pais').value = t.pais || '';
+  document.getElementById('rdm-resp').value = t.responsable || '';
+  document.getElementById('rdm-emision').value = emision;
+  document.getElementById('rdm-venc').value = tipo?.[3] ? _sumarMeses(emision, tipo[3]) : '';
+  document.getElementById('rdm-hint').textContent = tipo?.[3]
+    ? 'Vencimiento estimado por la vigencia habitual del tipo — corregilo con la fecha que diga el certificado.'
+    : '';
+  document.getElementById('m-regdoc').dataset.tram = id;
+  rdmAlcanceChange();
+}
+
 // ── Arranque ──
 window.addEventListener('load', async () => {
   restaurarNav();
   await initStore();
+  actualizarBadgeReg();
   go('minsumos');
 });
